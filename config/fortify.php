@@ -73,7 +73,8 @@ return [
     |
     */
 
-    'home' => '/dashboard',
+    // Route `/` akan redirect ke dashboard sesuai role via HomeController
+    'home' => '/',
 
     /*
     |--------------------------------------------------------------------------
