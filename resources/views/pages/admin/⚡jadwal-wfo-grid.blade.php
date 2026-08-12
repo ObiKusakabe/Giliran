@@ -187,15 +187,15 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                     </div>
 
                     {{-- Chip-chip tim --}}
-                    <div class="flex flex-wrap gap-1.5 flex-1">
+                    <div class="flex flex-wrap gap-1.5">
                         @foreach ($timDiHari as $tid => $namaTim)
-                            <span class="inline-flex items-center gap-1 rounded-full bg-brand/10 text-brand text-xs font-medium px-2 py-0.5 border border-brand/20">
+                            <span class="inline-flex items-center gap-1 rounded-full bg-brand/10 text-brand text-xs font-medium px-2 py-0.5 border border-brand/20 shrink-0">
                                 <span class="truncate max-w-[80px]" title="{{ $namaTim }}">{{ $namaTim }}</span>
                                 <button
                                     wire:click="hapusTim('{{ $hari }}', {{ $tid }})"
                                     wire:loading.attr="disabled"
                                     wire:target="hapusTim('{{ $hari }}', {{ $tid }})"
-                                    class="ml-0.5 text-brand/60 hover:text-red-500 transition-colors focus:outline-none"
+                                    class="ml-0.5 text-brand/60 hover:text-red-500 transition-colors focus:outline-none flex-shrink-0"
                                     aria-label="Hapus {{ $namaTim }} dari {{ $hari }}"
                                 >
                                     <svg class="h-3 w-3" viewBox="0 0 12 12" fill="currentColor">
