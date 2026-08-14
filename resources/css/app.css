@@ -23,6 +23,13 @@
     --color-zinc-900: #171717;
     --color-zinc-950: #0a0a0a;
 
+    /* ── Token brand default (Inovindo Primary Blue) ── */
+    --color-brand: #1591D8;
+    --color-brand-dark: #0D77B3;
+    --color-brand-navy: #12314F;
+    --color-brand-green: #2FA84F;
+    --color-brand-orange: #F2A340;
+
     --color-accent: var(--color-neutral-800);
     --color-accent-content: var(--color-neutral-800);
     --color-accent-foreground: var(--color-white);
@@ -33,6 +40,27 @@
         --color-accent: var(--color-white);
         --color-accent-content: var(--color-white);
         --color-accent-foreground: var(--color-neutral-800);
+    }
+
+    /* ── Tema Inovindo: class .inovindo di <html> ── */
+    .inovindo {
+        /* Background: navy dark */
+        --color-zinc-950: #0a1628;
+        --color-zinc-900: #12314F;
+        --color-zinc-800: #1a3f63;
+        --color-zinc-700: #1e4d78;
+        --color-zinc-600: #2D6CB5;
+        --color-zinc-500: #4a8cc9;
+        --color-zinc-400: #7ab3d9;
+        --color-zinc-300: #a8cfe8;
+        --color-zinc-200: #d4e8f5;
+        --color-zinc-100: #eaf4fb;
+        --color-zinc-50:  #f4f9fd;
+
+        /* Accent Inovindo: primary blue */
+        --color-accent: #1591D8;
+        --color-accent-content: #1591D8;
+        --color-accent-foreground: #ffffff;
     }
 }
 

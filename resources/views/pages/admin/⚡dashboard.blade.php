@@ -10,7 +10,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Dashboard')] #[Layout('layouts.admin')] class extends Component {
+new #[Title('')] #[Layout('layouts.admin')] class extends Component {
 
     #[Computed]
     public function periodeAktif(): ?PeriodeWfo

@@ -11,12 +11,12 @@ use Illuminate\Http\Request;
 
 /**
  * Endpoint JSON untuk FullCalendar events (DSB-07).
- * Adzan/kajian punya start/end time sesuai waktu sholat riil (§2.5).
+ * Adzan/kajian punya start/end time sesuai waktu sholat riil (Â§2.5).
  * Briefing dan alokasi ruangan tetap all-day (tanpa jam spesifik).
  */
 class KalenderController extends Controller
 {
-    /** Mapping waktu sholat → [start, end] dalam format H:i:s */
+    /** Mapping waktu sholat â†’ [start, end] dalam format H:i:s */
     private const JAM_SHOLAT = [
         'dhuhr' => ['12:00:00', '12:30:00'],
         'asr' => ['15:00:00', '15:30:00'],
@@ -25,7 +25,7 @@ class KalenderController extends Controller
         'isha' => ['19:30:00', '20:00:00'],
     ];
 
-    /** Mapping sesi briefing → [start, end] */
+    /** Mapping sesi briefing â†’ [start, end] */
     private const JAM_BRIEFING = [
         'pagi' => ['09:00:00', '09:30:00'],
         'sore' => ['16:00:00', '16:30:00'],
@@ -39,7 +39,7 @@ class KalenderController extends Controller
 
         $events = collect();
 
-        // ── Adzan & Kajian ─────────────────────────────────────────────────────
+        // â”€â”€ Adzan & Kajian â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $adzanQuery = JadwalAdzanKitab::with('personil.tim')
             ->whereBetween('tanggal', [$mulai, $selesai]);
 
@@ -54,11 +54,11 @@ class KalenderController extends Controller
             $events->push([
                 'id' => 'adzan_'.$j->id,
                 'title' => ucfirst($j->jenis_tugas).' '.strtoupper($j->waktu_sholat)
-                    .' — '.($j->personil?->nama ?? '?'),
+                    .' â€” '.($j->personil?->nama ?? '?'),
                 'start' => $tanggal.'T'.$jamMulai,
                 'end' => $tanggal.'T'.$jamSelesai,
-                'backgroundColor' => '#1976D2',
-                'borderColor' => '#1565C0',
+                'backgroundColor' => '#1591D8',
+                'borderColor' => '#0D77B3',
                 'textColor' => '#ffffff',
                 'extendedProps' => [
                     'jenis' => 'adzan',
@@ -72,7 +72,7 @@ class KalenderController extends Controller
             ]);
         });
 
-        // ── Briefing ───────────────────────────────────────────────────────────
+        // â”€â”€ Briefing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $briefingQuery = JadwalBriefing::with('personil', 'tim')
             ->whereBetween('tanggal', [$mulai, $selesai]);
 
@@ -87,7 +87,7 @@ class KalenderController extends Controller
             $events->push([
                 'id' => 'briefing_'.$j->id,
                 'title' => 'Briefing '.ucfirst($j->sesi)
-                    .' — '.($j->personil?->nama ?? '?'),
+                    .' â€” '.($j->personil?->nama ?? '?'),
                 'start' => $tanggal.'T'.$jamMulai,
                 'end' => $tanggal.'T'.$jamSelesai,
                 'backgroundColor' => '#7C3AED',
@@ -104,7 +104,7 @@ class KalenderController extends Controller
             ]);
         });
 
-        // ── Alokasi Ruangan — tetap all-day ───────────────────────────────────
+        // â”€â”€ Alokasi Ruangan â€” tetap all-day â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         $ruanganQuery = AlokasiRuangan::with('tim', 'ruangan')
             ->whereBetween('tanggal', [$mulai, $selesai]);
 
@@ -116,7 +116,7 @@ class KalenderController extends Controller
             $events->push([
                 'id' => 'ruangan_'.$j->id,
                 'title' => ($j->ruangan?->nama_ruangan ?? '?')
-                    .' — '.($j->tim?->nama_tim ?? '?'),
+                    .' â€” '.($j->tim?->nama_tim ?? '?'),
                 'start' => $j->tanggal->toDateString(),
                 'allDay' => true,
                 'backgroundColor' => '#059669',
