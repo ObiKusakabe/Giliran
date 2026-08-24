@@ -159,7 +159,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
             <flux:heading size="xl">Tim</flux:heading>
             <flux:text class="text-zinc-500">Kelola data tim peserta PKL/magang.</flux:text>
         </div>
-        <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus">Tambah Tim</flux:button>
+        <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus" class="flex-shrink-0">Tambah Tim</flux:button>
     </div>
 
     <div class="relative">
@@ -174,7 +174,35 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
     </div>
 
     <flux:card class="p-0 overflow-hidden">
-        <div class="overflow-x-auto">
+        {{-- Card-list: mobile only (< sm) --}}
+        <div class="sm:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
+            <template x-if="displayed.length === 0">
+                <div class="px-4 py-8 text-center text-zinc-400 text-sm" x-text="q ? 'Tidak ada tim yang cocok.' : 'Belum ada tim.'"></div>
+            </template>
+            <template x-for="tim in displayed" :key="tim.id">
+                <div class="flex items-center gap-3 px-4 py-3">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate" x-text="tim.nama_tim"></p>
+                        <p class="text-xs text-zinc-500 truncate mt-0.5" x-text="tim.keterangan || '—'"></p>
+                        <div class="flex items-center gap-1.5 mt-1">
+                            <span class="text-xs text-zinc-400">Personil:</span>
+                            <span class="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-700 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:text-zinc-300" x-text="tim.personil_count"></span>
+                        </div>
+                    </div>
+                    <flux:dropdown>
+                        <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
+                        <flux:menu>
+                            <flux:menu.item icon="pencil" @click="$wire.bukaFormEdit(tim.id)">Edit</flux:menu.item>
+                            <flux:menu.separator />
+                            <flux:menu.item icon="trash" variant="danger" @click="$wire.konfirmasiHapus(tim.id)">Hapus</flux:menu.item>
+                        </flux:menu>
+                    </flux:dropdown>
+                </div>
+            </template>
+        </div>
+
+        {{-- Tabel: sm dan lebih lebar --}}
+        <div class="hidden sm:block overflow-x-auto">
             <table class="w-full text-sm">
                 <thead class="border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">
                     <tr>

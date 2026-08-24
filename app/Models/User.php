@@ -16,8 +16,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 
 /**
  * @property int $id
- * @property int|null $personil_id
- * @property int|null $tim_id
+ * @property int|null $tim_id -- wajib diisi untuk role='tim'
  * @property string|null $username
  * @property string $name
  * @property string $email
@@ -27,7 +26,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
  * @property string|null $remember_token
- * @property string $role -- admin|personil|tim
+ * @property string $role -- admin|tim
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -37,7 +36,6 @@ class User extends Authenticatable implements PasskeyUser
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
     protected $fillable = [
-        'personil_id',
         'tim_id',
         'username',
         'name',
@@ -63,16 +61,21 @@ class User extends Authenticatable implements PasskeyUser
 
     // ── Relasi ────────────────────────────────────────────────────
 
-    /** @return BelongsTo<Personil, $this> */
-    public function personil(): BelongsTo
-    {
-        return $this->belongsTo(Personil::class, 'personil_id');
-    }
-
     /** @return BelongsTo<Tim, $this> */
     public function tim(): BelongsTo
     {
         return $this->belongsTo(Tim::class, 'tim_id');
+    }
+
+    /**
+     * Semua personil dalam tim yang sama.
+     * Hanya relevan untuk role 'tim'.
+     *
+     * @return HasMany<Personil, $this>
+     */
+    public function personilTim(): HasMany
+    {
+        return $this->hasMany(Personil::class, 'tim_id', 'tim_id');
     }
 
     /** @return HasMany<Notifikasi, $this> */
@@ -88,9 +91,10 @@ class User extends Authenticatable implements PasskeyUser
         return $this->role === 'admin';
     }
 
+    /** @deprecated role 'personil' sudah dihapus — gunakan isTim() */
     public function isPersonil(): bool
     {
-        return $this->role === 'personil';
+        return false;
     }
 
     public function isTim(): bool

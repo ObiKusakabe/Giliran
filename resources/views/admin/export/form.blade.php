@@ -6,32 +6,23 @@
         </div>
 
         <flux:card>
-            <form method="POST" action="{{ route('admin.export.pdf') }}" class="flex flex-col gap-4">
+            <form
+                method="POST"
+                action="{{ route('admin.export.pdf') }}"
+                class="flex flex-col gap-4"
+                x-data="{ from: '', to: '' }"
+            >
                 @csrf
 
-                <div>
-                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Tanggal Mulai</label>
-                    <input
-                        type="date"
-                        name="tanggal_mulai"
-                        value="{{ old('tanggal_mulai') }}"
-                        required
-                        class="w-full rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-                    />
-                    @error('tanggal_mulai') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Tanggal Selesai</label>
-                    <input
-                        type="date"
-                        name="tanggal_selesai"
-                        value="{{ old('tanggal_selesai') }}"
-                        required
-                        class="w-full rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-                    />
-                    @error('tanggal_selesai') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
+                <x-date-range-picker
+                    name-from="tanggal_mulai"
+                    name-to="tanggal_selesai"
+                    label-from="Rentang Tanggal"
+                    label-to=""
+                    :value-from="old('tanggal_mulai', '')"
+                    :value-to="old('tanggal_selesai', '')"
+                    :required="true"
+                />
 
                 <flux:select name="jenis" label="Jenis Jadwal">
                     <flux:select.option value="semua">Semua (Adzan + Briefing + Ruangan)</flux:select.option>

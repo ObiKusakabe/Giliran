@@ -6,10 +6,11 @@ use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Profile settings')] class extends Component {
+new #[Title('Profile settings')] #[Layout('layouts.admin')] class extends Component {
     use ProfileValidationRules;
 
     public string $name = '';
@@ -76,13 +77,52 @@ new #[Title('Profile settings')] class extends Component {
     }
 }; ?>
 
-<section class="w-full">
-    @include('partials.settings-heading')
+<div class="w-full space-y-6">
+    {{-- Settings Navigation Tabs - Horizontal --}}
+    <div class="flex gap-1 border-b border-zinc-200 dark:border-zinc-700">
+        <a 
+            href="{{ route('profile.edit') }}" 
+            wire:navigate.hover
+            @class([
+                'px-4 py-2 text-sm font-medium rounded-t-lg transition-colors',
+                'border-b-2 text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' => request()->routeIs('profile.edit'),
+                'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border-b-2 border-transparent' => !request()->routeIs('profile.edit'),
+            ])
+        >
+            Profil
+        </a>
+        <a 
+            href="{{ route('security.edit') }}" 
+            wire:navigate.hover
+            @class([
+                'px-4 py-2 text-sm font-medium rounded-t-lg transition-colors',
+                'border-b-2 text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' => request()->routeIs('security.edit'),
+                'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border-b-2 border-transparent' => !request()->routeIs('security.edit'),
+            ])
+        >
+            Keamanan
+        </a>
+        <a 
+            href="{{ route('appearance.edit') }}" 
+            wire:navigate.hover
+            @class([
+                'px-4 py-2 text-sm font-medium rounded-t-lg transition-colors',
+                'border-b-2 text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' => request()->routeIs('appearance.edit'),
+                'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border-b-2 border-transparent' => !request()->routeIs('appearance.edit'),
+            ])
+        >
+            Tampilan
+        </a>
+    </div>
 
-    <flux:heading class="sr-only">{{ 'Pengaturan Profil' }}</flux:heading>
+    {{-- Profile Content --}}
+    <div class="max-w-3xl space-y-6">
+        <div>
+            <flux:heading size="lg">Profil</flux:heading>
+            <flux:subheading>Perbarui nama dan alamat email kamu</flux:subheading>
+        </div>
 
-    <x-pages::settings.layout :heading="'Profil'" :subheading="'Perbarui nama dan alamat email kamu'">
-        <form wire:submit="updateProfileInformation" class="my-6 w-full space-y-6">
+        <form wire:submit="updateProfileInformation" class="space-y-6">
             <flux:input wire:model="name" :label="'Nama'" type="text" required autofocus autocomplete="name" />
 
             <div>
@@ -108,18 +148,16 @@ new #[Title('Profile settings')] class extends Component {
             </div>
 
             <div class="flex items-center gap-4">
-                <div class="flex items-center justify-end">
-                    <flux:button variant="primary" type="submit" class="w-full" data-test="update-profile-button">
-                        {{ 'Simpan' }}
-                    </flux:button>
-                </div>
-
+                <flux:button variant="primary" type="submit" data-test="update-profile-button">
+                    Simpan
+                </flux:button>
             </div>
         </form>
 
         @if ($this->showDeleteUser)
-            <livewire:pages::settings.delete-user-form />
+            <div class="pt-6 border-t border-zinc-200 dark:border-zinc-700">
+                <livewire:pages::settings.delete-user-form />
+            </div>
         @endif
-    </x-pages::settings.layout>
-</section>
-
+    </div>
+</div>

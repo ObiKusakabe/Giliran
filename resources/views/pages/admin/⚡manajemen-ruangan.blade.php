@@ -146,12 +146,12 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
     x-effect="if (q !== undefined || filterStatus !== undefined) page = 1"
     class="flex flex-col gap-6"
 >
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
         <div>
             <flux:heading size="xl">Ruangan</flux:heading>
             <flux:text class="text-zinc-500">Kelola data ruangan meeting dan kelas.</flux:text>
         </div>
-        <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus">Tambah Ruangan</flux:button>
+        <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus" class="flex-shrink-0">Tambah Ruangan</flux:button>
     </div>
 
     <div class="flex gap-3">
@@ -194,7 +194,36 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
     </div>
 
     <flux:card class="p-0 overflow-hidden">
-        <div class="overflow-x-auto">
+        {{-- Card-list: mobile only (< sm) --}}
+        <div class="sm:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
+            <template x-if="displayed.length === 0">
+                <div class="px-4 py-8 text-center text-zinc-400 text-sm">Tidak ada ruangan yang cocok.</div>
+            </template>
+            <template x-for="r in displayed" :key="r.id">
+                <div class="flex items-center gap-3 px-4 py-3">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate" x-text="r.nama_ruangan"></p>
+                            <span :class="r.status==='tersedia' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'"
+                                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0"
+                                  x-text="r.status==='tersedia' ? 'Tersedia' : 'Tidak Tersedia'"></span>
+                        </div>
+                        <p class="text-xs text-zinc-400 mt-0.5" x-text="r.kapasitas + ' orang'"></p>
+                    </div>
+                    <flux:dropdown>
+                        <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
+                        <flux:menu>
+                            <flux:menu.item icon="pencil" @click="$wire.bukaFormEdit(r.id)">Edit</flux:menu.item>
+                            <flux:menu.separator />
+                            <flux:menu.item icon="trash" variant="danger" @click="$wire.konfirmasiHapus(r.id)">Hapus</flux:menu.item>
+                        </flux:menu>
+                    </flux:dropdown>
+                </div>
+            </template>
+        </div>
+
+        {{-- Tabel: sm dan lebih lebar --}}
+        <div class="hidden sm:block overflow-x-auto">
             <table class="w-full text-sm">
                 <thead class="border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">
                     <tr>

@@ -16,8 +16,7 @@ class HomeController extends Controller
     {
         return match ($request->user()->role) {
             'admin' => redirect('/admin/dashboard'),
-            'personil' => redirect('/jadwal-saya'),
-            'tim' => redirect('/tim/ruangan'),
+            'tim' => redirect('/jadwal-tim'),
             default => redirect('/login'),
         };
     }

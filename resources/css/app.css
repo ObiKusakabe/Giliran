@@ -1,5 +1,6 @@
-@import 'tailwindcss';
+﻿@import 'tailwindcss';
 @import '../../vendor/livewire/flux/dist/flux.css';
+@import 'flatpickr/dist/flatpickr.min.css';
 
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -23,9 +24,9 @@
     --color-zinc-900: #171717;
     --color-zinc-950: #0a0a0a;
 
-    /* ── Token brand default (Inovindo Primary Blue) ── */
-    --color-brand: #1591D8;
-    --color-brand-dark: #0D77B3;
+    /* â”€â”€ Token brand default (Inovindo Primary Blue) â”€â”€ */
+    --color-brand: #3B71CA;
+    --color-brand-dark: #2d5db3;
     --color-brand-navy: #12314F;
     --color-brand-green: #2FA84F;
     --color-brand-orange: #F2A340;
@@ -42,24 +43,24 @@
         --color-accent-foreground: var(--color-neutral-800);
     }
 
-    /* ── Tema Inovindo: class .inovindo di <html> ── */
+    /* â”€â”€ Tema Inovindo: class .inovindo di <html> â”€â”€ */
     .inovindo {
-        /* Background: navy dark */
-        --color-zinc-950: #0a1628;
-        --color-zinc-900: #12314F;
-        --color-zinc-800: #1a3f63;
-        --color-zinc-700: #1e4d78;
-        --color-zinc-600: #2D6CB5;
-        --color-zinc-500: #4a8cc9;
-        --color-zinc-400: #7ab3d9;
-        --color-zinc-300: #a8cfe8;
-        --color-zinc-200: #d4e8f5;
-        --color-zinc-100: #eaf4fb;
-        --color-zinc-50:  #f4f9fd;
+        /* Light mode dengan text dark grey (bukan biru) kayak Inovindo asli */
+        --color-zinc-50:  #fafafa;
+        --color-zinc-100: #f5f5f5;
+        --color-zinc-200: #e5e5e5;
+        --color-zinc-300: #d4d4d4;
+        --color-zinc-400: #a3a3a3;
+        --color-zinc-500: #737373;
+        --color-zinc-600: #525252;
+        --color-zinc-700: #404040;
+        --color-zinc-800: #262626;
+        --color-zinc-900: #171717;
+        --color-zinc-950: #0a0a0a;
 
         /* Accent Inovindo: primary blue */
-        --color-accent: #1591D8;
-        --color-accent-content: #1591D8;
+        --color-accent: #3B71CA;
+        --color-accent-content: #3B71CA;
         --color-accent-foreground: #ffffff;
     }
 }
@@ -92,3 +93,124 @@ select:focus[data-flux-control] {
 /* \[:where(&)\]:size-4 {
     @apply size-4;
 } */
+
+/* ── Flatpickr theme override — konsisten dengan zinc + brand ── */
+.flatpickr-calendar {
+    border-radius: 0.75rem !important;
+    border: 1px solid #e5e5e5;
+    box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.15), 0 4px 10px -5px rgb(0 0 0 / 0.1);
+    font-family: inherit;
+    background: #ffffff;
+}
+.dark .flatpickr-calendar {
+    background: #262626;
+    border-color: #3f3f46;
+    color: #f4f4f5;
+}
+.flatpickr-months {
+    border-radius: 0.75rem 0.75rem 0 0;
+    background: transparent;
+    padding: 4px 0;
+}
+.flatpickr-month, .flatpickr-current-month {
+    color: inherit;
+}
+.dark .flatpickr-months .flatpickr-month { color: #f4f4f5; fill: #f4f4f5; }
+.flatpickr-weekday {
+    color: #a3a3a3 !important;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.flatpickr-day {
+    border-radius: 0.5rem !important;
+    color: #171717;
+    font-size: 0.8rem;
+}
+.dark .flatpickr-day { color: #d4d4d8; }
+.dark .flatpickr-day:hover { background: #3f3f46; border-color: transparent; }
+.flatpickr-day.today { border-color: #3B71CA !important; }
+.flatpickr-day.today:hover { background: #3B71CA; color: #fff; }
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+    background: #3B71CA !important;
+    border-color: #3B71CA !important;
+    color: #fff !important;
+    border-radius: 0.5rem !important;
+}
+.flatpickr-day.startRange { border-radius: 0.5rem 0 0 0.5rem !important; }
+.flatpickr-day.endRange   { border-radius: 0 0.5rem 0.5rem 0 !important; }
+.flatpickr-day.inRange {
+    background: rgba(59, 113, 202, 0.12) !important;
+    border-color: transparent !important;
+    color: #3B71CA;
+    border-radius: 0 !important;
+    box-shadow: -5px 0 0 rgba(59,113,202,0.12), 5px 0 0 rgba(59,113,202,0.12);
+}
+.dark .flatpickr-day.inRange {
+    background: rgba(59,113,202,0.2) !important;
+    color: #93b4f0;
+    box-shadow: -5px 0 0 rgba(59,113,202,0.2), 5px 0 0 rgba(59,113,202,0.2);
+}
+.flatpickr-day.flatpickr-disabled,
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay { color: #a3a3a3 !important; }
+.dark .flatpickr-day.prevMonthDay,
+.dark .flatpickr-day.nextMonthDay { color: #52525b !important; }
+.flatpickr-prev-month, .flatpickr-next-month {
+    color: #525252 !important;
+    fill: #525252 !important;
+}
+.dark .flatpickr-prev-month, .dark .flatpickr-next-month {
+    color: #a3a3a3 !important;
+    fill: #a3a3a3 !important;
+}
+.flatpickr-current-month input.cur-year,
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+.dark .flatpickr-current-month input.cur-year,
+.dark .flatpickr-current-month .flatpickr-monthDropdown-months {
+    color: #f4f4f5;
+    background: transparent;
+}
+/* Inline calendar border */
+.flatpickr-calendar.inline {
+    border: 1px solid #e5e5e5;
+}
+.dark .flatpickr-calendar.inline { border-color: #3f3f46; }
+
+/* Flatpickr HARUS di atas Flux modal (dialog z-index ~50) */
+.flatpickr-calendar {
+    z-index: 99999 !important;
+}
+
+/* Ketika flatpickr di-append ke dalam <dialog> Flux, dialog tidak boleh clip overflow */
+dialog:has(.flatpickr-calendar) {
+    overflow: visible !important;
+}
+dialog:has(.flatpickr-calendar) > * {
+    overflow: visible !important;
+}
+
+
+
+
+/* Button hover states di tema Inovindo light mode - lebih visible */
+.inovindo button:hover:not([disabled]),
+.inovindo [role="button"]:hover:not([disabled]) {
+    background-color: #f5f5f5 !important; /* zinc-100 */
+}
+
+/* Ghost button hover di Inovindo - lebih kontras */
+.inovindo [data-flux-button][data-variant="ghost"]:hover:not([disabled]) {
+    background-color: #e5e5e5 !important; /* zinc-200 */
+}
+
+/* Icon button / badge close button hover di Inovindo */
+.inovindo button[type="button"]:hover svg,
+.inovindo [role="button"]:hover svg {
+    color: #171717 !important; /* zinc-900 - dark grey */
+}

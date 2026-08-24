@@ -118,7 +118,7 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-6" wire:poll="60s">
+<div class="flex flex-col gap-6" wire:poll="60000">
     {{-- Header --}}
     <div>
         <flux:heading size="xl">Dashboard</flux:heading>

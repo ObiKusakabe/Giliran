@@ -233,7 +233,7 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
         {{-- Legend --}}
         <div class="flex gap-4 flex-wrap text-xs">
             <span class="flex items-center gap-1.5">
-                <span class="h-3 w-3 rounded-sm bg-[#1591D8]"></span> Adzan & Kajian
+                <span class="h-3 w-3 rounded-sm bg-[#3B71CA]"></span> Adzan & Kajian
             </span>
             <span class="flex items-center gap-1.5">
                 <span class="h-3 w-3 rounded-sm bg-[#7C3AED]"></span> Briefing
@@ -245,28 +245,96 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
 
         <flux:card class="p-4 overflow-hidden">
             <style>
-                .fc .fc-col-header-cell-cushion { color: #a1a1aa !important; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; text-decoration: none !important; }
-                .fc .fc-daygrid-day-number { color: #71717a; text-decoration: none !important; font-size: 0.75rem; }
-                .fc-theme-standard td, .fc-theme-standard th, .fc-theme-standard .fc-scrollgrid { border-color: #3f3f46 !important; }
-                .fc .fc-col-header-cell { background-color: #18181b !important; border-color: #3f3f46 !important; }
-                .fc .fc-daygrid-day { background-color: #09090b; }
-                .fc .fc-day-sun { background-color: #09090b !important; }
-                .fc .fc-daygrid-day.fc-day-today { background-color: rgba(25,118,210,0.10) !important; }
-                .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number { color: #60a5fa !important; font-weight: 600; }
-                .fc .fc-day-other .fc-daygrid-day-number { color: #52525b !important; }
-                .fc .fc-button, .fc .fc-button-primary { background-color: #27272a !important; border-color: #3f3f46 !important; color: #d4d4d8 !important; font-size: 0.75rem; padding: 0.3rem 0.6rem; box-shadow: none !important; }
-                .fc .fc-button:hover, .fc .fc-button-primary:hover { background-color: #3f3f46 !important; border-color: #52525b !important; color: #fff !important; }
-                .fc .fc-button-active, .fc .fc-button-primary:not(:disabled).fc-button-active { background-color: #f4f4f5 !important; border-color: #e4e4e7 !important; color: #18181b !important; font-weight: 600; }
-                .fc .fc-toolbar-title { color: #f4f4f5 !important; font-size: 1.1rem !important; font-weight: 600; }
-                .fc .fc-daygrid-more-link { color: #60a5fa !important; font-size: 0.7rem; }
-                .fc-theme-standard .fc-list { border-color: #3f3f46 !important; }
-                .fc .fc-list-empty { background-color: #09090b; color: #71717a; }
-                .fc .fc-timegrid-slot { background-color: #09090b; }
+                /* ── Header hari ── */
+                .fc .fc-col-header-cell-cushion {
+                    color: #71717a !important;
+                    font-size: 0.75rem; font-weight: 500;
+                    text-transform: uppercase; letter-spacing: 0.05em;
+                    text-decoration: none !important;
+                }
+                /* ── Nomor tanggal ── */
+                .fc .fc-daygrid-day-number {
+                    color: #71717a;
+                    text-decoration: none !important;
+                    font-size: 0.75rem;
+                }
+                /* ── Border grid — ikut tema ── */
+                .fc-theme-standard td,
+                .fc-theme-standard th,
+                .fc-theme-standard .fc-scrollgrid {
+                    border-color: var(--color-zinc-200, #e5e5e5) !important;
+                }
+                .dark .fc-theme-standard td,
+                .dark .fc-theme-standard th,
+                .dark .fc-theme-standard .fc-scrollgrid {
+                    border-color: #3f3f46 !important;
+                }
+                /* ── Header row ── */
+                .fc .fc-col-header-cell {
+                    background-color: var(--color-zinc-50, #fafafa) !important;
+                }
+                .dark .fc .fc-col-header-cell {
+                    background-color: #18181b !important;
+                }
+                /* ── Background hari ── */
+                .fc .fc-daygrid-day,
+                .fc .fc-day-sun,
+                .fc .fc-daygrid-body,
+                .fc .fc-timegrid-slot,
+                .fc .fc-timegrid-col {
+                    background-color: transparent !important;
+                }
+                /* ── Hari ini ── */
+                .fc .fc-daygrid-day.fc-day-today {
+                    background-color: rgba(59,113,202,0.08) !important;
+                }
+                .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+                    color: #3B71CA !important;
+                    font-weight: 600;
+                }
+                /* ── Hari luar bulan ── */
+                .fc .fc-day-other .fc-daygrid-day-number { color: #a3a3a3 !important; }
+                /* ── Toolbar buttons ── */
+                .fc .fc-button, .fc .fc-button-primary {
+                    background-color: var(--color-zinc-100, #f5f5f5) !important;
+                    border-color: var(--color-zinc-200, #e5e5e5) !important;
+                    color: var(--color-zinc-700, #3f3f46) !important;
+                    font-size: 0.75rem; padding: 0.3rem 0.6rem; box-shadow: none !important;
+                }
+                .dark .fc .fc-button, .dark .fc .fc-button-primary {
+                    background-color: #27272a !important;
+                    border-color: #3f3f46 !important;
+                    color: #d4d4d8 !important;
+                }
+                .fc .fc-button:hover, .fc .fc-button-primary:hover {
+                    background-color: var(--color-zinc-200, #e5e5e5) !important;
+                    color: #111 !important;
+                }
+                .dark .fc .fc-button:hover, .dark .fc .fc-button-primary:hover {
+                    background-color: #3f3f46 !important;
+                    color: #fff !important;
+                }
+                .fc .fc-button-active,
+                .fc .fc-button-primary:not(:disabled).fc-button-active {
+                    background-color: #f4f4f5 !important;
+                    border-color: #e4e4e7 !important;
+                    color: #18181b !important;
+                    font-weight: 600;
+                }
+                /* ── Judul bulan ── */
+                .fc .fc-toolbar-title {
+                    color: var(--color-zinc-900, #171717) !important;
+                    font-size: 1.1rem !important; font-weight: 600;
+                }
+                .dark .fc .fc-toolbar-title { color: #f4f4f5 !important; }
+                /* ── "+N lebih" ── */
+                .fc .fc-daygrid-more-link { color: #3B71CA !important; font-size: 0.7rem; }
+                /* ── Slot label time grid ── */
                 .fc .fc-timegrid-slot-label { color: #71717a; font-size: 0.7rem; }
-                .fc .fc-timegrid-col { background-color: #09090b; }
-                .fc .fc-timegrid-now-indicator-line { border-color: #60a5fa; }
-                .fc .fc-daygrid-body { background-color: #09090b; }
+                .fc .fc-timegrid-now-indicator-line { border-color: #3B71CA; }
                 .fc .fc-all-day-text { color: #71717a; font-size: 0.7rem; }
+                /* ── List empty ── */
+                .fc .fc-list-empty { color: #71717a; }
             </style>
             <div wire:ignore x-init="initCalendar()">
                 <div x-ref="kalender"></div>
@@ -457,5 +525,6 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
         </div>
     </div>
 </div>
+
 
 

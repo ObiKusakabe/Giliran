@@ -229,26 +229,97 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
 
         isLoading(rowId) {
             return this.loadingRowIds.includes(rowId);
+        },
+
+        // Event handlers
+        handleRowDitambah(event) {
+            const row = event.detail.row;
+            const tempIdx = this.rows.findIndex(r => r.tim_id === row.tim_id && r.hari === row.hari && r.id < 0);
+            if (tempIdx !== -1) this.rows[tempIdx].id = row.id;
+            else this.rows.push(row);
+        },
+
+        handleRowDihapus(event) {
+            this.rows = this.rows.filter(r => r.id !== event.detail.rowId);
+            this.loadingRowIds = this.loadingRowIds.filter(id => id !== event.detail.rowId);
+        },
+
+        handleRevertPindah(event) {
+            const { rowId, hariAsal } = event.detail;
+            const idx = this.rows.findIndex(r => r.id === rowId);
+            if (idx !== -1) this.rows[idx].hari = hariAsal;
+            this.loadingRowIds = this.loadingRowIds.filter(id => id !== rowId);
+        },
+
+        // ── Touch drag polyfill ──────────────────────────────────────────────
+        touchGhost: null,   // elemen visual yang mengikuti jari
+
+        touchStartDrag(event, row) {
+            // Cegah scroll saat drag dimulai
+            event.preventDefault();
+            this.startDrag(row);
+
+            // Buat ghost element
+            const chip = event.currentTarget;
+            const ghost = chip.cloneNode(true);
+            ghost.style.cssText = `
+                position: fixed; pointer-events: none; z-index: 99999;
+                opacity: 0.85; transform: scale(1.05);
+                border-radius: 9999px; transition: none;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            `;
+            const rect = chip.getBoundingClientRect();
+            const touch = event.touches[0];
+            ghost._offsetX = touch.clientX - rect.left;
+            ghost._offsetY = touch.clientY - rect.top;
+            ghost.style.left = (touch.clientX - ghost._offsetX) + 'px';
+            ghost.style.top  = (touch.clientY - ghost._offsetY) + 'px';
+            ghost.style.width = rect.width + 'px';
+            document.body.appendChild(ghost);
+            this.touchGhost = ghost;
+        },
+
+        touchMoveDrag(event) {
+            if (!this.dragging || !this.touchGhost) return;
+            event.preventDefault();
+            const touch = event.touches[0];
+            this.touchGhost.style.left = (touch.clientX - this.touchGhost._offsetX) + 'px';
+            this.touchGhost.style.top  = (touch.clientY - this.touchGhost._offsetY) + 'px';
+
+            // Deteksi target: sembunyikan ghost sementara supaya elementsFromPoint dapat elemen di bawahnya
+            this.touchGhost.style.display = 'none';
+            const els = document.elementsFromPoint(touch.clientX, touch.clientY);
+            this.touchGhost.style.display = '';
+
+            // Cek apakah di atas card hari
+            const hariCard = els.find(el => el.dataset.touchHari);
+            const trashZone = els.find(el => el.dataset.touchTrash);
+
+            this.overHari  = hariCard ? hariCard.dataset.touchHari : null;
+            this.overTrash = !!trashZone;
+        },
+
+        touchEndDrag(event) {
+            if (!this.dragging) return;
+            // Hapus ghost
+            if (this.touchGhost) {
+                this.touchGhost.remove();
+                this.touchGhost = null;
+            }
+            // Eksekusi drop
+            if (this.overTrash) {
+                this.dropKeTrash();
+            } else if (this.overHari && this.overHari !== this.dragging.hariAsal) {
+                this.dropKeHari(this.overHari);
+            } else {
+                this.dragging = null; this.overHari = null; this.overTrash = false;
+            }
         }
+        // ────────────────────────────────────────────────────────────────────
     }"
-    @row-ditambah.window="
-        // Ganti tempId negatif dengan ID asli dari server
-        const row = $event.detail.row;
-        const tempIdx = rows.findIndex(r => r.tim_id === row.tim_id && r.hari === row.hari && r.id < 0);
-        if (tempIdx !== -1) rows[tempIdx].id = row.id;
-        else rows.push(row);
-    "
-    @row-dihapus.window="
-        rows = rows.filter(r => r.id !== $event.detail.rowId);
-        loadingRowIds = loadingRowIds.filter(id => id !== $event.detail.rowId);
-    "
-    @revert-pindah.window="
-        // Server tolak pindah — kembalikan ke hari asal
-        const { rowId, hariAsal } = $event.detail;
-        const idx = rows.findIndex(r => r.id === rowId);
-        if (idx !== -1) rows[idx].hari = hariAsal;
-        loadingRowIds = loadingRowIds.filter(id => id !== rowId);
-    "
+    @row-ditambah.window="handleRowDitambah($event)"
+    @row-dihapus.window="handleRowDihapus($event)"
+    @revert-pindah.window="handleRevertPindah($event)"
     class="flex flex-col gap-6"
 >
     {{-- Header --}}
@@ -264,15 +335,17 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
             </flux:text>
         </div>
         <div class="w-full sm:w-72">
-            <flux:select wire:model.live="periodeId" label="Periode">
-                <flux:select.option value="">— Pilih Periode —</flux:select.option>
-                @foreach ($this->periodeOptions as $periode)
-                    <flux:select.option :value="$periode->id">
-                        {{ $periode->keterangan ?? $periode->tanggal_mulai->format('M Y') }}
-                        {{ $periode->status === 'aktif' ? '(Aktif)' : '' }}
-                    </flux:select.option>
-                @endforeach
-            </flux:select>
+            <x-searchable-select
+                name="periodeId"
+                label="Periode"
+                placeholder="— Pilih Periode —"
+                wire:model.live="periodeId"
+                :model-value="$periodeId"
+                :options="$this->periodeOptions->map(fn($p) => [
+                    'value' => $p->id,
+                    'label' => ($p->keterangan ?? $p->tanggal_mulai->format('M Y')) . ($p->status === 'aktif' ? ' (Aktif)' : ''),
+                ])->toArray()"
+            />
         </div>
     </div>
 
@@ -303,6 +376,7 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                     :class="{
                         'ring-2 ring-brand ring-offset-1 ring-offset-zinc-900 bg-brand/5': overHari === '{{ $hari }}' && dragging && dragging.hariAsal !== '{{ $hari }}',
                     }"
+                    data-touch-hari="{{ $hari }}"
                     @dragover.prevent="overHari = '{{ $hari }}'"
                     @dragleave="overHari = null"
                     @drop.prevent="dropKeHari('{{ $hari }}')"
@@ -323,7 +397,10 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                                     draggable="true"
                                     @dragstart="startDrag(row)"
                                     @dragend="dragging = null; overHari = null; overTrash = false"
-                                    class="inline-flex items-center gap-1 rounded-full bg-brand/10 text-brand text-xs font-medium px-2 py-0.5 border border-brand/20 cursor-grab"
+                                    @touchstart.prevent="touchStartDrag($event, row)"
+                                    @touchmove="touchMoveDrag($event)"
+                                    @touchend="touchEndDrag($event)"
+                                    class="inline-flex items-center gap-1 rounded-full bg-brand/10 text-brand text-xs font-medium px-2 py-0.5 border border-brand/20 cursor-grab active:cursor-grabbing touch-none"
                                     style="flex-shrink:0; width:auto; max-width:100%;"
                                     :class="dragging && dragging.rowId === row.id ? 'opacity-40 !cursor-grabbing' : ''"
                                 >
@@ -333,7 +410,7 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                                 <button
                                     @click.stop="hapusTimOptimistic(row.id)"
                                     :disabled="isLoading(row.id)"
-                                    class="ml-0.5 flex-shrink-0 transition-colors focus:outline-none"
+                                    class="ml-0.5 flex-shrink-0 transition-colors focus:outline-none rounded-full p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30"
                                     :class="isLoading(row.id) ? 'text-brand/30 cursor-wait' : 'text-brand/60 hover:text-red-500'"
                                 >
                                     {{-- Spinner saat loading --}}
@@ -405,12 +482,13 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
         <div
             x-show="dragging !== null"
             x-transition
+            data-touch-trash="true"
             @dragover.prevent="overTrash = true"
             @dragleave="overTrash = false"
             @drop.prevent="dropKeTrash()"
             :class="overTrash
-                ? 'border-red-400 bg-red-500/20 text-red-400'
-                : 'border-zinc-600 bg-zinc-800/60 text-zinc-500'"
+                ? 'border-red-400 bg-red-500/20 text-red-400 dark:border-red-400 dark:bg-red-500/20 dark:text-red-400'
+                : 'border-zinc-400 bg-zinc-200/80 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-500'"
             class="flex items-center justify-center gap-2 rounded-xl border-2 border-dashed py-5 transition-colors"
         >
             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">

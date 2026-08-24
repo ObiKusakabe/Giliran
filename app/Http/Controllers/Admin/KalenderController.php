@@ -11,12 +11,12 @@ use Illuminate\Http\Request;
 
 /**
  * Endpoint JSON untuk FullCalendar events (DSB-07).
- * Adzan/kajian punya start/end time sesuai waktu sholat riil (Â§2.5).
+ * Adzan/kajian punya start/end time sesuai waktu sholat riil (Ã‚Â§2.5).
  * Briefing dan alokasi ruangan tetap all-day (tanpa jam spesifik).
  */
 class KalenderController extends Controller
 {
-    /** Mapping waktu sholat â†’ [start, end] dalam format H:i:s */
+    /** Mapping waktu sholat Ã¢â€ â€™ [start, end] dalam format H:i:s */
     private const JAM_SHOLAT = [
         'dhuhr' => ['12:00:00', '12:30:00'],
         'asr' => ['15:00:00', '15:30:00'],
@@ -25,7 +25,7 @@ class KalenderController extends Controller
         'isha' => ['19:30:00', '20:00:00'],
     ];
 
-    /** Mapping sesi briefing â†’ [start, end] */
+    /** Mapping sesi briefing Ã¢â€ â€™ [start, end] */
     private const JAM_BRIEFING = [
         'pagi' => ['09:00:00', '09:30:00'],
         'sore' => ['16:00:00', '16:30:00'],
@@ -39,7 +39,7 @@ class KalenderController extends Controller
 
         $events = collect();
 
-        // â”€â”€ Adzan & Kajian â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Adzan & Kajian Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         $adzanQuery = JadwalAdzanKitab::with('personil.tim')
             ->whereBetween('tanggal', [$mulai, $selesai]);
 
@@ -54,11 +54,11 @@ class KalenderController extends Controller
             $events->push([
                 'id' => 'adzan_'.$j->id,
                 'title' => ucfirst($j->jenis_tugas).' '.strtoupper($j->waktu_sholat)
-                    .' â€” '.($j->personil?->nama ?? '?'),
+                    .' Ã¢â‚¬â€ '.($j->personil?->nama ?? '?'),
                 'start' => $tanggal.'T'.$jamMulai,
                 'end' => $tanggal.'T'.$jamSelesai,
-                'backgroundColor' => '#1591D8',
-                'borderColor' => '#0D77B3',
+                'backgroundColor' => '#3B71CA',
+                'borderColor' => '#2d5db3',
                 'textColor' => '#ffffff',
                 'extendedProps' => [
                     'jenis' => 'adzan',
@@ -72,7 +72,7 @@ class KalenderController extends Controller
             ]);
         });
 
-        // â”€â”€ Briefing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Briefing Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         $briefingQuery = JadwalBriefing::with('personil', 'tim')
             ->whereBetween('tanggal', [$mulai, $selesai]);
 
@@ -87,7 +87,7 @@ class KalenderController extends Controller
             $events->push([
                 'id' => 'briefing_'.$j->id,
                 'title' => 'Briefing '.ucfirst($j->sesi)
-                    .' â€” '.($j->personil?->nama ?? '?'),
+                    .' Ã¢â‚¬â€ '.($j->personil?->nama ?? '?'),
                 'start' => $tanggal.'T'.$jamMulai,
                 'end' => $tanggal.'T'.$jamSelesai,
                 'backgroundColor' => '#7C3AED',
@@ -104,7 +104,7 @@ class KalenderController extends Controller
             ]);
         });
 
-        // â”€â”€ Alokasi Ruangan â€” tetap all-day â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Alokasi Ruangan Ã¢â‚¬â€ tetap all-day Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         $ruanganQuery = AlokasiRuangan::with('tim', 'ruangan')
             ->whereBetween('tanggal', [$mulai, $selesai]);
 
@@ -116,7 +116,7 @@ class KalenderController extends Controller
             $events->push([
                 'id' => 'ruangan_'.$j->id,
                 'title' => ($j->ruangan?->nama_ruangan ?? '?')
-                    .' â€” '.($j->tim?->nama_tim ?? '?'),
+                    .' Ã¢â‚¬â€ '.($j->tim?->nama_tim ?? '?'),
                 'start' => $j->tanggal->toDateString(),
                 'allDay' => true,
                 'backgroundColor' => '#059669',

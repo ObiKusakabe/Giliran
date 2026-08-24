@@ -147,18 +147,17 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
                 <flux:text class="mt-1 text-zinc-500">Periode baru akan berstatus nonaktif. Aktifkan secara manual setelah dibuat.</flux:text>
             </div>
             <form wire:submit="simpan" class="flex flex-col gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Tanggal Mulai</label>
-                    <input type="date" wire:model="tanggal_mulai" required
-                        class="w-full rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                    @error('tanggal_mulai') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Tanggal Selesai</label>
-                    <input type="date" wire:model="tanggal_selesai" required
-                        class="w-full rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                    @error('tanggal_selesai') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                </div>
+                <x-date-range-picker
+                    name-from="tanggal_mulai"
+                    name-to="tanggal_selesai"
+                    label-from="Rentang Periode"
+                    label-to=""
+                    wire-from="tanggal_mulai"
+                    wire-to="tanggal_selesai"
+                    :value-from="$tanggal_mulai"
+                    :value-to="$tanggal_selesai"
+                    :required="true"
+                />
                 <flux:input wire:model="keterangan" label="Keterangan" placeholder="cth. PKL Agustus–September 2026" />
                 <div class="flex justify-end gap-2 pt-2">
                     <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>

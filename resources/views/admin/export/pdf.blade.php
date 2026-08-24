@@ -6,12 +6,12 @@
     <style>
         body { font-family: 'DejaVu Sans', sans-serif; font-size: 10px; color: #18181b; }
         h1 { font-size: 15px; font-weight: bold; margin-bottom: 2px; }
-        h2 { font-size: 12px; font-weight: bold; margin: 16px 0 5px; border-bottom: 2px solid #1591D8; padding-bottom: 3px; color: #1591D8; }
+        h2 { font-size: 12px; font-weight: bold; margin: 16px 0 5px; border-bottom: 2px solid #3B71CA; padding-bottom: 3px; color: #3B71CA; }
         p.sub { font-size: 9px; color: #71717a; margin-bottom: 14px; }
 
         table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
         th, td { border: 1px solid #d4d4d8; padding: 4px 6px; font-size: 9px; }
-        th { background: #1591D8; color: #fff; text-align: center; font-weight: bold; }
+        th { background: #3B71CA; color: #fff; text-align: center; font-weight: bold; }
         th.left { text-align: left; }
         td { text-align: left; }
         td.center { text-align: center; }
@@ -20,8 +20,8 @@
         tbody tr:nth-child(even) td { background: #f4f4f5; }
 
         /* Group header Zuhur/Ashar */
-        .th-group { background: #0D77B3; font-size: 10px; }
-        .th-sub { background: #1591D8; font-size: 9px; }
+        .th-group { background: #2d5db3; font-size: 10px; }
+        .th-sub { background: #3B71CA; font-size: 9px; }
 
         .badge { display: inline-block; padding: 1px 5px; border-radius: 9999px; font-size: 8px; font-weight: bold; }
         .badge-menunggu { background: #f4f4f5; color: #71717a; }
@@ -167,4 +167,5 @@
 
 </body>
 </html>
+
 

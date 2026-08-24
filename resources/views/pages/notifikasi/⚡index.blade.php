@@ -18,15 +18,18 @@ new #[Title('Notifikasi')] #[Layout('layouts.auth')] class extends Component {
         $query = Notifikasi::query()->orderByDesc('terkirim_pada');
 
         /**
-         * Scoping query per role — §5.2 aturan scoping notifikasi.
-         * JANGAN query tanpa filter (bisa lihat notifikasi semua personil).
+         * Scoping query per role.
+         * Role 'personil' sudah dihapus — sekarang cukup tim dan admin.
+         * Tim melihat notifikasi yang ditujukan ke user_id mereka
+         * ATAU notifikasi tentang personil dalam tim mereka (personil_id IN tim).
          */
-        if ($user->isPersonil()) {
-            // Notifikasi untuk akun personil ini
-            $query->where('personil_id', $user->personil?->id ?? 0);
-        } elseif ($user->isTim()) {
-            // Notifikasi yang ditujukan ke akun tim ini
-            $query->where('user_id', $user->id);
+        if ($user->isTim()) {
+            // Notifikasi ke akun tim ini ATAU tentang personil dalam timnya
+            $personilIds = \App\Models\Personil::where('tim_id', $user->tim_id)->pluck('id');
+            $query->where(function ($q) use ($user, $personilIds) {
+                $q->where('user_id', $user->id)
+                    ->orWhereIn('personil_id', $personilIds);
+            });
         } else {
             // Admin: notifikasi personal + broadcast umum
             $query->where(function ($q) use ($user) {
@@ -71,7 +74,11 @@ new #[Title('Notifikasi')] #[Layout('layouts.auth')] class extends Component {
         if ($user->isPersonil()) {
             $query->where('personil_id', $user->personil?->id ?? 0);
         } elseif ($user->isTim()) {
-            $query->where('user_id', $user->id);
+            $personilIds = \App\Models\Personil::where('tim_id', $user->tim_id)->pluck('id');
+            $query->where(function ($q) use ($user, $personilIds) {
+                $q->where('user_id', $user->id)
+                    ->orWhereIn('personil_id', $personilIds);
+            });
         } else {
             $query->where(function ($q) use ($user) {
                 $q->where('user_id', $user->id)
@@ -89,7 +96,7 @@ new #[Title('Notifikasi')] #[Layout('layouts.auth')] class extends Component {
     {{-- Topbar --}}
     <header class="sticky top-0 z-10 border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 h-14 flex items-center px-4 gap-3">
         <a
-            href="{{ auth()->user()->isAdmin() ? route('admin.dashboard') : (auth()->user()->isPersonil() ? route('personil.jadwal-saya') : route('tim.ruangan')) }}"
+            href="{{ auth()->user()->isAdmin() ? route('admin.dashboard') : route('tim.jadwal') }}"
             wire:navigate
             class="p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700"
         >

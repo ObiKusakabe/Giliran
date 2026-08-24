@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -36,12 +35,6 @@ class Personil extends Model
     public function tim(): BelongsTo
     {
         return $this->belongsTo(Tim::class, 'tim_id');
-    }
-
-    /** @return HasOne<User, $this> */
-    public function user(): HasOne
-    {
-        return $this->hasOne(User::class, 'personil_id');
     }
 
     /** @return HasMany<JadwalAdzanKitab, $this> */

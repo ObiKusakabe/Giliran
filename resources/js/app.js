@@ -4,8 +4,16 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import idLocale from '@fullcalendar/core/locales/id';
+import flatpickr from 'flatpickr';
+import { Indonesian } from 'flatpickr/dist/l10n/id.js';
 
-// Expose FullCalendar ke window supaya bisa diakses dari Alpine x-init di blade
+// Flatpickr default locale Indonesia
+flatpickr.localize(Indonesian);
+
+// Expose ke window SEBELUM Alpine boot
+window.flatpickr = flatpickr;
+
+// Expose FullCalendar ke window
 window.FullCalendar = {
     Calendar,
     dayGridPlugin,
@@ -14,3 +22,8 @@ window.FullCalendar = {
     interactionPlugin,
     idLocale,
 };
+
+// Pastikan flatpickr tersedia setelah setiap wire:navigate
+document.addEventListener('livewire:navigated', () => {
+    window.flatpickr = flatpickr;
+});

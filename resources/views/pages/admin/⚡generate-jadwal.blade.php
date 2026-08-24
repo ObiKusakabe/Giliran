@@ -175,35 +175,19 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
     <flux:card>
         <div class="flex flex-col sm:flex-row gap-4 items-end">
             <div class="flex-1">
-                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-                    Tanggal Mulai
-                </label>
-                <input
-                    type="date"
-                    wire:model="tanggalMulai"
-                    class="w-full rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-                    @if($this->periodeAktif)
-                        min="{{ $this->periodeAktif->tanggal_mulai->toDateString() }}"
-                        max="{{ $this->periodeAktif->tanggal_selesai->toDateString() }}"
-                    @endif
+                <x-date-range-picker
+                    name-from="tanggalMulai"
+                    name-to="tanggalSelesai"
+                    label-from="Rentang Tanggal"
+                    label-to=""
+                    wire-from="tanggalMulai"
+                    wire-to="tanggalSelesai"
+                    :value-from="$tanggalMulai"
+                    :value-to="$tanggalSelesai"
+                    :min-date="$this->periodeAktif?->tanggal_mulai->toDateString()"
+                    :max-date="$this->periodeAktif?->tanggal_selesai->toDateString()"
+                    :required="true"
                 />
-                @error('tanggalMulai') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-            </div>
-
-            <div class="flex-1">
-                <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-                    Tanggal Selesai
-                </label>
-                <input
-                    type="date"
-                    wire:model="tanggalSelesai"
-                    class="w-full rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-                    @if($this->periodeAktif)
-                        min="{{ $this->periodeAktif->tanggal_mulai->toDateString() }}"
-                        max="{{ $this->periodeAktif->tanggal_selesai->toDateString() }}"
-                    @endif
-                />
-                @error('tanggalSelesai') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
             </div>
 
             <flux:button
