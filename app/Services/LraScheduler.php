@@ -134,6 +134,7 @@ class LraScheduler
             // Tim yang WFO hari ini
             $timIds = JadwalWfo::where('periode_wfo_id', $periodeWfoId)
                 ->where('hari', $namaHari)
+                ->whereHas('tim', fn ($q) => $q->where('status', 'active')) // Filter tim active
                 ->pluck('tim_id');
 
             foreach ($timIds as $timId) {
@@ -255,6 +256,7 @@ class LraScheduler
     {
         $timIds = JadwalWfo::where('periode_wfo_id', $periodeWfoId)
             ->where('hari', $namaHari)
+            ->whereHas('tim', fn ($q) => $q->where('status', 'active')) // Filter tim active
             ->pluck('tim_id');
 
         return Personil::whereIn('tim_id', $timIds)

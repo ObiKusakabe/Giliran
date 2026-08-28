@@ -4,7 +4,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Tampilan')] #[Layout('layouts.admin')] class extends Component {
+new #[Title('Pengaturan Tampilan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label' => 'Pengaturan'], ['label' => 'Tampilan']]])] class extends Component {
     //
 }; ?>
 

@@ -43,6 +43,13 @@
                 allowInput: false,
                 disableMobile: true,
                 appendTo: dialogEl ?? document.body,
+                onOpen: function(selectedDates, dateStr, instance) {
+                    // Force z-index above modal backdrop (9999)
+                    const fpContainer = instance.calendarContainer;
+                    if (fpContainer) {
+                        fpContainer.style.zIndex = '10000';
+                    }
+                },
                 onChange: (dates) => {
                     if (dates.length >= 1) {
                         this.from = this.fp.formatDate(dates[0], 'Y-m-d');

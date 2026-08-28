@@ -12,18 +12,28 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
     public ?int $editingId    = null;
     public string $nama_tim   = '';
     public string $keterangan = '';
+    public string $status     = 'active'; // Default status
     public ?int $hapusId      = null;
+    public bool $showInactive = false; // Toggle filter inactive
+    public ?int $toggleStatusId = null; // ID tim yang akan toggle status
 
     #[Computed]
     public function semuaTim(): array
     {
-        return Tim::withCount('personil')
-            ->orderBy('nama_tim')
+        $query = Tim::withCount('personil');
+
+        // Filter status berdasarkan toggle
+        if (!$this->showInactive) {
+            $query->where('status', 'active');
+        }
+
+        return $query->orderBy('nama_tim')
             ->get()
             ->map(fn ($t) => [
                 'id'             => $t->id,
                 'nama_tim'       => $t->nama_tim,
                 'keterangan'     => $t->keterangan ?? '',
+                'status'         => $t->status,
                 'personil_count' => $t->personil_count,
             ])
             ->toArray();
@@ -41,6 +51,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
         $this->editingId  = $id;
         $this->nama_tim   = $tim->nama_tim;
         $this->keterangan = $tim->keterangan ?? '';
+        $this->status     = $tim->status;
         $this->modal('form-tim')->show();
     }
 
@@ -49,24 +60,61 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
         $this->validate([
             'nama_tim'   => 'required|string|max:100',
             'keterangan' => 'nullable|string',
+            'status'     => 'required|in:active,inactive',
         ]);
+
+        // Auto-generate nama dengan suffix gelombang jika create baru
+        $namaTim = $this->nama_tim;
+        if (!$this->editingId && !str_contains($this->nama_tim, '-' . now()->year . '-')) {
+            $naming = app(\App\Services\TimNamingService::class);
+            $namaTim = $naming->generateNamaGelombang($this->nama_tim);
+        }
 
         if ($this->editingId) {
             Tim::findOrFail($this->editingId)->update([
-                'nama_tim'   => $this->nama_tim,
+                'nama_tim'   => $namaTim,
                 'keterangan' => $this->keterangan ?: null,
+                'status'     => $this->status,
             ]);
             Flux::toast(variant: 'success', text: 'Tim berhasil diperbarui.');
         } else {
             Tim::create([
-                'nama_tim'   => $this->nama_tim,
+                'nama_tim'   => $namaTim,
                 'keterangan' => $this->keterangan ?: null,
+                'status'     => $this->status,
             ]);
-            Flux::toast(variant: 'success', text: 'Tim berhasil ditambahkan.');
+            Flux::toast(variant: 'success', text: 'Tim berhasil ditambahkan dengan nama: ' . $namaTim);
         }
 
         $this->modal('form-tim')->close();
         $this->resetForm();
+        unset($this->semuaTim);
+    }
+
+    public function konfirmasiToggleStatus(int $id): void
+    {
+        $this->toggleStatusId = $id;
+        $this->modal('konfirmasi-toggle-status')->show();
+    }
+
+    public function toggleStatus(): void
+    {
+        if (!$this->toggleStatusId) {
+            return;
+        }
+
+        $tim = Tim::findOrFail($this->toggleStatusId);
+        $newStatus = $tim->status === 'active' ? 'inactive' : 'active';
+
+        $tim->update(['status' => $newStatus]);
+
+        $message = $newStatus === 'active'
+            ? 'Tim berhasil diaktifkan kembali.'
+            : 'Tim berhasil dinonaktifkan. Tim tidak akan masuk scheduling.';
+
+        Flux::toast(variant: 'success', text: $message);
+        $this->modal('konfirmasi-toggle-status')->close();
+        $this->toggleStatusId = null;
         unset($this->semuaTim);
     }
 
@@ -104,6 +152,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
         $this->editingId  = null;
         $this->nama_tim   = '';
         $this->keterangan = '';
+        $this->status     = 'active'; // Reset to default
         $this->resetValidation();
     }
 }; ?>
@@ -162,6 +211,11 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
         <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus" class="flex-shrink-0">Tambah Tim</flux:button>
     </div>
 
+    {{-- Filter Toggle --}}
+    <div class="flex items-center gap-3">
+        <flux:checkbox wire:model.live="showInactive" label="Tampilkan Tim Inactive" />
+    </div>
+
     <div class="relative">
         <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -182,7 +236,11 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
             <template x-for="tim in displayed" :key="tim.id">
                 <div class="flex items-center gap-3 px-4 py-3">
                     <div class="flex-1 min-w-0">
-                        <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate" x-text="tim.nama_tim"></p>
+                        <div class="flex items-center gap-2">
+                            <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate" x-text="tim.nama_tim"></p>
+                            <span x-show="tim.status === 'active'" class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">Active</span>
+                            <span x-show="tim.status === 'inactive'" class="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-700 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-400">Inactive</span>
+                        </div>
                         <p class="text-xs text-zinc-500 truncate mt-0.5" x-text="tim.keterangan || '—'"></p>
                         <div class="flex items-center gap-1.5 mt-1">
                             <span class="text-xs text-zinc-400">Personil:</span>
@@ -193,6 +251,12 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
                         <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
                         <flux:menu>
                             <flux:menu.item icon="pencil" @click="$wire.bukaFormEdit(tim.id)">Edit</flux:menu.item>
+                            <template x-if="tim.status === 'active'">
+                                <flux:menu.item icon="x-circle" @click="$wire.konfirmasiToggleStatus(tim.id)">Set Inactive</flux:menu.item>
+                            </template>
+                            <template x-if="tim.status === 'inactive'">
+                                <flux:menu.item icon="check-circle" @click="$wire.konfirmasiToggleStatus(tim.id)">Set Active</flux:menu.item>
+                            </template>
                             <flux:menu.separator />
                             <flux:menu.item icon="trash" variant="danger" @click="$wire.konfirmasiHapus(tim.id)">Hapus</flux:menu.item>
                         </flux:menu>
@@ -213,6 +277,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
                                 <svg x-show="sortField!=='nama_tim'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
                             </span>
                         </th>
+                        <th class="px-4 py-3 text-left font-medium text-zinc-600 dark:text-zinc-400">Status</th>
                         <th class="px-4 py-3 text-left font-medium text-zinc-600 dark:text-zinc-400">Keterangan</th>
                         <th @click="toggleSort('personil_count')" class="px-4 py-3 text-center font-medium text-zinc-600 dark:text-zinc-400 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
                             <span class="inline-flex items-center justify-center gap-1">Personil
@@ -226,11 +291,15 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
                 </thead>
                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     <template x-if="displayed.length === 0">
-                        <tr><td colspan="4" class="px-4 py-8 text-center text-zinc-400 text-sm" x-text="q ? 'Tidak ada tim yang cocok.' : 'Belum ada tim.'"></td></tr>
+                        <tr><td colspan="5" class="px-4 py-8 text-center text-zinc-400 text-sm" x-text="q ? 'Tidak ada tim yang cocok.' : 'Belum ada tim.'"></td></tr>
                     </template>
                     <template x-for="tim in displayed" :key="tim.id">
                         <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
                             <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100" x-text="tim.nama_tim"></td>
+                            <td class="px-4 py-3">
+                                <span x-show="tim.status === 'active'" class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">Active</span>
+                                <span x-show="tim.status === 'inactive'" class="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-700 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-400">Inactive</span>
+                            </td>
                             <td class="px-4 py-3 text-zinc-500 max-w-xs truncate" x-text="tim.keterangan || '—'"></td>
                             <td class="px-4 py-3 text-center">
                                 <span class="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-700 px-2.5 py-0.5 text-xs font-medium text-zinc-700 dark:text-zinc-300" x-text="tim.personil_count"></span>
@@ -240,6 +309,12 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
                                     <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
                                     <flux:menu>
                                         <flux:menu.item icon="pencil" @click="$wire.bukaFormEdit(tim.id)">Edit</flux:menu.item>
+                                        <template x-if="tim.status === 'active'">
+                                            <flux:menu.item icon="x-circle" @click="$wire.konfirmasiToggleStatus(tim.id)">Set Inactive</flux:menu.item>
+                                        </template>
+                                        <template x-if="tim.status === 'inactive'">
+                                            <flux:menu.item icon="check-circle" @click="$wire.konfirmasiToggleStatus(tim.id)">Set Active</flux:menu.item>
+                                        </template>
                                         <flux:menu.separator />
                                         <flux:menu.item icon="trash" variant="danger" @click="$wire.konfirmasiHapus(tim.id)">Hapus</flux:menu.item>
                                     </flux:menu>
@@ -296,6 +371,29 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
             <div class="flex justify-end gap-2">
                 <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
                 <flux:button variant="danger" wire:click="hapus" wire:loading.attr="disabled" wire:target="hapus">Ya, Hapus</flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
+    <flux:modal name="konfirmasi-toggle-status" class="max-w-md">
+        <div class="flex flex-col gap-4 p-1">
+            <div>
+                <flux:heading size="lg">Konfirmasi Ubah Status Tim</flux:heading>
+                <flux:text class="mt-1 text-zinc-500">
+                    Tim yang dinonaktifkan tidak akan masuk jadwal scheduling dan tidak bisa login. 
+                    Tim yang diaktifkan kembali akan masuk jadwal scheduling dan bisa login.
+                </flux:text>
+            </div>
+            <div class="flex justify-end gap-2">
+                <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
+                <flux:button 
+                    variant="primary"
+                    wire:click="toggleStatus" 
+                    wire:loading.attr="disabled" 
+                    wire:target="toggleStatus"
+                >
+                    Ya, Ubah Status
+                </flux:button>
             </div>
         </div>
     </flux:modal>

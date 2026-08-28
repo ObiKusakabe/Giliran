@@ -7,7 +7,7 @@ Aplikasi web internal untuk mengelola jadwal petugas adzan/pembacaan kitab, brie
 
 ## Stack
 
-- **Laravel 13** (PHP 8.4) + **Livewire 4** + **Flux UI**
+- **Laravel 13** (PHP 8.3) + **Livewire 4** + **Flux UI**
 - **Tailwind CSS v4** + Alpine.js
 - **MySQL** + Laravel Queue (database driver)
 - **Laravel Fortify** (autentikasi headless)

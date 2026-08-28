@@ -16,6 +16,78 @@
 
 {{-- Custom sidebar styles --}}
 <style>
+    /* Prevent text selection on logo */
+    [data-flux-sidebar-brand],
+    [data-flux-sidebar-brand] *,
+    [data-flux-brand],
+    [data-flux-brand] * {
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+    }
+
+    /* Custom scrollbar untuk sidebar */
+    .scrollbar-thin::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: rgb(212 212 216); /* zinc-300 */
+        border-radius: 3px;
+    }
+    
+    .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: rgb(63 63 70); /* zinc-700 */
+    }
+    
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background-color: rgb(161 161 170); /* zinc-400 */
+    }
+    
+    .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background-color: rgb(82 82 91); /* zinc-600 */
+    }
+
+    /* Sidebar smooth animation - ease-out gentle (300ms, no bounce) */
+    [data-flux-sidebar] {
+        transition: width 300ms cubic-bezier(0.4, 0.0, 0.2, 1) !important;
+    }
+    
+    [data-flux-sidebar] * {
+        transition: opacity 300ms cubic-bezier(0.4, 0.0, 0.2, 1),
+                    transform 300ms cubic-bezier(0.4, 0.0, 0.2, 1);
+    }
+
+    /* Fix collapsed button sizing - force square dimensions */
+    [data-flux-sidebar][data-flux-collapsed="true"] button[data-flux-sidebar-item],
+    [data-flux-sidebar][data-flux-collapsed="true"] a[data-flux-sidebar-item] {
+        width: 2.5rem !important; /* 40px = w-10 */
+        height: 2.5rem !important;
+        min-width: 2.5rem !important;
+        min-height: 2.5rem !important;
+        border-radius: 0.5rem !important; /* rounded-lg */
+        justify-content: center !important;
+        align-items: center !important;
+        padding: 0 !important;
+    }
+    
+    /* Ensure icon stays centered in collapsed state */
+    [data-flux-sidebar][data-flux-collapsed="true"] button[data-flux-sidebar-item] svg,
+    [data-flux-sidebar][data-flux-collapsed="true"] a[data-flux-sidebar-item] svg {
+        margin: 0 !important;
+    }
+    
+    /* Hide text labels in collapsed state */
+    [data-flux-sidebar][data-flux-collapsed="true"] button[data-flux-sidebar-item] span:not(.sr-only),
+    [data-flux-sidebar][data-flux-collapsed="true"] a[data-flux-sidebar-item] span:not(.sr-only) {
+        display: none !important;
+    }
+
     /* Sidebar active state: blue background + white text (sama kayak collapsed icons) */
     /* Target dengan specificity tinggi */
     [data-flux-sidebar] a[aria-current="page"],
@@ -83,6 +155,55 @@
     /* Avatar image: bulat penuh */
     [data-flux-sidebar-profile] [data-flux-avatar] img {
         border-radius: 9999px !important;
+    }
+
+    /* Fix Flux button hover - prevent white background on colored buttons */
+    /* Strengthened selectors to catch all Flux button variants */
+    button[data-flux-button][variant="primary"],
+    button[data-flux-button][class*="bg-blue"],
+    button[data-flux-button][class*="bg-brand"],
+    button[data-flux-button][class*="primary"] {
+        background-color: rgb(37 99 235) !important; /* blue-600 */
+        color: white !important;
+        border-color: rgb(37 99 235) !important;
+    }
+    
+    button[data-flux-button][variant="primary"]:hover,
+    button[data-flux-button][class*="bg-blue"]:hover,
+    button[data-flux-button][class*="bg-brand"]:hover,
+    button[data-flux-button][class*="primary"]:hover {
+        background-color: rgb(29 78 216) !important; /* blue-700 */
+        color: white !important;
+        border-color: rgb(29 78 216) !important;
+    }
+    
+    button[data-flux-button][variant="danger"],
+    button[data-flux-button][class*="bg-red"],
+    button[data-flux-button][class*="danger"] {
+        background-color: rgb(220 38 38) !important; /* red-600 */
+        color: white !important;
+        border-color: rgb(220 38 38) !important;
+    }
+    
+    button[data-flux-button][variant="danger"]:hover,
+    button[data-flux-button][class*="bg-red"]:hover,
+    button[data-flux-button][class*="danger"]:hover {
+        background-color: rgb(185 28 28) !important; /* red-700 */
+        color: white !important;
+        border-color: rgb(185 28 28) !important;
+    }
+    
+    /* Disabled state - ensure no hover effect */
+    button[data-flux-button][disabled],
+    button[data-flux-button]:disabled {
+        opacity: 0.5 !important;
+        cursor: not-allowed !important;
+        pointer-events: none !important;
+    }
+    
+    button[data-flux-button][disabled]:hover,
+    button[data-flux-button]:disabled:hover {
+        background-color: inherit !important;
     }
 </style>
 

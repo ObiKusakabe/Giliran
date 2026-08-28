@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -11,6 +12,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property string $nama_tim
  * @property string|null $keterangan
+ * @property string $status
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -24,6 +26,7 @@ class Tim extends Model
     protected $fillable = [
         'nama_tim',
         'keterangan',
+        'status',
     ];
 
     /** @return HasMany<Personil, $this> */
@@ -48,5 +51,39 @@ class Tim extends Model
     public function jadwalBriefing(): HasMany
     {
         return $this->hasMany(JadwalBriefing::class, 'tim_id');
+    }
+
+    // ── Scopes ────────────────────────────────────────────────────────────────
+
+    /**
+     * Scope untuk filter tim yang aktif.
+     *
+     * @param  Builder  $query
+     * @return Builder
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active');
+    }
+
+    /**
+     * Scope untuk filter tim yang inactive.
+     *
+     * @param  Builder  $query
+     * @return Builder
+     */
+    public function scopeInactive($query)
+    {
+        return $query->where('status', 'inactive');
+    }
+
+    // ── Accessors ─────────────────────────────────────────────────────────────
+
+    /**
+     * Check apakah tim active.
+     */
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
     }
 }

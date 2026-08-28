@@ -4,11 +4,14 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Fortify;
 
 class FortifyServiceProvider extends ServiceProvider
@@ -29,6 +32,7 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+        $this->configureAuthentication();
     }
 
     /**
@@ -75,6 +79,29 @@ class FortifyServiceProvider extends ServiceProvider
             return Limit::perMinute(10)->by(
                 ($credentialId ?: $request->session()->getId()).'|'.$request->ip(),
             );
+        });
+    }
+
+    /**
+     * Configure custom authentication logic.
+     */
+    private function configureAuthentication(): void
+    {
+        Fortify::authenticateUsing(function (Request $request) {
+            $user = User::where('email', $request->email)->first();
+
+            if (! $user || ! Hash::check($request->password, $user->password)) {
+                return null;
+            }
+
+            // Check tim status jika user adalah role=tim
+            if ($user->role === 'tim' && $user->tim && $user->tim->status === 'inactive') {
+                throw ValidationException::withMessages([
+                    'email' => ['Tim Anda sudah tidak aktif. Silakan hubungi admin.'],
+                ]);
+            }
+
+            return $user;
         });
     }
 }

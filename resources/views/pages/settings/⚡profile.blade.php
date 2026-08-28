@@ -10,7 +10,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Profile settings')] #[Layout('layouts.admin')] class extends Component {
+new #[Title('Pengaturan Profil')] #[Layout('layouts.admin', ['breadcrumbs' => [['label' => 'Pengaturan'], ['label' => 'Profil']]])] class extends Component {
     use ProfileValidationRules;
 
     public string $name = '';

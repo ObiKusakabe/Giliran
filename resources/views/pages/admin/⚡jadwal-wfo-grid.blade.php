@@ -373,9 +373,7 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
             @foreach (['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'] as $hari)
                 <flux:card
                     class="flex flex-col gap-3 p-3 min-h-[140px] transition-colors"
-                    :class="{
-                        'ring-2 ring-brand ring-offset-1 ring-offset-zinc-900 bg-brand/5': overHari === '{{ $hari }}' && dragging && dragging.hariAsal !== '{{ $hari }}',
-                    }"
+                    x-bind:class="overHari === '{{ $hari }}' && dragging && dragging.hariAsal !== '{{ $hari }}' ? 'ring-2 ring-brand ring-offset-1 ring-offset-zinc-900 bg-brand/5' : ''"
                     data-touch-hari="{{ $hari }}"
                     @dragover.prevent="overHari = '{{ $hari }}'"
                     @dragleave="overHari = null"
