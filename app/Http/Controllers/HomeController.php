@@ -14,10 +14,20 @@ class HomeController extends Controller
      */
     public function __invoke(Request $request): RedirectResponse
     {
-        return match ($request->user()->role) {
-            'admin' => redirect('/admin/dashboard'),
-            'tim' => redirect('/jadwal-tim'),
-            default => redirect('/login'),
-        };
+        $user = $request->user();
+
+        if ($user->isAdmin()) {
+            return redirect('/admin/dashboard');
+        }
+
+        if ($user->isTim()) {
+            if ($user->needsOnboarding()) {
+                return redirect()->route('tim.onboarding');
+            }
+
+            return redirect('/jadwal-tim');
+        }
+
+        return redirect('/login');
     }
 }

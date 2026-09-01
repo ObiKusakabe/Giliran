@@ -1,14 +1,20 @@
-<x-layouts::auth :title="__('Masuk')">
-    <div class="flex flex-col gap-6">
-        <x-auth-header
-            :title="__('Sistem Manajemen Jadwal')"
-            :description="__('Masuk dengan akun yang diberikan oleh admin')"
-        />
+<x-layouts::auth.split :title="__('Masuk')">
+    <div class="space-y-6">
+        <flux:heading class="text-center" size="xl">{{ __('Selamat Datang') }}</flux:heading>
 
         <!-- Session Status -->
         <x-auth-session-status class="text-center" :status="session('status')" />
 
-        <form method="POST" action="{{ route('login.store') }}" class="flex flex-col gap-6" x-data="{ loading: false }" @submit="loading = true">
+        <!-- Passkey Login -->
+        <x-passkey-verify
+            options-route="passkey.login-options"
+            submit-route="passkey.login"
+            :label="__('Masuk dengan Passkey')"
+            :loading-label="__('Mengautentikasi...')"
+            :separator="__('atau')"
+        />
+
+        <form method="POST" action="{{ route('login.store') }}" class="flex flex-col gap-5" x-data="{ loading: false }" @submit="loading = true">
             @csrf
 
             <!-- Email -->
@@ -24,27 +30,31 @@
             />
 
             <!-- Password -->
-            <div class="relative">
+            <flux:field>
+                <div class="mb-2 flex justify-between">
+                    <flux:label>{{ __('Password') }}</flux:label>
+
+                    @if (Route::has('password.request'))
+                        <flux:link
+                            :href="route('password.request')"
+                            variant="subtle"
+                            class="text-sm"
+                            wire:navigate
+                        >
+                            {{ __('Lupa password?') }}
+                        </flux:link>
+                    @endif
+                </div>
+
                 <flux:input
                     name="password"
-                    :label="__('Password')"
                     type="password"
                     required
                     autocomplete="current-password"
-                    :placeholder="__('Password')"
+                    :placeholder="__('Password Anda')"
                     viewable
                 />
-
-                @if (Route::has('password.request'))
-                    <flux:link
-                        class="absolute top-0 end-0 text-sm"
-                        :href="route('password.request')"
-                        wire:navigate
-                    >
-                        {{ __('Lupa password?') }}
-                    </flux:link>
-                @endif
-            </div>
+            </flux:field>
 
             <!-- Remember Me -->
             <flux:checkbox name="remember" :label="__('Ingat saya')" :checked="old('remember')" />
@@ -60,5 +70,12 @@
                 </span>
             </flux:button>
         </form>
+
+        @if (Route::has('register'))
+            <flux:text class="text-center text-sm">
+                {{ __('Belum memiliki akun?') }}
+                <flux:link :href="route('register')" wire:navigate class="font-medium ms-1">{{ __('Daftar') }}</flux:link>
+            </flux:text>
+        @endif
     </div>
-</x-layouts::auth>
+</x-layouts::auth.split>

@@ -61,7 +61,7 @@ class LraScheduler
 
         foreach ($tanggalList as $tanggal) {
             $namaHari = $this->namaHariIndonesia($tanggal);
-            $kandidat = $this->ambilPersonilWfo($periodeWfoId, $namaHari);
+            $kandidat = $this->ambilPersonilWfo($periodeWfoId, $namaHari, 'laki-laki');
 
             if ($kandidat->isEmpty()) {
                 continue;
@@ -252,7 +252,7 @@ class LraScheduler
      *
      * @return Collection<int, Personil>
      */
-    public function ambilPersonilWfo(int $periodeWfoId, string $namaHari): Collection
+    public function ambilPersonilWfo(int $periodeWfoId, string $namaHari, ?string $jenisKelamin = null): Collection
     {
         $timIds = JadwalWfo::where('periode_wfo_id', $periodeWfoId)
             ->where('hari', $namaHari)
@@ -261,6 +261,7 @@ class LraScheduler
 
         return Personil::whereIn('tim_id', $timIds)
             ->where('status', 'aktif')
+            ->when($jenisKelamin, fn ($q) => $q->where('jenis_kelamin', $jenisKelamin))
             ->get();
     }
 

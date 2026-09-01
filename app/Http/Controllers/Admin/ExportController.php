@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\AlokasiRuangan;
 use App\Models\JadwalAdzanKitab;
 use App\Models\JadwalBriefing;
+use App\Models\JadwalWfo;
+use App\Models\PeriodeWfo;
+use App\Models\Tim;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -21,31 +24,55 @@ class ExportController extends Controller
 
     public function pdf(Request $request): Response
     {
-        $request->validate([
-            'tanggal_mulai' => 'required|date',
-            'tanggal_selesai' => 'required|date|after_or_equal:tanggal_mulai',
-            'jenis' => 'required|in:semua,adzan,briefing,ruangan',
-        ]);
+        $periodeAktif = PeriodeWfo::where('status', 'aktif')->first();
 
-        $mulai = Carbon::parse($request->tanggal_mulai);
-        $selesai = Carbon::parse($request->tanggal_selesai);
-        $jenis = $request->jenis;
+        $tglMulai = $request->input('tanggal_mulai')
+            ?? $periodeAktif?->tanggal_mulai?->format('Y-m-d')
+            ?? now()->startOfMonth()->format('Y-m-d');
 
-        $adzan = $jenis === 'semua' || $jenis === 'adzan'
+        $tglSelesai = $request->input('tanggal_selesai')
+            ?? $periodeAktif?->tanggal_selesai?->format('Y-m-d')
+            ?? now()->endOfMonth()->format('Y-m-d');
+
+        $jenis = $request->input('jenis', 'semua');
+
+        $mulai = Carbon::parse($tglMulai);
+        $selesai = Carbon::parse($tglSelesai);
+
+        $periode = PeriodeWfo::where('tanggal_mulai', '<=', $selesai)
+            ->where('tanggal_selesai', '>=', $mulai)
+            ->first() ?? $periodeAktif;
+
+        // 1. Data WFO Mingguan (Lampiran 1)
+        $jadwalWfo = JadwalWfo::with('tim')
+            ->when($periode, fn ($q) => $q->where('periode_wfo_id', $periode->id))
+            ->get()
+            ->groupBy('hari');
+
+        // 2. Data Kelompok Tim & Personil (Lampiran 2)
+        $semuaTim = Tim::with(['personil' => fn ($q) => $q->where('status', 'aktif')])
+            ->where('status', 'active')
+            ->orderBy('nama_tim')
+            ->get();
+
+        // 3. Data Adzan & Kitab
+        $adzan = ($jenis === 'semua' || $jenis === 'adzan')
             ? JadwalAdzanKitab::with('personil.tim')
                 ->whereBetween('tanggal', [$mulai, $selesai])
-                ->orderBy('tanggal')->orderBy('waktu_sholat')
+                ->orderBy('tanggal')
                 ->get()
             : collect();
 
-        $briefing = $jenis === 'semua' || $jenis === 'briefing'
+        // 4. Data Briefing
+        $briefing = ($jenis === 'semua' || $jenis === 'briefing')
             ? JadwalBriefing::with('personil', 'tim')
                 ->whereBetween('tanggal', [$mulai, $selesai])
                 ->orderBy('tanggal')->orderBy('sesi')
                 ->get()
             : collect();
 
-        $ruangan = $jenis === 'semua' || $jenis === 'ruangan'
+        // 5. Data Ruangan
+        $ruangan = ($jenis === 'semua' || $jenis === 'ruangan')
             ? AlokasiRuangan::with('tim', 'ruangan')
                 ->whereBetween('tanggal', [$mulai, $selesai])
                 ->orderBy('tanggal')
@@ -53,10 +80,10 @@ class ExportController extends Controller
             : collect();
 
         $pdf = Pdf::loadView('admin.export.pdf', compact(
-            'adzan', 'briefing', 'ruangan', 'mulai', 'selesai', 'jenis'
+            'adzan', 'briefing', 'ruangan', 'jadwalWfo', 'semuaTim', 'periode', 'mulai', 'selesai', 'jenis'
         ))->setPaper('a4', 'portrait');
 
-        $filename = 'jadwal-'.$mulai->format('Ymd').'-'.$selesai->format('Ymd').'.pdf';
+        $filename = 'jadwal-inovindo-'.$mulai->format('Ymd').'-'.$selesai->format('Ymd').'.pdf';
 
         return $pdf->download($filename);
     }

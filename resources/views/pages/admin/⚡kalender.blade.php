@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use App\Models\JadwalAdzanKitab;
 use App\Models\JadwalBriefing;
@@ -109,6 +109,9 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
         selectedEvent: null,
         filterJenis: '',
         filterTimId: '',
+        currentView: 'dayGridMonth',
+        activeDateLabel: '',
+        isSaturday: false,
 
         initCalendar() {
             this.calendar = new FullCalendar.Calendar(this.$refs.kalender, {
@@ -121,24 +124,52 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
                     FullCalendar.interactionPlugin,
                 ],
                 buttonText: {
-                    today: 'hari ini',
+                    today: 'Hari Ini',
                     month: 'Bulan',
                     week:  'Minggu',
-                    day:   'Hari',
+                    day:   'Harian',
                 },
                 slotMinTime: '09:00:00',
                 slotMaxTime: '17:00:00',
                 allDaySlot: true,
-                allDayText: 'Ruangan',
+                allDayText: 'WFO / Ruangan',
                 slotLabelFormat: {
-                    hour:   'numeric',
+                    hour:   '2-digit',
                     minute: '2-digit',
-                    hour12: true,
+                    hour12: false,
                 },
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                    right: 'dayGridMonth,timeGridDay'
+                },
+                navLinks: true,
+                navLinkDayClick: (date) => {
+                    this.calendar.changeView('timeGridDay', date);
+                },
+                dateClick: (info) => {
+                    if (this.currentView === 'dayGridMonth') {
+                        this.calendar.changeView('timeGridDay', info.dateStr);
+                    }
+                },
+                datesSet: (info) => {
+                    this.currentView = info.view.type;
+                    const dateObj = info.view.currentStart;
+                    const dayOfWeek = dateObj.getDay(); // 0 = Sun, 6 = Sat
+                    this.isSaturday = (dayOfWeek === 6);
+
+                    // Format tanggal Bahasa Indonesia
+                    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                    this.activeDateLabel = dateObj.toLocaleDateString('id-ID', options);
+
+                    // Dinamis jam kerja: Sabtu s/d 14:00, Senin-Jumat s/d 17:00
+                    if (this.currentView === 'timeGridDay') {
+                        if (this.isSaturday) {
+                            this.calendar.setOption('slotMaxTime', '14:00:00');
+                        } else {
+                            this.calendar.setOption('slotMaxTime', '17:00:00');
+                        }
+                    }
                 },
                 events: (info, successCb, failureCb) => {
                     const url = `/admin/kalender/events?start=${info.startStr}&end=${info.endStr}&tim_id=${this.filterTimId}`;
@@ -278,12 +309,46 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
                 }
                 /* ── Background hari ── */
                 .fc .fc-daygrid-day,
-                .fc .fc-day-sun,
                 .fc .fc-daygrid-body,
                 .fc .fc-timegrid-slot,
                 .fc .fc-timegrid-col {
                     background-color: transparent !important;
                 }
+
+                /* Hari Minggu - Tanda Libur */
+                .fc .fc-daygrid-day.fc-day-sun {
+                    background-color: rgba(254, 242, 242, 0.45) !important;
+                }
+                .dark .fc .fc-daygrid-day.fc-day-sun {
+                    background-color: rgba(239, 68, 68, 0.04) !important;
+                }
+                .fc .fc-daygrid-day.fc-day-sun .fc-daygrid-day-number {
+                    color: #ef4444 !important;
+                    font-weight: 600;
+                }
+                .fc .fc-daygrid-day.fc-day-sun .fc-daygrid-day-top::after {
+                    content: 'Libur';
+                    font-size: 9px;
+                    font-weight: 600;
+                    color: #dc2626;
+                    background: rgba(239, 68, 68, 0.12);
+                    padding: 1px 4px;
+                    border-radius: 4px;
+                    margin-right: 4px;
+                }
+
+                /* Pointer hover on Month Grid */
+                .fc-daygrid-day-frame {
+                    cursor: pointer;
+                    transition: background-color 0.15s ease;
+                }
+                .fc-daygrid-day-frame:hover {
+                    background-color: rgba(59, 113, 202, 0.06);
+                }
+                .dark .fc-daygrid-day-frame:hover {
+                    background-color: rgba(59, 113, 202, 0.12);
+                }
+
                 /* ── Hari ini ── */
                 .fc .fc-daygrid-day.fc-day-today {
                     background-color: rgba(59,113,202,0.08) !important;
@@ -300,6 +365,7 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
                     border-color: var(--color-zinc-200, #e5e5e5) !important;
                     color: var(--color-zinc-700, #3f3f46) !important;
                     font-size: 0.75rem; padding: 0.3rem 0.6rem; box-shadow: none !important;
+                    border-radius: 0.5rem !important;
                 }
                 .dark .fc .fc-button, .dark .fc .fc-button-primary {
                     background-color: #27272a !important;
@@ -316,9 +382,9 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
                 }
                 .fc .fc-button-active,
                 .fc .fc-button-primary:not(:disabled).fc-button-active {
-                    background-color: #f4f4f5 !important;
-                    border-color: #e4e4e7 !important;
-                    color: #18181b !important;
+                    background-color: #3B71CA !important;
+                    border-color: #3B71CA !important;
+                    color: #ffffff !important;
                     font-weight: 600;
                 }
                 /* ── Judul bulan ── */
@@ -336,6 +402,29 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
                 /* ── List empty ── */
                 .fc .fc-list-empty { color: #71717a; }
             </style>
+
+            {{-- Breadcrumb Navigation saat di Mode Harian --}}
+            <div x-show="currentView === 'timeGridDay'" x-transition class="mb-4 flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/50">
+                <div class="flex items-center gap-2.5">
+                    <button
+                        type="button"
+                        @click="calendar.changeView('dayGridMonth')"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition-all border border-zinc-200 dark:border-zinc-700 shadow-xs cursor-pointer"
+                    >
+                        <flux:icon icon="arrow-left" class="size-3.5 text-blue-600 dark:text-blue-400" />
+                        <span>← Kembali ke Tampilan Bulan</span>
+                    </button>
+                    <span class="text-zinc-300 dark:text-zinc-600">/</span>
+                    <span class="text-xs font-bold text-blue-700 dark:text-blue-300 capitalize" x-text="activeDateLabel"></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                        <flux:icon icon="clock" class="size-3" />
+                        <span x-text="isSaturday ? 'Jam Operasional: 09:00 - 14:00 (Sabtu)' : 'Jam Operasional: 09:00 - 17:00 (Weekday)'"></span>
+                    </span>
+                </div>
+            </div>
+
             <div wire:ignore x-init="initCalendar()">
                 <div x-ref="kalender"></div>
             </div>

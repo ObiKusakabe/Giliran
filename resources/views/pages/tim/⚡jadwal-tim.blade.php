@@ -12,7 +12,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Jadwal Tim')] #[Layout('layouts.auth')] class extends Component {
+new #[Title('Jadwal Tim')] #[Layout('layouts.app.sidebar')] class extends Component {
 
     #[Computed]
     public function tim()
@@ -142,44 +142,16 @@ new #[Title('Jadwal Tim')] #[Layout('layouts.auth')] class extends Component {
     }
 }; ?>
 
-<div class="min-h-screen bg-zinc-50 dark:bg-zinc-900">
-    {{-- Topbar --}}
-    <header class="sticky top-0 z-10 border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 h-14 flex items-center px-4 gap-3">
-        <span class="font-semibold text-sm text-zinc-900 dark:text-zinc-100 flex-1">
-            {{ $this->tim?->nama_tim ?? 'Jadwal Tim' }}
-        </span>
+<div class="space-y-6">
+    {{-- Header --}}
+    <div>
+        <flux:heading size="xl" class="font-bold tracking-tight text-zinc-900 dark:text-white">Jadwal Tim</flux:heading>
+        <flux:text class="text-zinc-500 dark:text-zinc-400 mt-0.5">
+            Jadwal tugas seluruh anggota {{ $this->tim?->nama_tim ?? 'tim' }} ke depan. Konfirmasi kehadiran masing-masing anggota.
+        </flux:text>
+    </div>
 
-        <a href="{{ route('tim.ruangan') }}" wire:navigate
-           class="p-1.5 rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-xs text-zinc-500">
-            Ruangan
-        </a>
-
-        <a href="{{ route('notifikasi.index') }}" wire:navigate class="relative p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700">
-            <flux:icon icon="bell" class="h-5 w-5 text-zinc-500" />
-            @if ($this->jumlahBelumDibaca > 0)
-                <span class="absolute top-0.5 right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold">
-                    {{ $this->jumlahBelumDibaca > 9 ? '9+' : $this->jumlahBelumDibaca }}
-                </span>
-            @endif
-        </a>
-
-        <form method="POST" action="{{ route('logout') }}">
-            @csrf
-            <flux:button type="submit" variant="ghost" size="sm">Keluar</flux:button>
-        </form>
-    </header>
-
-    <div class="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-6">
-        {{-- Header --}}
-        <div>
-            <flux:heading size="xl">Jadwal Tim</flux:heading>
-            <flux:text class="text-zinc-500">
-                Jadwal tugas seluruh anggota {{ $this->tim?->nama_tim ?? 'tim' }} ke depan.
-                Konfirmasi kehadiran masing-masing anggota.
-            </flux:text>
-        </div>
-
-        @if (! $this->timId)
+    @if (! $this->timId)
             <flux:callout variant="warning" icon="exclamation-triangle">
                 <flux:callout.heading>Akun belum terhubung ke tim</flux:callout.heading>
                 <flux:callout.text>Hubungi admin untuk menghubungkan akun ini ke data tim.</flux:callout.text>
@@ -288,5 +260,4 @@ new #[Title('Jadwal Tim')] #[Layout('layouts.auth')] class extends Component {
                 </div>
             @endforeach
         @endif
-    </div>
 </div>

@@ -24,3 +24,14 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Markdown files (except README)
+*.md
+!README.md
+!README*.md
+BATCH_LOG.md
+
+# Session and temp framework files
+/sess_*
+/storage/framework/lsp-*.php
+

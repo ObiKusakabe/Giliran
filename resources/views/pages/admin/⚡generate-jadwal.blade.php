@@ -38,35 +38,40 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
         return PeriodeWfo::where('status', 'aktif')->first();
     }
 
+    public function mount(): void
+    {
+        if ($this->periodeAktif) {
+            $this->tanggalMulai   = $this->periodeAktif->tanggal_mulai->toDateString();
+            $this->tanggalSelesai = $this->periodeAktif->tanggal_selesai->toDateString();
+        }
+    }
+
     public function preview(): void
     {
-        $this->validate([
-            'tanggalMulai'   => 'required|date',
-            'tanggalSelesai' => 'required|date|after_or_equal:tanggalMulai',
-        ]);
-
         if (! $this->periodeAktif) {
             Flux::toast(variant: 'danger', text: 'Tidak ada periode WFO aktif. Aktifkan periode terlebih dahulu.');
             return;
         }
 
-        $periode   = $this->periodeAktif;
+        $periode = $this->periodeAktif;
+
+        // Auto-fill dari periode aktif jika belum terisi
+        if (empty($this->tanggalMulai)) {
+            $this->tanggalMulai = $periode->tanggal_mulai->toDateString();
+        }
+        if (empty($this->tanggalSelesai)) {
+            $this->tanggalSelesai = $periode->tanggal_selesai->toDateString();
+        }
+
         $scheduler = new LraScheduler;
 
-        // Validasi rentang ada di dalam periode aktif
         $mulai   = Carbon::parse($this->tanggalMulai);
         $selesai = Carbon::parse($this->tanggalSelesai);
-
-        if ($mulai->lt($periode->tanggal_mulai) || $selesai->gt($periode->tanggal_selesai)) {
-            Flux::toast(variant: 'danger', text: 'Rentang tanggal harus berada di dalam periode aktif ('
-                .$periode->tanggal_mulai->format('d/m/Y').' – '.$periode->tanggal_selesai->format('d/m/Y').').');
-            return;
-        }
 
         $tanggalList = $scheduler->expandTanggal($mulai, $selesai);
 
         if (empty($tanggalList)) {
-            Flux::toast(variant: 'warning', text: 'Tidak ada hari kerja dalam rentang tanggal tersebut.');
+            Flux::toast(variant: 'warning', text: 'Tidak ada hari kerja dalam rentang periode tersebut.');
             return;
         }
 
@@ -100,7 +105,15 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
             return;
         }
 
-        DB::transaction(function () {
+        $mulai   = Carbon::parse($this->tanggalMulai)->toDateString();
+        $selesai = Carbon::parse($this->tanggalSelesai)->toDateString();
+
+        DB::transaction(function () use ($mulai, $selesai) {
+            // Bersihkan jadwal lama pada rentang tanggal tersebut agar tidak terjadi duplikasi saat generate ulang
+            JadwalAdzanKitab::whereBetween('tanggal', [$mulai, $selesai])->delete();
+            JadwalBriefing::whereBetween('tanggal', [$mulai, $selesai])->delete();
+            AlokasiRuangan::whereBetween('tanggal', [$mulai, $selesai])->delete();
+
             // Bulk insert — GEN-08: tersimpan permanen
             if (! empty($this->previewAdzan)) {
                 JadwalAdzanKitab::insert($this->previewAdzan);
@@ -121,15 +134,15 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
 
         Flux::toast(
             variant: 'success',
-            text: "Jadwal berhasil disimpan: {$totalAdzan} adzan/kajian, {$totalBriefing} briefing, {$totalRuangan} alokasi ruangan."
+            text: "Jadwal berhasil diperbarui & disimpan: {$totalAdzan} adzan/kajian, {$totalBriefing} briefing, {$totalRuangan} alokasi ruangan."
         );
 
         // Reset state
         $this->reset(['previewAdzan', 'previewBriefing', 'previewRuangan', 'sudahPreview', 'warnings']);
         unset($this->periodeAktif);
 
-        // Redirect ke kalender setelah simpan (GEN setelah simpan → kalender)
-        $this->redirect(route('admin.kalender'), navigate: true);
+        // Redirect ke dashboard setelah simpan
+        $this->redirect(route('admin.dashboard'), navigate: true);
     }
 
     public function resetPreview(): void
@@ -146,62 +159,54 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
     <div>
         <flux:heading size="xl">Generate Jadwal</flux:heading>
         <flux:text class="text-zinc-500">
-            Generate jadwal adzan/kajian, briefing, dan alokasi ruangan dari data WFO.
-            Cek preview sebelum menyimpan.
+            Otomatisasi pembuatan jadwal adzan/kajian, briefing, dan alokasi ruangan berdasarkan periode WFO aktif.
         </flux:text>
     </div>
 
-    {{-- Info periode aktif --}}
+    {{-- Control Card: Periode Aktif --}}
     @if ($this->periodeAktif)
-        <flux:callout variant="success" icon="check-circle">
-            <flux:callout.heading>Periode Aktif: {{ $this->periodeAktif->keterangan }}</flux:callout.heading>
-            <flux:callout.text>
-                {{ $this->periodeAktif->tanggal_mulai->translatedFormat('d M Y') }}
-                s/d {{ $this->periodeAktif->tanggal_selesai->translatedFormat('d M Y') }}
-            </flux:callout.text>
-        </flux:callout>
+        <flux:card class="bg-gradient-to-r from-blue-500/5 via-emerald-500/5 to-transparent border-zinc-200 dark:border-zinc-700">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <flux:heading size="lg">{{ $this->periodeAktif->keterangan }}</flux:heading>
+                        <flux:badge color="green" size="sm">Periode Aktif</flux:badge>
+                    </div>
+                    <flux:text class="text-zinc-600 dark:text-zinc-300">
+                        <span class="font-medium text-zinc-900 dark:text-white">
+                            {{ $this->periodeAktif->tanggal_mulai->translatedFormat('l, d F Y') }}
+                        </span>
+                        s/d
+                        <span class="font-medium text-zinc-900 dark:text-white">
+                            {{ $this->periodeAktif->tanggal_selesai->translatedFormat('l, d F Y') }}
+                        </span>
+                    </flux:text>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <flux:button
+                        variant="primary"
+                        wire:click="preview"
+                        wire:loading.attr="disabled"
+                        wire:target="preview"
+                        icon="sparkles"
+                    >
+                        <span wire:loading.remove wire:target="preview">Generate & Preview</span>
+                        <span wire:loading wire:target="preview">Menghitung Algoritma LRA…</span>
+                    </flux:button>
+                </div>
+            </div>
+        </flux:card>
     @else
         <flux:callout variant="danger" icon="exclamation-triangle">
             <flux:callout.heading>Tidak ada periode WFO aktif</flux:callout.heading>
             <flux:callout.text>
                 Aktifkan periode di halaman
-                <a href="{{ route('admin.periode-wfo') }}" wire:navigate class="underline">Periode WFO</a>
-                terlebih dahulu.
+                <a href="{{ route('admin.periode-wfo') }}" wire:navigate class="underline font-medium">Periode WFO</a>
+                terlebih dahulu untuk men-generate jadwal.
             </flux:callout.text>
         </flux:callout>
     @endif
-
-    {{-- Form rentang tanggal --}}
-    <flux:card>
-        <div class="flex flex-col sm:flex-row gap-4 items-end">
-            <div class="flex-1">
-                <x-date-range-picker
-                    name-from="tanggalMulai"
-                    name-to="tanggalSelesai"
-                    label-from="Rentang Tanggal"
-                    label-to=""
-                    wire-from="tanggalMulai"
-                    wire-to="tanggalSelesai"
-                    :value-from="$tanggalMulai"
-                    :value-to="$tanggalSelesai"
-                    :min-date="$this->periodeAktif?->tanggal_mulai->toDateString()"
-                    :max-date="$this->periodeAktif?->tanggal_selesai->toDateString()"
-                    :required="true"
-                />
-            </div>
-
-            <flux:button
-                variant="primary"
-                wire:click="preview"
-                wire:loading.attr="disabled"
-                wire:target="preview"
-                icon="sparkles"
-            >
-                <span wire:loading.remove wire:target="preview">Preview</span>
-                <span wire:loading wire:target="preview">Menghitung…</span>
-            </flux:button>
-        </div>
-    </flux:card>
 
     {{-- Warnings --}}
     @if (! empty($warnings))

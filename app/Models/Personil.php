@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $tim_id
  * @property string $nama
+ * @property string $jenis_kelamin -- laki-laki|perempuan
  * @property string|null $no_hp
  * @property string $status -- aktif|nonaktif
  * @property Carbon|null $created_at
@@ -27,6 +28,7 @@ class Personil extends Model
     protected $fillable = [
         'tim_id',
         'nama',
+        'jenis_kelamin',
         'no_hp',
         'status',
     ];

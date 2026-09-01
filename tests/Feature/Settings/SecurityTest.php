@@ -17,43 +17,25 @@ beforeEach(function () {
     ]);
 });
 
-test('security settings page can be rendered', function () {
+test('security settings route redirects to profile page', function () {
     $user = User::factory()->create();
 
     $response = $this->actingAs($user)
-        ->withSession(['auth.password_confirmed_at' => time()])
         ->get(route('security.edit'));
 
-    $response->assertOk();
+    $response->assertRedirect(route('profile.edit'));
+});
 
+test('profile page displays security sections', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)
+        ->get(route('profile.edit'));
+
+    $response->assertOk();
     $response->assertSee('Passkeys');
     $response->assertSee('No passkeys yet');
     $response->assertSee('Two-factor authentication');
-    $response->assertSee('Enable 2FA');
-});
-
-test('security settings page requires password confirmation when enabled', function () {
-    $user = User::factory()->create();
-
-    $response = $this->actingAs($user)
-        ->get(route('security.edit'));
-
-    $response->assertRedirect(route('password.confirm'));
-});
-
-test('security settings page renders without two factor when feature is disabled', function () {
-    config(['fortify.features' => []]);
-
-    $user = User::factory()->create();
-
-    $this->actingAs($user)
-        ->withSession(['auth.password_confirmed_at' => time()])
-        ->get(route('security.edit'))
-        ->assertOk()
-        ->assertSee('Perbarui Password')
-        ->assertDontSee('Manage your passkeys for passwordless sign-in')
-        ->assertDontSee('Add a passkey to sign in without a password')
-        ->assertDontSee('Two-factor authentication');
 });
 
 test('two factor authentication disabled when confirmation abandoned between requests', function () {
@@ -67,7 +49,7 @@ test('two factor authentication disabled when confirmation abandoned between req
 
     $this->actingAs($user);
 
-    $component = Livewire::test('pages::settings.security');
+    $component = Livewire::test('pages::settings.profile');
 
     $component->assertSet('twoFactorEnabled', false);
 
@@ -85,7 +67,7 @@ test('password can be updated', function () {
 
     $this->actingAs($user);
 
-    $response = Livewire::test('pages::settings.security')
+    $response = Livewire::test('pages::settings.profile')
         ->set('current_password', 'password')
         ->set('password', 'new-password')
         ->set('password_confirmation', 'new-password')
@@ -103,7 +85,7 @@ test('correct password must be provided to update password', function () {
 
     $this->actingAs($user);
 
-    $response = Livewire::test('pages::settings.security')
+    $response = Livewire::test('pages::settings.profile')
         ->set('current_password', 'wrong-password')
         ->set('password', 'new-password')
         ->set('password_confirmation', 'new-password')

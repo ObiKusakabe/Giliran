@@ -10,12 +10,13 @@ use Livewire\Component;
 
 new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
 
-    public ?int $editingId    = null;
-    public int|string $tim_id = '';
-    public string $nama       = '';
-    public string $no_hp      = '';
-    public string $status     = 'aktif';
-    public ?int $hapusId      = null;
+    public ?int $editingId       = null;
+    public int|string $tim_id    = '';
+    public string $nama          = '';
+    public string $jenis_kelamin = 'laki-laki';
+    public string $no_hp         = '';
+    public string $status        = 'aktif';
+    public ?int $hapusId         = null;
 
     #[Computed]
     public function semuaPersonil(): array
@@ -24,11 +25,12 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
             ->orderBy('nama')
             ->get()
             ->map(fn ($p) => [
-                'id'      => $p->id,
-                'nama'    => $p->nama,
-                'tim'     => $p->tim?->nama_tim ?? '—',
-                'no_hp'   => $p->no_hp ?? '',
-                'status'  => $p->status,
+                'id'            => $p->id,
+                'nama'          => $p->nama,
+                'jenis_kelamin' => $p->jenis_kelamin ?? 'laki-laki',
+                'tim'           => $p->tim?->nama_tim ?? '—',
+                'no_hp'         => $p->no_hp ?? '',
+                'status'        => $p->status,
             ])
             ->toArray();
     }
@@ -39,6 +41,30 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         return Tim::orderBy('nama_tim')->get(['id', 'nama_tim']);
     }
 
+    #[Computed]
+    public function totalPersonil(): int
+    {
+        return Personil::count();
+    }
+
+    #[Computed]
+    public function totalPersonilAktif(): int
+    {
+        return Personil::where('status', 'aktif')->count();
+    }
+
+    #[Computed]
+    public function totalPersonilNonaktif(): int
+    {
+        return Personil::where('status', 'nonaktif')->count();
+    }
+
+    #[Computed]
+    public function totalTim(): int
+    {
+        return Tim::count();
+    }
+
     public function bukaFormTambah(): void
     {
         $this->resetForm();
@@ -47,45 +73,49 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
 
     public function bukaFormEdit(int $id): void
     {
-        $personil        = Personil::findOrFail($id);
-        $this->editingId = $id;
-        $this->tim_id    = $personil->tim_id;
-        $this->nama      = $personil->nama;
-        $this->no_hp     = $personil->no_hp ?? '';
-        $this->status    = $personil->status;
+        $personil           = Personil::findOrFail($id);
+        $this->editingId    = $id;
+        $this->tim_id       = $personil->tim_id;
+        $this->nama         = $personil->nama;
+        $this->jenis_kelamin = $personil->jenis_kelamin ?? 'laki-laki';
+        $this->no_hp        = $personil->no_hp ?? '';
+        $this->status       = $personil->status;
         $this->modal('form-personil')->show();
     }
 
     public function simpan(): void
     {
         $this->validate([
-            'tim_id' => 'required|exists:tim,id',
-            'nama'   => 'required|string|max:150',
-            'no_hp'  => 'nullable|string|max:20',
-            'status' => 'required|in:aktif,nonaktif',
+            'tim_id'        => 'required|exists:tim,id',
+            'nama'          => 'required|string|max:150',
+            'jenis_kelamin' => 'required|in:laki-laki,perempuan',
+            'no_hp'         => 'nullable|string|max:20',
+            'status'        => 'required|in:aktif,nonaktif',
         ]);
 
         if ($this->editingId) {
             Personil::findOrFail($this->editingId)->update([
-                'tim_id' => $this->tim_id,
-                'nama'   => $this->nama,
-                'no_hp'  => $this->no_hp ?: null,
-                'status' => $this->status,
+                'tim_id'        => $this->tim_id,
+                'nama'          => $this->nama,
+                'jenis_kelamin' => $this->jenis_kelamin,
+                'no_hp'         => $this->no_hp ?: null,
+                'status'        => $this->status,
             ]);
             Flux::toast(variant: 'success', text: 'Personil berhasil diperbarui.');
         } else {
             Personil::create([
-                'tim_id' => $this->tim_id,
-                'nama'   => $this->nama,
-                'no_hp'  => $this->no_hp ?: null,
-                'status' => $this->status,
+                'tim_id'        => $this->tim_id,
+                'nama'          => $this->nama,
+                'jenis_kelamin' => $this->jenis_kelamin,
+                'no_hp'         => $this->no_hp ?: null,
+                'status'        => $this->status,
             ]);
-            Flux::toast(variant: 'success', text: 'Personil berhasil ditambahkan.');
+            Flux::toast(variant: 'success', text: 'Personil baru berhasil ditambahkan.');
         }
 
         $this->modal('form-personil')->close();
         $this->resetForm();
-        unset($this->semuaPersonil);
+        unset($this->semuaPersonil, $this->totalPersonil, $this->totalPersonilAktif, $this->totalPersonilNonaktif);
     }
 
     public function konfirmasiHapus(int $id): void
@@ -104,7 +134,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         Flux::toast(variant: 'success', text: 'Personil berhasil dihapus.');
         $this->modal('hapus-personil')->close();
         $this->hapusId = null;
-        unset($this->semuaPersonil);
+        unset($this->semuaPersonil, $this->totalPersonil, $this->totalPersonilAktif, $this->totalPersonilNonaktif);
     }
 
     private function resetForm(): void
@@ -123,6 +153,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         rows: @js($this->semuaPersonil),
         q: '',
         filterStatus: '',
+        filterGender: '',
         sortField: 'nama',
         sortDir: 'asc',
         page: 1,
@@ -132,6 +163,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
             let data = [...this.rows];
             if (this.q) data = data.filter(r => r.nama.toLowerCase().includes(this.q.toLowerCase()) || r.tim.toLowerCase().includes(this.q.toLowerCase()));
             if (this.filterStatus) data = data.filter(r => r.status === this.filterStatus);
+            if (this.filterGender) data = data.filter(r => r.jenis_kelamin === this.filterGender);
             data.sort((a, b) => {
                 let va = a[this.sortField] ?? ''; let vb = b[this.sortField] ?? '';
                 if (typeof va === 'string') va = va.toLowerCase();
@@ -160,7 +192,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
             this.page = 1;
         }
     }"
-    x-effect="if (q !== undefined || filterStatus !== undefined) page = 1"
+    x-effect="if (q !== undefined || filterStatus !== undefined || filterGender !== undefined) page = 1"
     class="flex flex-col gap-6"
 >
     <div class="flex items-center justify-between gap-3 flex-wrap">
@@ -171,26 +203,105 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus" class="flex-shrink-0">Tambah Personil</flux:button>
     </div>
 
-    <div class="flex gap-3">
+    {{-- Quick Info Cards with Watermark Icons --}}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
+            <div class="relative z-10 pr-6">
+                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Total Personil</flux:text>
+                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+                    {{ $this->totalPersonil }}
+                </flux:heading>
+            </div>
+            <flux:icon icon="users" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-blue-500/10 dark:text-blue-400/10 pointer-events-none" />
+        </flux:card>
+
+        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
+            <div class="relative z-10 pr-6">
+                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Personil Aktif</flux:text>
+                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                    {{ $this->totalPersonilAktif }}
+                </flux:heading>
+            </div>
+            <flux:icon icon="check-circle" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-emerald-500/10 dark:text-emerald-400/10 pointer-events-none" />
+        </flux:card>
+
+        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
+            <div class="relative z-10 pr-6">
+                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Nonaktif</flux:text>
+                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-zinc-600 dark:text-zinc-400">
+                    {{ $this->totalPersonilNonaktif }}
+                </flux:heading>
+            </div>
+            <flux:icon icon="x-circle" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-zinc-500/10 dark:text-zinc-400/10 pointer-events-none" />
+        </flux:card>
+
+        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
+            <div class="relative z-10 pr-6">
+                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Total Tim</flux:text>
+                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-purple-600 dark:text-purple-400">
+                    {{ $this->totalTim }}
+                </flux:heading>
+            </div>
+            <flux:icon icon="user-group" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-purple-500/10 dark:text-purple-400/10 pointer-events-none" />
+        </flux:card>
+    </div>
+
+    {{-- Search & Filter Bar --}}
+    {{-- Search & Filter Bar --}}
+    <div class="flex flex-col sm:flex-row gap-3">
         <div class="relative flex-1">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-            <input x-model="q" type="text" placeholder="Cari nama atau tim…"
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input x-model="q" type="text" placeholder="Cari nama, tim, atau no HP…"
                 class="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-brand dark:text-zinc-100" />
-            <button x-show="q" @click="q = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+            <button x-show="q" @click="q = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>
+
+        {{-- Filter Jenis Kelamin --}}
         <div
             x-data="{ open: false }"
             @click.outside="open = false"
-            class="relative w-40"
+            class="relative w-full sm:w-44"
         >
             <button type="button" @click="open = !open"
-                :class="open ? 'ring-2 ring-brand border-brand' : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-500'"
-                class="w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-left transition-colors focus:outline-none"
+                :class="open ? 'ring-2 ring-brand border-brand' : (filterGender ? 'border-brand text-brand font-medium' : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-500')"
+                class="w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-left transition-colors focus:outline-none cursor-pointer"
+            >
+                <span x-text="filterGender === '' ? 'Semua Gender' : (filterGender === 'laki-laki' ? '♂ Laki-laki' : '♀ Perempuan')"
+                      class="truncate"></span>
+                <svg class="h-4 w-4 text-zinc-400 flex-shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            <div x-show="open" x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-75" x-transition:leave-end="opacity-0"
+                 class="absolute z-50 mt-1 w-full rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-lg py-1">
+                <template x-for="opt in [{value:'',label:'Semua Gender'},{value:'laki-laki',label:'♂ Laki-laki'},{value:'perempuan',label:'♀ Perempuan'}]" :key="opt.value">
+                    <button type="button" @click="filterGender = opt.value; page = 1; open = false"
+                        :class="filterGender === opt.value ? 'bg-brand/10 text-brand font-medium' : 'text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700'"
+                        class="w-full text-left px-3 py-2 text-sm flex items-center justify-between cursor-pointer"
+                    >
+                        <span x-text="opt.label"></span>
+                        <svg x-show="filterGender === opt.value" class="h-4 w-4 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    </button>
+                </template>
+            </div>
+        </div>
+
+        {{-- Filter Status --}}
+        <div
+            x-data="{ open: false }"
+            @click.outside="open = false"
+            class="relative w-full sm:w-40"
+        >
+            <button type="button" @click="open = !open"
+                :class="open ? 'ring-2 ring-brand border-brand' : (filterStatus ? 'border-brand text-brand font-medium' : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-500')"
+                class="w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-left transition-colors focus:outline-none cursor-pointer"
             >
                 <span x-text="filterStatus === '' ? 'Semua Status' : (filterStatus === 'aktif' ? 'Aktif' : 'Nonaktif')"
-                      class="text-zinc-900 dark:text-zinc-100"></span>
+                      class="truncate"></span>
                 <svg class="h-4 w-4 text-zinc-400 flex-shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                 </svg>
@@ -200,7 +311,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
                 <template x-for="opt in [{value:'',label:'Semua Status'},{value:'aktif',label:'Aktif'},{value:'nonaktif',label:'Nonaktif'}]" :key="opt.value">
                     <button type="button" @click="filterStatus = opt.value; page = 1; open = false"
                         :class="filterStatus === opt.value ? 'bg-brand/10 text-brand font-medium' : 'text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700'"
-                        class="w-full text-left px-3 py-2 text-sm flex items-center justify-between"
+                        class="w-full text-left px-3 py-2 text-sm flex items-center justify-between cursor-pointer"
                     >
                         <span x-text="opt.label"></span>
                         <svg x-show="filterStatus === opt.value" class="h-4 w-4 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
@@ -210,7 +321,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         </div>
     </div>
 
-    <flux:card class="p-0 overflow-hidden">
+    <flux:card class="p-0 overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
         {{-- Card-list: mobile only (< sm) --}}
         <div class="sm:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
             <template x-if="displayed.length === 0">
@@ -241,40 +352,108 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         </div>
 
         {{-- Tabel: sm dan lebih lebar --}}
-        <div class="hidden sm:block overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead class="border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">
-                    <tr>
-                        @foreach([['nama','Nama'],['tim','Tim'],['status','Status']] as [$f,$l])
-                        <th @click="toggleSort('{{ $f }}')"
-                            class="px-4 py-3 {{ $f==='status' ? 'text-center' : 'text-left' }} font-medium text-zinc-600 dark:text-zinc-400 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
-                            <span class="inline-flex items-center {{ $f==='status' ? 'justify-center' : '' }} gap-1">
-                                {{ $l }}
-                                <svg x-show="sortField==='{{ $f }}' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
-                                <svg x-show="sortField==='{{ $f }}' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                                <svg x-show="sortField!=='{{ $f }}'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
-                            </span>
-                        </th>
-                        @endforeach
-                        <th class="px-4 py-3 text-left font-medium text-zinc-600 dark:text-zinc-400">No. HP</th>
-                        <th class="px-4 py-3 text-right font-medium text-zinc-600 dark:text-zinc-400">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+        <div class="hidden sm:block px-5">
+            <flux:table>
+                <flux:table.columns class="sticky top-0 z-10 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-700">
+                    <flux:table.column @click="toggleSort('nama')" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
+                        <span class="inline-flex items-center gap-1">Nama
+                            <svg x-show="sortField==='nama' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                            <svg x-show="sortField==='nama' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg x-show="sortField!=='nama'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                        </span>
+                    </flux:table.column>
+                    <flux:table.column @click="toggleSort('tim')" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
+                        <span class="inline-flex items-center gap-1">Tim
+                            <svg x-show="sortField==='tim' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                            <svg x-show="sortField==='tim' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg x-show="sortField!=='tim'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                        </span>
+                    </flux:table.column>
+
+                    {{-- Kolom Jenis Kelamin dengan Filter Dropdown di Header --}}
+                    <flux:table.column class="select-none">
+                        <div x-data="{ openColGender: false }" @click.outside="openColGender = false" class="relative inline-block">
+                            <button
+                                type="button"
+                                @click="openColGender = !openColGender"
+                                class="inline-flex items-center gap-1.5 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                                :class="filterGender ? 'text-brand font-semibold' : ''"
+                            >
+                                <span>Jenis Kelamin</span>
+                                <svg class="h-3.5 w-3.5" :class="filterGender ? 'text-brand' : 'text-zinc-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                <span x-show="filterGender" class="size-1.5 rounded-full bg-brand"></span>
+                            </button>
+                            <div
+                                x-show="openColGender"
+                                x-transition:enter="transition ease-out duration-100"
+                                x-transition:enter-start="opacity-0 translate-y-1"
+                                x-transition:enter-end="opacity-100 translate-y-0"
+                                x-transition:leave="transition ease-in duration-75"
+                                x-transition:leave-end="opacity-0"
+                                class="absolute left-0 z-50 mt-1.5 w-36 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-xl py-1 text-xs font-normal"
+                            >
+                                <button type="button" @click="filterGender = ''; page = 1; openColGender = false"
+                                    :class="filterGender === '' ? 'bg-brand/10 text-brand font-semibold' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'"
+                                    class="w-full text-left px-3 py-1.5 flex items-center justify-between cursor-pointer"
+                                >
+                                    <span>Semua</span>
+                                    <svg x-show="filterGender === ''" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                </button>
+                                <button type="button" @click="filterGender = 'laki-laki'; page = 1; openColGender = false"
+                                    :class="filterGender === 'laki-laki' ? 'bg-brand/10 text-brand font-semibold' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'"
+                                    class="w-full text-left px-3 py-1.5 flex items-center justify-between cursor-pointer"
+                                >
+                                    <span>♂ Laki-laki</span>
+                                    <svg x-show="filterGender === 'laki-laki'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                </button>
+                                <button type="button" @click="filterGender = 'perempuan'; page = 1; openColGender = false"
+                                    :class="filterGender === 'perempuan' ? 'bg-brand/10 text-brand font-semibold' : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'"
+                                    class="w-full text-left px-3 py-1.5 flex items-center justify-between cursor-pointer"
+                                >
+                                    <span>♀ Perempuan</span>
+                                    <svg x-show="filterGender === 'perempuan'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </flux:table.column>
+
+                    <flux:table.column @click="toggleSort('status')" align="center" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
+                        <span class="inline-flex items-center justify-center gap-1">Status
+                            <svg x-show="sortField==='status' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                            <svg x-show="sortField==='status' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg x-show="sortField!=='status'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                        </span>
+                    </flux:table.column>
+                    <flux:table.column>No. HP</flux:table.column>
+                    <flux:table.column align="end">Aksi</flux:table.column>
+                </flux:table.columns>
+                <flux:table.rows>
                     <template x-if="displayed.length === 0">
-                        <tr><td colspan="5" class="px-4 py-8 text-center text-zinc-400 text-sm">Tidak ada personil yang cocok.</td></tr>
+                        <flux:table.row>
+                            <flux:table.cell colspan="6" class="text-center text-zinc-400 text-sm py-8">Tidak ada personil yang cocok.</flux:table.cell>
+                        </flux:table.row>
                     </template>
                     <template x-for="p in displayed" :key="p.id">
-                        <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                            <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100" x-text="p.nama"></td>
-                            <td class="px-4 py-3 text-zinc-500" x-text="p.tim"></td>
-                            <td class="px-4 py-3 text-center">
-                                <span :class="p.status==='aktif' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'"
-                                      class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                        <flux:table.row>
+                            <flux:table.cell class="font-medium text-zinc-900 dark:text-zinc-100" x-text="p.nama"></flux:table.cell>
+                            <flux:table.cell class="text-zinc-500" x-text="p.tim"></flux:table.cell>
+                            <flux:table.cell>
+                                <span x-show="p.jenis_kelamin === 'laki-laki'" class="inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 px-2 py-0.5 rounded-md">
+                                    <span>♂</span> Laki-laki
+                                </span>
+                                <span x-show="p.jenis_kelamin === 'perempuan'" class="inline-flex items-center gap-1 text-xs font-medium text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950/40 border border-pink-200 dark:border-pink-800/50 px-2 py-0.5 rounded-md">
+                                    <span>♀</span> Perempuan
+                                </span>
+                            </flux:table.cell>
+                            <flux:table.cell align="center">
+                                <span :class="p.status==='aktif' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400'"
+                                      class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
                                       x-text="p.status==='aktif' ? 'Aktif' : 'Nonaktif'"></span>
-                            </td>
-                            <td class="px-4 py-3 text-zinc-500" x-text="p.no_hp || '—'"></td>
-                            <td class="px-4 py-3 text-right">
+                            </flux:table.cell>
+                            <flux:table.cell class="text-zinc-500" x-text="p.no_hp || '—'"></flux:table.cell>
+                            <flux:table.cell align="end">
                                 <flux:dropdown>
                                     <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
                                     <flux:menu>
@@ -283,11 +462,11 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
                                         <flux:menu.item icon="trash" variant="danger" @click="$wire.konfirmasiHapus(p.id)">Hapus</flux:menu.item>
                                     </flux:menu>
                                 </flux:dropdown>
-                            </td>
-                        </tr>
+                            </flux:table.cell>
+                        </flux:table.row>
                     </template>
-                </tbody>
-            </table>
+                </flux:table.rows>
+            </flux:table>
         </div>
         {{-- Pagination bar --}}
         <div class="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -323,6 +502,10 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
                     :options="$this->timOptions->map(fn($t) => ['value' => $t->id, 'label' => $t->nama_tim])->toArray()"
                 />
                 <flux:input wire:model.live="nama" label="Nama Lengkap" placeholder="cth. Budi Santoso" required />
+                <flux:select wire:model="jenis_kelamin" label="Jenis Kelamin" required>
+                    <flux:select.option value="laki-laki">Laki-laki (Dapat ditugaskan adzan/kitab)</flux:select.option>
+                    <flux:select.option value="perempuan">Perempuan</flux:select.option>
+                </flux:select>
                 <flux:input wire:model="no_hp" label="No. HP" placeholder="cth. 08123456789" type="tel" />
                 {{-- Status — styled dropdown, konsisten dengan filter di tabel --}}
                 <div>

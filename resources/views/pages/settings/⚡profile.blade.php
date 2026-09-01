@@ -1,28 +1,76 @@
-﻿<?php
+<?php
 
+use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Flux\Flux;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Pengaturan Profil')] #[Layout('layouts.admin', ['breadcrumbs' => [['label' => 'Pengaturan'], ['label' => 'Profil']]])] class extends Component {
+new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label' => 'Pengaturan']]])] class extends Component {
     use ProfileValidationRules;
+    use PasswordValidationRules;
 
+    // Profile fields
     public string $name = '';
     public string $email = '';
+
+    // Password fields
+    public string $current_password = '';
+    public string $password = '';
+    public string $password_confirmation = '';
+
+    // Security features
+    public bool $canManageTwoFactor;
+    public bool $twoFactorEnabled;
+    public bool $requiresConfirmation;
+
+    #[Locked]
+    public bool $canManagePasskeys;
+
+    #[Locked]
+    public array $passkeys = [];
+
+    public bool $showDeleteModal = false;
+
+    #[Locked]
+    public ?int $deletingPasskeyId = null;
+
+    #[Locked]
+    public string $deletingPasskeyName = '';
 
     /**
      * Mount the component.
      */
-    public function mount(): void
+    public function mount(\Laravel\Fortify\Actions\DisableTwoFactorAuthentication $disableTwoFactorAuthentication): void
     {
+        // Profile
         $this->name = Auth::user()->name;
         $this->email = Auth::user()->email;
+
+        // Two-Factor
+        $this->canManageTwoFactor = \Laravel\Fortify\Features::canManageTwoFactorAuthentication();
+
+        if ($this->canManageTwoFactor) {
+            if (\Laravel\Fortify\Fortify::confirmsTwoFactorAuthentication() && is_null(auth()->user()->two_factor_confirmed_at)) {
+                $disableTwoFactorAuthentication(auth()->user());
+            }
+
+            $this->twoFactorEnabled = auth()->user()->hasEnabledTwoFactorAuthentication();
+            $this->requiresConfirmation = \Laravel\Fortify\Features::optionEnabled(\Laravel\Fortify\Features::twoFactorAuthentication(), 'confirm');
+        }
+
+        // Passkeys
+        $this->canManagePasskeys = \Laravel\Fortify\Features::canManagePasskeys();
+
+        if ($this->canManagePasskeys) {
+            $this->loadPasskeys();
+        }
     }
 
     /**
@@ -43,6 +91,108 @@ new #[Title('Pengaturan Profil')] #[Layout('layouts.admin', ['breadcrumbs' => [[
         $user->save();
 
         Flux::toast(variant: 'success', text: __('Profile updated.'));
+    }
+
+    /**
+     * Update the password for the currently authenticated user.
+     */
+    public function updatePassword(): void
+    {
+        try {
+            $validated = $this->validate([
+                'current_password' => $this->currentPasswordRules(),
+                'password' => $this->passwordRules(),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->reset('current_password', 'password', 'password_confirmation');
+
+            throw $e;
+        }
+
+        Auth::user()->update([
+            'password' => $validated['password'],
+        ]);
+
+        $this->reset('current_password', 'password', 'password_confirmation');
+
+        Flux::toast(variant: 'success', text: __('Password updated.'));
+    }
+
+    /**
+     * Load the user's passkeys.
+     */
+    public function loadPasskeys(): void
+    {
+        $this->passkeys = auth()->user()->passkeys()
+            ->select(['id', 'name', 'credential', 'created_at', 'last_used_at'])
+            ->latest()
+            ->get()
+            ->map(fn ($passkey) => [
+                'id' => $passkey->id,
+                'name' => $passkey->name,
+                'authenticator' => $passkey->authenticator,
+                'created_at_diff' => $passkey->created_at->diffForHumans(),
+                'last_used_at_diff' => $passkey->last_used_at?->diffForHumans(),
+            ])
+            ->toArray();
+    }
+
+    /**
+     * Show the delete confirmation modal.
+     */
+    public function confirmDelete(int $passkeyId): void
+    {
+        $passkey = auth()->user()->passkeys()->findOrFail($passkeyId);
+
+        $this->deletingPasskeyId = $passkey->id;
+        $this->deletingPasskeyName = $passkey->name;
+        $this->showDeleteModal = true;
+    }
+
+    /**
+     * Delete the passkey.
+     */
+    public function deletePasskey(\Laravel\Passkeys\Actions\DeletePasskey $deletePasskey): void
+    {
+        if (! $this->deletingPasskeyId) {
+            return;
+        }
+
+        $passkey = auth()->user()->passkeys()->findOrFail($this->deletingPasskeyId);
+
+        $deletePasskey(auth()->user(), $passkey);
+
+        $this->closeDeleteModal();
+        $this->loadPasskeys();
+    }
+
+    /**
+     * Close the delete confirmation modal.
+     */
+    public function closeDeleteModal(): void
+    {
+        $this->showDeleteModal = false;
+        $this->deletingPasskeyId = null;
+        $this->deletingPasskeyName = '';
+    }
+
+    /**
+     * Handle the two-factor authentication enabled event.
+     */
+    #[On('two-factor-enabled')]
+    public function onTwoFactorEnabled(): void
+    {
+        $this->twoFactorEnabled = true;
+    }
+
+    /**
+     * Disable two-factor authentication for the user.
+     */
+    public function disable(\Laravel\Fortify\Actions\DisableTwoFactorAuthentication $disableTwoFactorAuthentication): void
+    {
+        $disableTwoFactorAuthentication(auth()->user());
+
+        $this->twoFactorEnabled = false;
     }
 
     /**
@@ -77,87 +227,330 @@ new #[Title('Pengaturan Profil')] #[Layout('layouts.admin', ['breadcrumbs' => [[
     }
 }; ?>
 
-<div class="w-full space-y-6">
-    {{-- Settings Navigation Tabs - Horizontal --}}
-    <div class="flex gap-1 border-b border-zinc-200 dark:border-zinc-700">
-        <a 
-            href="{{ route('profile.edit') }}" 
-            wire:navigate.hover
-            @class([
-                'px-4 py-2 text-sm font-medium rounded-t-lg transition-colors',
-                'border-b-2 text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' => request()->routeIs('profile.edit'),
-                'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border-b-2 border-transparent' => !request()->routeIs('profile.edit'),
-            ])
-        >
-            Profil
-        </a>
-        <a 
-            href="{{ route('security.edit') }}" 
-            wire:navigate.hover
-            @class([
-                'px-4 py-2 text-sm font-medium rounded-t-lg transition-colors',
-                'border-b-2 text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' => request()->routeIs('security.edit'),
-                'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border-b-2 border-transparent' => !request()->routeIs('security.edit'),
-            ])
-        >
-            Keamanan
-        </a>
-        <a 
-            href="{{ route('appearance.edit') }}" 
-            wire:navigate.hover
-            @class([
-                'px-4 py-2 text-sm font-medium rounded-t-lg transition-colors',
-                'border-b-2 text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' => request()->routeIs('appearance.edit'),
-                'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 border-b-2 border-transparent' => !request()->routeIs('appearance.edit'),
-            ])
-        >
-            Tampilan
-        </a>
+<div class="max-w-4xl mx-auto">
+    <div>
+        <flux:heading size="xl">Pengaturan</flux:heading>
+        <flux:text class="text-zinc-500 mt-1">Kelola informasi profil akun, keamanan & password, serta preferensi tema antarmuka.</flux:text>
     </div>
 
-    {{-- Profile Content --}}
-    <div class="max-w-3xl space-y-6">
-        <div>
+    <flux:separator variant="subtle" class="my-8" />
+
+    {{-- SECTION 1: PROFIL --}}
+    <div class="flex flex-col lg:flex-row gap-6 lg:gap-12">
+        <div class="lg:w-80 shrink-0">
             <flux:heading size="lg">Profil</flux:heading>
-            <flux:subheading>Perbarui nama dan alamat email kamu</flux:subheading>
+            <flux:text class="mt-2 text-zinc-500">Perbarui nama lengkap dan alamat email akun Anda.</flux:text>
         </div>
 
-        <form wire:submit="updateProfileInformation" class="space-y-6">
-            <flux:input wire:model="name" :label="'Nama'" type="text" required autofocus autocomplete="name" />
+        <div class="flex-1 space-y-6">
+            <form wire:submit="updateProfileInformation" class="space-y-6">
+                <flux:input wire:model="name" label="Nama" type="text" required autofocus autocomplete="name" />
 
-            <div>
-                <flux:input wire:model="email" :label="'Email'" type="email" required autocomplete="email" />
+                <div>
+                    <flux:input wire:model="email" label="Email" type="email" required autocomplete="email" />
 
-                @if ($this->hasUnverifiedEmail)
-                    <div>
-                        <flux:text class="mt-4">
-                            {{ 'Alamat email kamu belum diverifikasi.' }}
-
-                            <flux:link class="text-sm cursor-pointer" wire:click.prevent="resendVerificationNotification">
-                                {{ 'Klik di sini untuk kirim ulang email verifikasi.' }}
-                            </flux:link>
-                        </flux:text>
-
-                        @if (session('status') === 'verification-link-sent')
-                            <flux:text class="mt-2 font-medium !dark:text-green-400 !text-green-600">
-                                {{ 'Tautan verifikasi baru telah dikirim ke email kamu.' }}
+                    @if ($this->hasUnverifiedEmail)
+                        <div class="mt-4">
+                            <flux:text>
+                                Alamat email kamu belum diverifikasi.
+                                <flux:link class="text-sm cursor-pointer" wire:click.prevent="resendVerificationNotification">
+                                    Klik di sini untuk kirim ulang email verifikasi.
+                                </flux:link>
                             </flux:text>
+
+                            @if (session('status') === 'verification-link-sent')
+                                <flux:text class="mt-2 font-medium !dark:text-green-400 !text-green-600">
+                                    Tautan verifikasi baru telah dikirim ke email kamu.
+                                </flux:text>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+
+                <div class="flex justify-end">
+                    <flux:button variant="primary" type="submit" data-test="update-profile-button">
+                        Simpan Profil
+                    </flux:button>
+                </div>
+            </form>
+
+            @if ($this->showDeleteUser)
+                <flux:separator variant="subtle" class="my-6" />
+                <livewire:pages::settings.delete-user-form />
+            @endif
+        </div>
+    </div>
+
+    <flux:separator variant="subtle" class="my-8" />
+
+    {{-- SECTION 2: KEAMANAN & PASSWORD --}}
+    <div class="flex flex-col lg:flex-row gap-6 lg:gap-12">
+        <div class="lg:w-80 shrink-0">
+            <flux:heading size="lg">Keamanan & Password</flux:heading>
+            <flux:text class="mt-2 text-zinc-500">Pastikan akun kamu menggunakan password yang kuat serta kelola autentikasi tambahan.</flux:text>
+        </div>
+
+        <div class="flex-1 space-y-8">
+            {{-- Update Password Form --}}
+            <form method="POST" wire:submit="updatePassword" class="space-y-6">
+                <flux:input
+                    wire:model="current_password"
+                    label="Password Saat Ini"
+                    type="password"
+                    required
+                    autocomplete="current-password"
+                    viewable
+                />
+                <flux:input
+                    wire:model="password"
+                    label="Password Baru"
+                    type="password"
+                    required
+                    autocomplete="new-password"
+                    passwordrules="{{ \Illuminate\Validation\Rules\Password::defaults()->toPasswordRulesString() }}"
+                    viewable
+                />
+                <flux:input
+                    wire:model="password_confirmation"
+                    label="Konfirmasi Password"
+                    type="password"
+                    required
+                    autocomplete="new-password"
+                    passwordrules="{{ \Illuminate\Validation\Rules\Password::defaults()->toPasswordRulesString() }}"
+                    viewable
+                />
+
+                <div class="flex justify-end">
+                    <flux:button variant="primary" type="submit" data-test="update-password-button">
+                        Perbarui Password
+                    </flux:button>
+                </div>
+            </form>
+
+            {{-- Two-Factor Authentication --}}
+            @if ($canManageTwoFactor)
+                <flux:separator variant="subtle" class="my-6" />
+
+                <div class="space-y-4">
+                    <div>
+                        <flux:heading size="md">{{ __('Two-factor authentication') }}</flux:heading>
+                        <flux:text class="mt-1 text-zinc-500">{{ __('Manage your two-factor authentication settings') }}</flux:text>
+                    </div>
+
+                    <div class="flex flex-col w-full space-y-4 text-sm" wire:cloak>
+                        @if ($twoFactorEnabled)
+                            <div class="space-y-4">
+                                <flux:text>
+                                    {{ __('You will be prompted for a secure, random pin during login, which you can retrieve from the TOTP-supported application on your phone.') }}
+                                </flux:text>
+
+                                <div class="flex justify-start">
+                                    <flux:button
+                                        variant="danger"
+                                        wire:click="disable"
+                                    >
+                                        {{ __('Disable 2FA') }}
+                                    </flux:button>
+                                </div>
+
+                                <livewire:pages::settings.two-factor.recovery-codes :$requiresConfirmation />
+                            </div>
+                        @else
+                            <div class="space-y-4">
+                                <flux:text variant="subtle">
+                                    {{ __('When you enable two-factor authentication, you will be prompted for a secure pin during login. This pin can be retrieved from a TOTP-supported application on your phone.') }}
+                                </flux:text>
+
+                                <flux:modal.trigger name="two-factor-setup-modal">
+                                    <flux:button
+                                        variant="primary"
+                                        wire:click="$dispatch('start-two-factor-setup')"
+                                    >
+                                        {{ __('Enable 2FA') }}
+                                    </flux:button>
+                                </flux:modal.trigger>
+
+                                <livewire:pages::settings.two-factor-setup-modal :requires-confirmation="$requiresConfirmation" />
+                            </div>
                         @endif
                     </div>
-                @endif
+                </div>
+            @endif
+
+            {{-- Passkeys --}}
+            @if ($canManagePasskeys)
+                <flux:separator variant="subtle" class="my-6" />
+
+                <div class="space-y-4">
+                    <div>
+                        <flux:heading size="md">{{ __('Passkeys') }}</flux:heading>
+                        <flux:text class="mt-1 text-zinc-500">{{ __('Manage your passkeys for passwordless sign-in') }}</flux:text>
+                    </div>
+
+                    <div class="flex flex-col w-full space-y-4 text-sm" wire:cloak>
+                        <div class="border rounded-lg border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                            @forelse ($passkeys as $passkey)
+                                <div class="flex items-center justify-between p-4 {{ ! $loop->last ? 'border-b border-zinc-200 dark:border-zinc-700' : '' }}">
+                                    <div class="flex items-center gap-4">
+                                        <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                                            <flux:icon.key class="size-5 text-zinc-500 dark:text-zinc-400" />
+                                        </div>
+                                        <div class="space-y-1">
+                                            <div class="flex items-center gap-2.5">
+                                                <p class="font-medium tracking-tight">{{ $passkey['name'] }}</p>
+                                                @if ($passkey['authenticator'])
+                                                    <flux:badge size="sm">{{ $passkey['authenticator'] }}</flux:badge>
+                                                @endif
+                                            </div>
+                                            <p class="text-zinc-500 dark:text-zinc-400 text-xs">
+                                                {{ __('Added :time', ['time' => $passkey['created_at_diff']]) }}
+                                                @if ($passkey['last_used_at_diff'])
+                                                    <span class="opacity-50 mx-1">/</span>
+                                                    {{ __('Last used :time', ['time' => $passkey['last_used_at_diff']]) }}
+                                                @endif
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <flux:button
+                                        variant="ghost"
+                                        size="sm"
+                                        icon="trash"
+                                        icon:variant="outline"
+                                        wire:click="confirmDelete({{ $passkey['id'] }})"
+                                        class="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
+                                    />
+                                </div>
+                            @empty
+                                <div class="p-8 text-center">
+                                    <div class="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800">
+                                        <flux:icon.key class="size-7 text-zinc-400 dark:text-zinc-500" />
+                                    </div>
+                                    <p class="font-medium">{{ __('No passkeys yet') }}</p>
+                                    <flux:text class="mt-1">{{ __('Add a passkey to sign in without a password') }}</flux:text>
+                                </div>
+                            @endforelse
+                        </div>
+
+                        <x-passkey-registration />
+                    </div>
+                </div>
+            @endif
+        </div>
+    </div>
+
+    <flux:separator variant="subtle" class="my-8" />
+
+    {{-- SECTION 3: TAMPILAN & TEMA --}}
+    <div class="flex flex-col lg:flex-row gap-6 lg:gap-12 pb-12">
+        <div class="lg:w-80 shrink-0">
+            <flux:heading size="lg">Tampilan</flux:heading>
+            <flux:text class="mt-2 text-zinc-500">Atur preferensi mode terang/gelap dan tema warna antarmuka aplikasi.</flux:text>
+        </div>
+
+        <div class="flex-1 space-y-6">
+            <div
+                x-data="{
+                    inovindoActive: localStorage.getItem('theme-inovindo') === 'true',
+
+                    toggleInovindo() {
+                        this.inovindoActive = !this.inovindoActive;
+                        localStorage.setItem('theme-inovindo', this.inovindoActive);
+
+                        if (this.inovindoActive) {
+                            document.documentElement.classList.add('inovindo');
+                            document.documentElement.classList.remove('dark');
+                            localStorage.setItem('flux-appearance', 'light');
+                            if (window.$flux) window.$flux.appearance = 'light';
+                        } else {
+                            document.documentElement.classList.remove('inovindo');
+                        }
+                    },
+
+                    onFluxChange(val) {
+                        if (val === 'light' || val === 'dark') {
+                            this.inovindoActive = false;
+                            localStorage.setItem('theme-inovindo', 'false');
+                            document.documentElement.classList.remove('inovindo');
+                        }
+                    }
+                }"
+                class="flex flex-col gap-5"
+            >
+                <div>
+                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Mode Tampilan</label>
+                    <flux:radio.group
+                        x-data
+                        variant="segmented"
+                        x-model="$flux.appearance"
+                        @change="onFluxChange($event.target.value)"
+                    >
+                        <flux:radio value="light" icon="sun">Terang</flux:radio>
+                        <flux:radio value="dark" icon="moon">Gelap</flux:radio>
+                    </flux:radio.group>
+                </div>
+
+                {{-- Tema Inovindo --}}
+                <div class="flex items-center justify-between rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 px-4 py-3.5">
+                    <div class="flex items-center gap-3">
+                        <div class="flex gap-1">
+                            <span class="h-4 w-4 rounded-full" style="background:#12314F"></span>
+                            <span class="h-4 w-4 rounded-full" style="background:#3B71CA"></span>
+                            <span class="h-4 w-4 rounded-full" style="background:#2FA84F"></span>
+                            <span class="h-4 w-4 rounded-full" style="background:#F2A340"></span>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Tema Inovindo</p>
+                            <p class="text-xs text-zinc-500">Palet warna resmi PT Inovindo Digital Media</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        @click="toggleInovindo()"
+                        :class="inovindoActive ? 'bg-[#3B71CA]' : 'bg-zinc-200 dark:bg-zinc-700'"
+                        class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#3B71CA] focus:ring-offset-2"
+                        role="switch"
+                        :aria-checked="inovindoActive"
+                    >
+                        <span
+                            :class="inovindoActive ? 'translate-x-5' : 'translate-x-0'"
+                            class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                        ></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Delete Passkey Modal --}}
+    <flux:modal
+        name="delete-passkey-modal"
+        class="max-w-md md:min-w-md"
+        @close="closeDeleteModal"
+        wire:model="showDeleteModal"
+    >
+        <div class="space-y-6">
+            <div class="space-y-2">
+                <flux:heading size="lg">{{ __('Remove passkey') }}</flux:heading>
+                <flux:text>
+                    {{ __('Are you sure you want to remove the passkey ":name"? You will no longer be able to use it to sign in.', ['name' => $deletingPasskeyName]) }}
+                </flux:text>
             </div>
 
-            <div class="flex items-center gap-4">
-                <flux:button variant="primary" type="submit" data-test="update-profile-button">
-                    Simpan
+            <div class="flex gap-3 justify-end">
+                <flux:button
+                    variant="outline"
+                    wire:click="closeDeleteModal"
+                >
+                    {{ __('Cancel') }}
+                </flux:button>
+                <flux:button
+                    variant="danger"
+                    wire:click="deletePasskey"
+                >
+                    {{ __('Remove passkey') }}
                 </flux:button>
             </div>
-        </form>
-
-        @if ($this->showDeleteUser)
-            <div class="pt-6 border-t border-zinc-200 dark:border-zinc-700">
-                <livewire:pages::settings.delete-user-form />
-            </div>
-        @endif
-    </div>
+        </div>
+    </flux:modal>
 </div>

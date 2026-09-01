@@ -1,4 +1,4 @@
-﻿@import 'tailwindcss';
+@import 'tailwindcss';
 @import '../../vendor/livewire/flux/dist/flux.css';
 @import 'flatpickr/dist/flatpickr.min.css';
 
@@ -31,19 +31,19 @@
     --color-brand-green: #2FA84F;
     --color-brand-orange: #F2A340;
 
-    --color-accent: var(--color-neutral-800);
-    --color-accent-content: var(--color-neutral-800);
-    --color-accent-foreground: var(--color-white);
+    --color-accent: #3B71CA;
+    --color-accent-content: #3B71CA;
+    --color-accent-foreground: #ffffff;
 }
 
 @layer theme {
     .dark {
-        --color-accent: var(--color-white);
-        --color-accent-content: var(--color-white);
-        --color-accent-foreground: var(--color-neutral-800);
+        --color-accent: #3B71CA;
+        --color-accent-content: #3B71CA;
+        --color-accent-foreground: #ffffff;
     }
 
-    /* â”€â”€ Tema Inovindo: class .inovindo di <html> â”€â”€ */
+    /* ── Tema Inovindo: class .inovindo di <html> ── */
     .inovindo {
         /* Light mode dengan text dark grey (bukan biru) kayak Inovindo asli */
         --color-zinc-50:  #fafafa;
@@ -183,20 +183,112 @@ select:focus[data-flux-control] {
 .dark .flatpickr-calendar.inline { border-color: #3f3f46; }
 
 /* Flatpickr HARUS di atas Flux modal (dialog z-index ~50) */
+.flatpickr-wrapper {
+    display: block !important;
+    width: 100% !important;
+    position: relative !important;
+}
+
 .flatpickr-calendar {
-    z-index: 99999 !important;
+    z-index: 999999 !important;
 }
 
-/* Ketika flatpickr di-append ke dalam <dialog> Flux, dialog tidak boleh clip overflow */
-dialog:has(.flatpickr-calendar) {
+.flatpickr-calendar.open {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 999999 !important;
+}
+
+.flatpickr-calendar.static.open {
+    top: 100% !important;
+    left: 0 !important;
+    margin-top: 4px !important;
+    position: absolute !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 999999 !important;
+}
+
+/* Ketika flatpickr berada di dalam <dialog> Flux, dialog dan container tidak boleh clip overflow */
+dialog:has(.flatpickr-calendar),
+dialog:has(.flatpickr-wrapper),
+[data-flux-modal]:has(.flatpickr-wrapper),
+ui-modal:has(.flatpickr-wrapper),
+ui-modal dialog {
     overflow: visible !important;
 }
-dialog:has(.flatpickr-calendar) > * {
-    overflow: visible !important;
+/* ── Universal Modal & Dialog Backdrop Blur Effect ── */
+dialog::backdrop,
+[data-flux-modal]::backdrop,
+[data-flux-flyout]::backdrop,
+ui-modal::backdrop,
+[data-flux-sidebar-backdrop] {
+    background-color: rgba(15, 23, 42, 0.45) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
 }
 
+.dark dialog::backdrop,
+.dark [data-flux-modal]::backdrop,
+.dark [data-flux-flyout]::backdrop,
+.dark ui-modal::backdrop,
+.dark [data-flux-sidebar-backdrop] {
+    background-color: rgba(0, 0, 0, 0.65) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
 
+/* ── Primary Button Styles (Inovindo Blue #3B71CA) ── */
+[data-flux-button][data-variant="primary"],
+.btn-primary {
+    background-color: #3B71CA !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+}
 
+[data-flux-button][data-variant="primary"]:hover:not(:disabled),
+.btn-primary:hover:not(:disabled) {
+    background-color: #2d5db3 !important;
+    color: #ffffff !important;
+}
+
+[data-flux-button][data-variant="primary"]:active:not(:disabled),
+.btn-primary:active:not(:disabled) {
+    background-color: #1e4b9e !important;
+    color: #ffffff !important;
+}
+
+[data-flux-button][data-variant="primary"]:disabled,
+.btn-primary:disabled {
+    opacity: 0.65 !important;
+    background-color: #3B71CA !important;
+    color: #ffffff !important;
+    cursor: not-allowed !important;
+}
+
+/* Ensure menu items inside flux dropdowns are NEVER styled as primary buttons */
+[data-flux-menu] [data-flux-menu-item],
+[data-flux-menu] button,
+[data-flux-menu] form button {
+    background-color: transparent !important;
+    color: inherit !important;
+}
+
+[data-flux-menu] [data-flux-menu-item]:hover,
+[data-flux-menu] button:hover,
+[data-flux-menu] form button:hover {
+    background-color: var(--color-zinc-100, #f4f4f5) !important;
+    color: var(--color-zinc-900, #18181b) !important;
+}
+
+.dark [data-flux-menu] [data-flux-menu-item]:hover,
+.dark [data-flux-menu] button:hover,
+.dark [data-flux-menu] form button:hover {
+    background-color: var(--color-zinc-800, #27272a) !important;
+    color: var(--color-zinc-100, #f4f4f5) !important;
+}
 
 /* Button hover states di tema Inovindo light mode - lebih visible */
 .inovindo button:hover:not([disabled]):not([data-variant="primary"]),
@@ -205,8 +297,7 @@ dialog:has(.flatpickr-calendar) > * {
 }
 
 /* Primary button hover di Inovindo - darker blue, text tetap white */
-.inovindo [data-flux-button][data-variant="primary"]:hover:not([disabled]),
-.inovindo button[data-variant="primary"]:hover:not([disabled]) {
+.inovindo [data-flux-button][data-variant="primary"]:hover:not([disabled]) {
     background-color: #2d5db3 !important; /* brand-dark */
     color: white !important;
 }
@@ -221,3 +312,17 @@ dialog:has(.flatpickr-calendar) > * {
 .inovindo [role="button"]:hover svg {
     color: #171717 !important; /* zinc-900 - dark grey */
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   Sidebar collapsed state: only reveal expand toggle on header hover
+   ══════════════════════════════════════════════════════════════════ */
+[data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-collapse] {
+    display: none !important;
+}
+[data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-header]:hover [data-flux-sidebar-collapse] {
+    display: flex !important;
+}
+[data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-header]:hover [data-flux-sidebar-brand] {
+    display: none !important;
+}
+

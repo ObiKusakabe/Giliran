@@ -189,3 +189,21 @@ test('GEN-15: satu ruangan tidak dialokasikan ke 2 tim di hari yang sama', funct
     expect($hasil)->toHaveCount(3);
     expect($ruanganIds)->toBe(array_unique($ruanganIds), 'Ada ruangan dialokasikan ke 2 tim!');
 });
+
+test('generateAdzanKajian hanya menjadwalkan personil laki-laki', function () {
+    $periode = buatPeriode();
+    $tim = Tim::create(['nama_tim' => 'Tim Campuran', 'status' => 'active']);
+
+    $pLaki = Personil::create(['tim_id' => $tim->id, 'nama' => 'Ahmad', 'jenis_kelamin' => 'laki-laki', 'status' => 'aktif']);
+    $pPerempuan = Personil::create(['tim_id' => $tim->id, 'nama' => 'Aisyah', 'jenis_kelamin' => 'perempuan', 'status' => 'aktif']);
+
+    JadwalWfo::create(['periode_wfo_id' => $periode->id, 'tim_id' => $tim->id, 'hari' => 'senin']);
+
+    $hasil = (new LraScheduler)->generateAdzanKajian([Carbon::parse('2026-08-03')], $periode->id);
+
+    expect($hasil)->not->toBeEmpty();
+    $personilIds = collect($hasil)->pluck('personil_id')->unique()->toArray();
+
+    expect($personilIds)->toContain($pLaki->id);
+    expect($personilIds)->not->toContain($pPerempuan->id);
+});

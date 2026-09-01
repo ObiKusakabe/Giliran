@@ -1,94 +1,194 @@
+@props(['title' => null, 'breadcrumbs' => []])
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
     <head>
         @include('partials.head')
     </head>
     <body class="min-h-screen bg-white dark:bg-zinc-800">
-        <flux:sidebar sticky collapsible="mobile" class="border-e border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
+        {{-- Sidebar dengan Flux standard layout --}}
+        <flux:sidebar
+            sticky
+            collapsible
+            class="border-e border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900"
+        >
+            {{-- Header Sidebar / Brand --}}
             <flux:sidebar.header>
-                <x-app-logo :sidebar="true" href="{{ route('dashboard') }}" wire:navigate />
-                <flux:sidebar.collapse class="lg:hidden" />
+                <flux:sidebar.brand
+                    href="{{ auth()->user()?->hasRole('admin') ? route('admin.dashboard') : route('tim.jadwal') }}"
+                    logo="/favicon.svg"
+                    name="Giliran"
+                />
+                <flux:sidebar.collapse />
             </flux:sidebar.header>
 
+            {{-- Navigasi Sidebar --}}
             <flux:sidebar.nav>
-                <flux:sidebar.group :heading="__('Platform')" class="grid">
-                    <flux:sidebar.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
+                @if (auth()->user()?->hasRole('admin'))
+                    {{-- Navigasi Admin --}}
+                    <flux:sidebar.item icon="chart-bar" :href="route('admin.dashboard')" :current="request()->routeIs('admin.dashboard')" wire:navigate.hover>
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
-                </flux:sidebar.group>
+
+                    <flux:sidebar.item icon="users" :href="route('admin.tim')" :current="request()->routeIs('admin.tim')" wire:navigate.hover>
+                        {{ __('Tim') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="user" :href="route('admin.personil')" :current="request()->routeIs('admin.personil')" wire:navigate.hover>
+                        {{ __('Personil') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="home-modern" :href="route('admin.ruangan')" :current="request()->routeIs('admin.ruangan')" wire:navigate.hover>
+                        {{ __('Ruangan') }}
+                    </flux:sidebar.item>
+
+                    <flux:sidebar.item icon="calendar-days" :href="route('admin.periode-wfo')" :current="request()->routeIs('admin.periode-wfo')" wire:navigate.hover>
+                        {{ __('Periode WFO') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="calendar-days" :href="route('admin.jadwal-wfo')" :current="request()->routeIs('admin.jadwal-wfo')" wire:navigate.hover>
+                        {{ __('Jadwal WFO') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="building-office-2" :href="route('admin.alokasi-ruangan')" :current="request()->routeIs('admin.alokasi-ruangan')" wire:navigate.hover>
+                        {{ __('Alokasi Ruangan') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="sparkles" :href="route('admin.generate-jadwal')" :current="request()->routeIs('admin.generate-jadwal')" wire:navigate.hover>
+                        {{ __('Generate Jadwal') }}
+                    </flux:sidebar.item>
+                @else
+                    {{-- Navigasi Tim Portal --}}
+                    <flux:sidebar.item icon="calendar-days" :href="route('tim.jadwal')" :current="request()->routeIs('tim.jadwal')" wire:navigate.hover>
+                        {{ __('Jadwal Tim') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="home-modern" :href="route('tim.ruangan')" :current="request()->routeIs('tim.ruangan')" wire:navigate.hover>
+                        {{ __('Ruangan Hari Ini') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="user-group" :href="route('tim.profil')" :current="request()->routeIs('tim.profil')" wire:navigate.hover>
+                        {{ __('Profil & Anggota') }}
+                    </flux:sidebar.item>
+                @endif
             </flux:sidebar.nav>
-
-            <flux:spacer />
-
-            <flux:sidebar.nav>
-                <flux:sidebar.item icon="folder-git-2" href="https://github.com/laravel/livewire-starter-kit" target="_blank">
-                    {{ __('Repository') }}
-                </flux:sidebar.item>
-
-                <flux:sidebar.item icon="book-open-text" href="https://laravel.com/docs/starter-kits#livewire" target="_blank">
-                    {{ __('Documentation') }}
-                </flux:sidebar.item>
-            </flux:sidebar.nav>
-
-            <x-desktop-user-menu class="hidden lg:block" :name="auth()->user()->name" />
         </flux:sidebar>
 
-        <!-- Mobile User Menu -->
-        <flux:header class="lg:hidden">
+        {{-- Navbar Atas --}}
+        <flux:header class="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200/60 dark:border-zinc-700/60 sticky top-0 z-20">
             <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
+            
+            <div class="hidden lg:block">
+                @php
+                    $routeName = request()->route()->getName();
+                    $breadcrumbParts = [];
+                    
+                    if (str_starts_with($routeName, 'admin.dashboard')) {
+                        $breadcrumbParts = [['label' => 'Dashboard']];
+                    } 
+                    elseif (str_starts_with($routeName, 'admin.tim') || 
+                            str_starts_with($routeName, 'admin.personil') || 
+                            str_starts_with($routeName, 'admin.ruangan')) {
+                        $breadcrumbParts[] = ['label' => 'Master Data'];
+                        if (str_starts_with($routeName, 'admin.tim')) {
+                            $breadcrumbParts[] = ['label' => 'Tim'];
+                        } elseif (str_starts_with($routeName, 'admin.personil')) {
+                            $breadcrumbParts[] = ['label' => 'Personil'];
+                        } elseif (str_starts_with($routeName, 'admin.ruangan')) {
+                            $breadcrumbParts[] = ['label' => 'Ruangan'];
+                        }
+                    }
+                    elseif (str_starts_with($routeName, 'admin.')) {
+                        $breadcrumbParts[] = ['label' => 'Jadwal'];
+                        if (str_starts_with($routeName, 'admin.periode-wfo')) {
+                            $breadcrumbParts[] = ['label' => 'Periode WFO'];
+                        } elseif (str_starts_with($routeName, 'admin.jadwal-wfo')) {
+                            $breadcrumbParts[] = ['label' => 'Jadwal WFO'];
+                        } elseif (str_starts_with($routeName, 'admin.alokasi-ruangan')) {
+                            $breadcrumbParts[] = ['label' => 'Alokasi Ruangan'];
+                        } elseif (str_starts_with($routeName, 'admin.generate-jadwal')) {
+                            $breadcrumbParts[] = ['label' => 'Generate Jadwal'];
+                        }
+                    }
+                    elseif (str_starts_with($routeName, 'tim.')) {
+                        $breadcrumbParts[] = ['label' => 'Portal Tim'];
+                        if (str_starts_with($routeName, 'tim.jadwal')) {
+                            $breadcrumbParts[] = ['label' => 'Jadwal Tim'];
+                        } elseif (str_starts_with($routeName, 'tim.ruangan')) {
+                            $breadcrumbParts[] = ['label' => 'Ruangan Hari Ini'];
+                        } elseif (str_starts_with($routeName, 'tim.profil')) {
+                            $breadcrumbParts[] = ['label' => 'Profil & Anggota'];
+                        }
+                    }
+                    elseif ($title) {
+                        $breadcrumbParts[] = ['label' => $title];
+                    }
+                    
+                    if (!empty($breadcrumbs)) {
+                        $breadcrumbParts = $breadcrumbs;
+                    }
+                @endphp
+                
+                @if (count($breadcrumbParts) > 0)
+                    <flux:breadcrumbs class="text-sm">
+                        @foreach ($breadcrumbParts as $crumb)
+                            @if (isset($crumb['href']))
+                                <flux:breadcrumbs.item :href="$crumb['href']" wire:navigate.hover>{{ $crumb['label'] }}</flux:breadcrumbs.item>
+                            @else
+                                <flux:breadcrumbs.item>{{ $crumb['label'] }}</flux:breadcrumbs.item>
+                            @endif
+                        @endforeach
+                    </flux:breadcrumbs>
+                @endif
+            </div>
 
             <flux:spacer />
 
-            <flux:dropdown position="top" align="end">
-                <flux:profile
-                    :initials="auth()->user()->initials()"
-                    icon-trailing="chevron-down"
-                />
+            <div class="flex items-center gap-2">
+                <livewire:notifikasi-dropdown />
 
-                <flux:menu>
-                    <flux:menu.radio.group>
-                        <div class="p-0 text-sm font-normal">
-                            <div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
-                                <flux:avatar
-                                    :name="auth()->user()->name"
-                                    :initials="auth()->user()->initials()"
-                                />
+                <flux:dropdown position="bottom" align="end">
+                    <flux:profile
+                        :initials="auth()->user()->initials()"
+                        icon-trailing="chevron-down"
+                    />
 
-                                <div class="grid flex-1 text-start text-sm leading-tight">
-                                    <flux:heading class="truncate">{{ auth()->user()->name }}</flux:heading>
-                                    <flux:text class="truncate">{{ auth()->user()->email }}</flux:text>
+                    <flux:menu>
+                        <flux:menu.radio.group>
+                            <div class="p-0 text-sm font-normal">
+                                <div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
+                                    <flux:avatar :name="auth()->user()->name" :initials="auth()->user()->initials()" />
+                                    <div class="grid flex-1 text-start text-sm leading-tight">
+                                        <flux:heading class="truncate">{{ auth()->user()->name }}</flux:heading>
+                                        <flux:text class="truncate">{{ auth()->user()->email }}</flux:text>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </flux:menu.radio.group>
-
-                    <flux:menu.separator />
-
-                    <flux:menu.radio.group>
-                        <flux:menu.item :href="route('profile.edit')" icon="cog" wire:navigate>
-                            {{ __('Settings') }}
-                        </flux:menu.item>
-                    </flux:menu.radio.group>
-
-                    <flux:menu.separator />
-
-                    <form method="POST" action="{{ route('logout') }}" class="w-full">
-                        @csrf
-                        <flux:menu.item
-                            as="button"
-                            type="submit"
-                            icon="arrow-right-start-on-rectangle"
-                            class="w-full cursor-pointer"
-                            data-test="logout-button"
-                        >
-                            {{ __('Log out') }}
-                        </flux:menu.item>
-                    </form>
-                </flux:menu>
-            </flux:dropdown>
+                        </flux:menu.radio.group>
+                        <flux:menu.separator />
+                        <flux:menu.radio.group>
+                            <flux:menu.item :href="route('profile.edit')" icon="cog" wire:navigate.hover>
+                                {{ __('Settings') }}
+                            </flux:menu.item>
+                        </flux:menu.radio.group>
+                        <flux:menu.separator />
+                        <form method="POST" action="{{ route('logout') }}" class="w-full">
+                            @csrf
+                            <flux:menu.item as="button" type="submit" icon="arrow-right-start-on-rectangle" class="w-full cursor-pointer" data-test="logout-button">
+                                {{ __('Log out') }}
+                            </flux:menu.item>
+                        </form>
+                    </flux:menu>
+                </flux:dropdown>
+            </div>
         </flux:header>
 
-        {{ $slot }}
+        <flux:main class="!pb-0">
+            {{ $slot }}
+        </flux:main>
+
+        {{-- DreamsPOS-style Footer --}}
+        <flux:footer class="border-t border-zinc-200/60 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 !py-3.5 !px-6 text-xs text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5">
+                <span>2026 © <strong class="font-semibold text-zinc-700 dark:text-zinc-300">Giliran</strong> — PT Inovindo Digital Media. All Rights Reserved</span>
+            </div>
+            <div class="flex items-center gap-1">
+                <span>Designed & Developed by</span>
+                <a href="https://obikusakabe.github.io/MyPortfolio/" target="_blank" rel="noopener noreferrer" class="font-semibold text-[#3B71CA] dark:text-blue-400 hover:underline">Roby Rachmat Firdaus</a>
+            </div>
+        </flux:footer>
 
         @persist('toast')
             <flux:toast.group>

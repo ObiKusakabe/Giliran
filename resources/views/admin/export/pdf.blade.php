@@ -1,171 +1,498 @@
-﻿<!DOCTYPE html>
+@php
+    $logoPath = public_path('images/inovindo-logo.png');
+    $logoBase64 = file_exists($logoPath) ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath)) : null;
+@endphp
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Jadwal Kegiatan Internal</title>
+    <title>Jadwal WFO & Petugas Internal — PT Inovindo Digital Media</title>
     <style>
-        body { font-family: 'DejaVu Sans', sans-serif; font-size: 10px; color: #18181b; }
-        h1 { font-size: 15px; font-weight: bold; margin-bottom: 2px; }
-        h2 { font-size: 12px; font-weight: bold; margin: 16px 0 5px; border-bottom: 2px solid #3B71CA; padding-bottom: 3px; color: #3B71CA; }
-        p.sub { font-size: 9px; color: #71717a; margin-bottom: 14px; }
+        @page {
+            margin: 18mm 18mm 18mm 18mm;
+            size: a4 portrait;
+        }
 
-        table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-        th, td { border: 1px solid #d4d4d8; padding: 4px 6px; font-size: 9px; }
-        th { background: #3B71CA; color: #fff; text-align: center; font-weight: bold; }
-        th.left { text-align: left; }
-        td { text-align: left; }
-        td.center { text-align: center; }
+        body {
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+            font-size: 10pt;
+            color: #000000;
+            line-height: 1.4;
+            margin: 0;
+            padding: 0;
+        }
 
-        /* Zebra striping */
-        tbody tr:nth-child(even) td { background: #f4f4f5; }
+        .page-break {
+            page-break-after: always;
+        }
 
-        /* Group header Zuhur/Ashar */
-        .th-group { background: #2d5db3; font-size: 10px; }
-        .th-sub { background: #3B71CA; font-size: 9px; }
+        /* Kop Surat Header (Times New Roman) */
+        .kop-table {
+            width: 100%;
+            border-collapse: collapse;
+            border-bottom: 2.5px solid #000000;
+            padding-bottom: 8px;
+            margin-bottom: 22px;
+            font-family: 'Times New Roman', Times, Georgia, serif !important;
+        }
 
-        .badge { display: inline-block; padding: 1px 5px; border-radius: 9999px; font-size: 8px; font-weight: bold; }
-        .badge-menunggu { background: #f4f4f5; color: #71717a; }
-        .badge-siap { background: #d1fae5; color: #065f46; }
-        .badge-berhalangan { background: #fee2e2; color: #991b1b; }
+        .kop-table td {
+            font-family: 'Times New Roman', Times, Georgia, serif !important;
+        }
 
-        .footer { margin-top: 24px; font-size: 8px; color: #a1a1aa; text-align: right; }
+        .kop-logo {
+            width: 38%;
+            vertical-align: middle;
+            text-align: left;
+        }
+
+        .kop-logo-img {
+            max-height: 42px;
+            width: auto;
+        }
+
+        .kop-brand-text {
+            font-size: 16pt;
+            font-weight: 900;
+            color: #3B71CA;
+            letter-spacing: -0.5px;
+            font-family: 'Times New Roman', Times, serif;
+        }
+        .kop-brand-sub {
+            font-size: 8pt;
+            font-weight: bold;
+            color: #2FA84F;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            font-family: 'Times New Roman', Times, serif;
+        }
+
+        .kop-address {
+            width: 62%;
+            vertical-align: middle;
+            text-align: right;
+            font-size: 8.5pt;
+            color: #111111;
+            line-height: 1.35;
+            font-family: 'Times New Roman', Times, Georgia, serif !important;
+        }
+
+        .kop-company {
+            font-size: 10.5pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+            color: #000000;
+            font-family: 'Times New Roman', Times, Georgia, serif !important;
+        }
+
+        /* Typography & Paragraphs (Arial MT) */
+        p {
+            margin: 0 0 12px 0;
+            text-align: justify;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
+
+        .title-lampiran {
+            text-align: center;
+            font-size: 12pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-top: 8px;
+            margin-bottom: 4px;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
+
+        .subtitle-lampiran {
+            text-align: center;
+            font-size: 11pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
+
+        .periode-lampiran {
+            text-align: center;
+            font-size: 9pt;
+            margin-bottom: 20px;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
+
+        /* Tabel WFO & Kelompok (Blue Headers) */
+        .table-cyan {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 18px;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
+
+        .table-cyan th {
+            background-color: #0000FF;
+            color: #ffffff;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 9pt;
+            padding: 7px 8px;
+            border: 1px solid #000000;
+            text-align: left;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
+
+        .table-cyan td {
+            border: 1px solid #000000;
+            padding: 5.5px 8px;
+            font-size: 8.5pt;
+            vertical-align: middle;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
+
+        /* Tabel Adzan (Blue Headers) */
+        .table-blue {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 18px;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
+
+        .table-blue th {
+            background-color: #0000FF;
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 8.5pt;
+            padding: 6px 4px;
+            border: 1px solid #000000;
+            text-align: center;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
+
+        .table-blue td {
+            border: 1px solid #000000;
+            padding: 5px 6px;
+            font-size: 8pt;
+            vertical-align: middle;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
+
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .font-bold { font-weight: bold; }
+
+        .keterangan-box {
+            font-size: 8.5pt;
+            line-height: 1.5;
+            margin-top: 14px;
+            font-family: 'Arial MT', 'Arial', 'Helvetica', sans-serif;
+        }
     </style>
 </head>
 <body>
 
-<h1>Jadwal Kegiatan Internal â€” PT Inovindo Digital Media</h1>
-<p class="sub">
-    Periode: {{ $mulai->translatedFormat('d F Y') }} s/d {{ $selesai->translatedFormat('d F Y') }}
-    &nbsp;|&nbsp; Diekspor: {{ now()->translatedFormat('d F Y, H:i') }}
-</p>
+{{-- ========================================================================= --}}
+{{-- HALAMAN 1: SURAT RESMI PEMBERITAHUAN JADWAL WFO                            --}}
+{{-- ========================================================================= --}}
+@if ($jenis === 'semua' || $jenis === 'ruangan' || $jenis === 'wfo')
+    {{-- Kop Surat Inovindo (Times New Roman & PNG Logo) --}}
+    <table class="kop-table">
+        <tr>
+            <td class="kop-logo">
+                @if ($logoBase64)
+                    <img src="{{ $logoBase64 }}" class="kop-logo-img" alt="Inovindo Logo">
+                @else
+                    <div class="kop-brand-text">Inovindo</div>
+                    <div class="kop-brand-sub">digital - media</div>
+                @endif
+            </td>
+            <td class="kop-address">
+                <div class="kop-company">PT INOVINDO DIGITAL MEDIA</div>
+                <div>Komplek Buana Citra Ciwastra No. D3, Kab. Bandung</div>
+                <div>WhatsApp. 08562251196 Website www.inovindo.com</div>
+            </td>
+        </tr>
+    </table>
 
-{{-- â”€â”€ JADWAL ADZAN & KAJIAN â€” Format Inovindo: 2-level header, 1 baris = 1 tanggal â”€â”€ --}}
-@if ($adzan->isNotEmpty())
-    <h2>Jadwal Petugas Adzan & Pembacaan Kitab Zuhur dan Ashar</h2>
+    <table style="width:100%; margin-bottom: 22px; font-size: 9.5pt;">
+        <tr>
+            <td style="width: 12%;">Nomor</td>
+            <td style="width: 2%;">:</td>
+            <td style="width: 46%;">-</td>
+            <td style="width: 40%; text-align: right;">Bandung, {{ $mulai->translatedFormat('d F Y') }}</td>
+        </tr>
+        <tr>
+            <td>Lampiran</td>
+            <td>:</td>
+            <td colspan="2">2 (dua) Berkas</td>
+        </tr>
+        <tr>
+            <td>Perihal</td>
+            <td>:</td>
+            <td colspan="2"><strong>Pemberitahuan Jadwal WFO</strong></td>
+        </tr>
+    </table>
+
+    <div style="margin-bottom: 20px; font-size: 9.5pt;">
+        <div>Kepada Yth,</div>
+        <div style="font-weight: bold;">Seluruh Peserta PKL dan Magang</div>
+        <div>PT Inovindo Digital Media</div>
+        <div>di Tempat</div>
+    </div>
+
+    <div style="font-size: 9.5pt;">
+        <p>Dengan hormat,</p>
+        <p>
+            Sehubungan dengan bertambahnya peserta PKL di PT Inovindo Digital Media, kami bermaksud untuk memberitahukan jadwal kerja WFO (Work From Office) yang akan berlaku mulai tanggal {{ $mulai->translatedFormat('d F') }} s.d {{ $selesai->translatedFormat('d F Y') }}.
+        </p>
+        <p>
+            Perubahan ini dilakukan dengan tujuan untuk memberikan fleksibilitas lebih bagi para peserta PKL/magang dalam menyelesaikan tugas-tugas yang diberikan, serta untuk mendukung upaya perusahaan dalam menjaga produktivitas dan efisiensi kerja selama periode magang. Jadwal telah dibuat dinamis agar setiap institusi dapat bergiliran dan berkesempatan saling bertemu. Bersama ini kami lampirkan jadwal WFO untuk peserta PKL/magang.
+        </p>
+        <p>
+            Kami mengharapkan kerjasama dan pengertian dari seluruh peserta PKL/magang dalam melaksanakan jadwal baru ini. Atas perhatian dan kerjasamanya, kami ucapkan terima kasih.
+        </p>
+    </div>
+
+    <table style="width: 100%; margin-top: 50px; font-size: 9.5pt;">
+        <tr>
+            <td style="width: 60%;"></td>
+            <td style="width: 40%; text-align: left;">
+                <div>Hormat kami,</div>
+                <div style="margin-top: 65px; font-weight: bold;">Direktur</div>
+                <div>PT Inovindo Digital Media</div>
+                <div style="font-weight: bold; margin-top: 4px;">Novi Setia Nurviat</div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="page-break"></div>
+
+    {{-- ========================================================================= --}}
+    {{-- HALAMAN 2: LAMPIRAN 1 — JADWAL WFO PESERTA PKL/MAGANG                      --}}
+    {{-- ========================================================================= --}}
+    <table class="kop-table">
+        <tr>
+            <td class="kop-logo">
+                @if ($logoBase64)
+                    <img src="{{ $logoBase64 }}" class="kop-logo-img" alt="Inovindo Logo">
+                @else
+                    <div class="kop-brand-text">Inovindo</div>
+                    <div class="kop-brand-sub">digital - media</div>
+                @endif
+            </td>
+            <td class="kop-address">
+                <div class="kop-company">PT INOVINDO DIGITAL MEDIA</div>
+                <div>Komplek Buana Citra Ciwastra No. D3, Kab. Bandung</div>
+                <div>WhatsApp. 08562251196 Website www.inovindo.com</div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="title-lampiran">LAMPIRAN 1</div>
+    <div class="subtitle-lampiran">JADWAL WFO PESERTA PKL/MAGANG</div>
+    <div class="periode-lampiran">Tanggal {{ $mulai->translatedFormat('d') }} s.d {{ $selesai->translatedFormat('d F Y') }}</div>
 
     @php
-        /**
-         * Group data adzan per tanggal.
-         * Tiap tanggal bisa punya: dhuhr_adzan, dhuhr_kajian, asr_adzan, asr_kajian
-         */
-        $grouped = $adzan->groupBy(fn($j) => $j->tanggal->toDateString())
+        $seninList  = $jadwalWfo['senin']  ?? collect();
+        $selasaList = $jadwalWfo['selasa'] ?? collect();
+        $rabuList   = $jadwalWfo['rabu']   ?? collect();
+        $kamisList  = $jadwalWfo['kamis']  ?? collect();
+        $jumatList  = $jadwalWfo['jumat']  ?? collect();
+        $sabtuList  = $jadwalWfo['sabtu']  ?? collect();
+
+        $maxRow1 = max($seninList->count(), $selasaList->count(), $rabuList->count(), 6);
+        $maxRow2 = max($kamisList->count(), $jumatList->count(), $sabtuList->count(), 6);
+    @endphp
+
+    {{-- Bagian 1: SENIN, SELASA, RABU --}}
+    <table class="table-cyan">
+        <thead>
+            <tr>
+                <th style="width: 33.33%;">SENIN</th>
+                <th style="width: 33.33%;">SELASA</th>
+                <th style="width: 33.33%;">RABU</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for ($i = 0; $i < $maxRow1; $i++)
+                <tr>
+                    <td>{{ $seninList[$i]->tim->nama_tim ?? '' }}</td>
+                    <td>{{ $selasaList[$i]->tim->nama_tim ?? '' }}</td>
+                    <td>{{ $rabuList[$i]->tim->nama_tim ?? '' }}</td>
+                </tr>
+            @endfor
+        </tbody>
+    </table>
+
+    {{-- Bagian 2: KAMIS, JUM'AT, SABTU --}}
+    <table class="table-cyan">
+        <thead>
+            <tr>
+                <th style="width: 33.33%;">KAMIS</th>
+                <th style="width: 33.33%;">JUM'AT</th>
+                <th style="width: 33.33%;">SABTU</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for ($i = 0; $i < $maxRow2; $i++)
+                <tr>
+                    <td>{{ $kamisList[$i]->tim->nama_tim ?? '' }}</td>
+                    <td>{{ $jumatList[$i]->tim->nama_tim ?? '' }}</td>
+                    <td>{{ $sabtuList[$i]->tim->nama_tim ?? '' }}</td>
+                </tr>
+            @endfor
+        </tbody>
+    </table>
+
+    <div class="keterangan-box">
+        <div class="font-bold">Keterangan:</div>
+        <div>Daily report: 09.00 - 10.00</div>
+        <div>• Absen/presensi pagi: 09.00 - 09.05</div>
+        <div>• Absen/presensi sore: 17.00 (weekday) / 14.00 (weekend)</div>
+        <div>Kehadiran dibawah 80% nilai default C (tidak mendapatkan sertifikat PKL)</div>
+    </div>
+
+    <div class="page-break"></div>
+
+    {{-- ========================================================================= --}}
+    {{-- HALAMAN 3 & 4: LAMPIRAN 2 — DAFTAR KELOMPOK PESERTA PKL/MAGANG             --}}
+    {{-- ========================================================================= --}}
+    <table class="kop-table">
+        <tr>
+            <td class="kop-logo">
+                @if ($logoBase64)
+                    <img src="{{ $logoBase64 }}" class="kop-logo-img" alt="Inovindo Logo">
+                @else
+                    <div class="kop-brand-text">Inovindo</div>
+                    <div class="kop-brand-sub">digital - media</div>
+                @endif
+            </td>
+            <td class="kop-address">
+                <div class="kop-company">PT INOVINDO DIGITAL MEDIA</div>
+                <div>Komplek Buana Citra Ciwastra No. D3, Kab. Bandung</div>
+                <div>WhatsApp. 08562251196 Website www.inovindo.com</div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="title-lampiran">LAMPIRAN 2</div>
+    <div class="subtitle-lampiran" style="margin-bottom: 22px;">DAFTAR KELOMPOK PESERTA PKL/MAGANG</div>
+
+    <table class="table-cyan">
+        <thead>
+            <tr>
+                <th style="width: 38%;">ASAL SEKOLAH</th>
+                <th style="width: 62%;">NAMA PESERTA</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($semuaTim as $tim)
+                @php
+                    $personilCount = $tim->personil->count();
+                @endphp
+                @if ($personilCount > 0)
+                    @foreach ($tim->personil as $idx => $p)
+                        <tr>
+                            @if ($idx === 0)
+                                <td rowspan="{{ $personilCount }}" style="font-weight: bold; vertical-align: top; background: #ffffff;">
+                                    {{ $tim->nama_tim }}
+                                </td>
+                            @endif
+                            <td>{{ $p->nama }}</td>
+                        </tr>
+                    @endforeach
+                @else
+                    <tr>
+                        <td style="font-weight: bold; vertical-align: top; background: #ffffff;">{{ $tim->nama_tim }}</td>
+                        <td style="color: #71717a; font-style: italic;">(Belum ada data anggota)</td>
+                    </tr>
+                @endif
+            @endforeach
+        </tbody>
+    </table>
+
+    <div class="page-break"></div>
+@endif
+
+{{-- ========================================================================= --}}
+{{-- HALAMAN 5+: JADWAL PETUGAS ADZAN & PEMBACAAN KITAB ZUHUR DAN ASHAR        --}}
+{{-- ========================================================================= --}}
+@if ($adzan->isNotEmpty())
+    @php
+        $groupedAdzan = $adzan->groupBy(fn($j) => $j->tanggal->toDateString())
             ->map(function ($rows) {
                 $map = [];
                 foreach ($rows as $r) {
-                    $key = $r->waktu_sholat . '_' . $r->jenis_tugas; // mis. dhuhr_adzan
+                    $key = $r->waktu_sholat . '_' . $r->jenis_tugas;
                     $map[$key] = $r;
                 }
                 return $map;
             });
     @endphp
 
-    <table>
+    <table class="kop-table">
+        <tr>
+            <td class="kop-logo">
+                @if ($logoBase64)
+                    <img src="{{ $logoBase64 }}" class="kop-logo-img" alt="Inovindo Logo">
+                @else
+                    <div class="kop-brand-text">Inovindo</div>
+                    <div class="kop-brand-sub">digital - media</div>
+                @endif
+            </td>
+            <td class="kop-address">
+                <div class="kop-company">PT INOVINDO DIGITAL MEDIA</div>
+                <div>Komplek Buana Citra Ciwastra No. D3, Kab. Bandung</div>
+                <div>WhatsApp. 08562251196 Website www.inovindo.com</div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="subtitle-lampiran" style="font-size: 12pt; margin-top: 10px;">Jadwal Petugas Adzan & Pembacaan Kitab Zuhur dan Ashar</div>
+    <div class="periode-lampiran" style="font-size: 10pt; font-weight: bold; margin-bottom: 18px;">
+        Bulan {{ $mulai->translatedFormat('F Y') }}
+    </div>
+
+    <table class="table-blue">
         <thead>
             <tr>
-                <th class="th-group left" rowspan="2" style="width:12%">Hari, Tanggal</th>
-                <th class="th-group left" rowspan="2" style="width:8%">Hari</th>
-                <th class="th-group" colspan="2" style="width:30%">Zuhur</th>
-                <th class="th-group" colspan="2" style="width:30%">Ashar</th>
+                <th rowspan="2" style="width: 14%;">Hari, Tanggal</th>
+                <th rowspan="2" style="width: 10%;">Hari</th>
+                <th colspan="2" style="width: 38%;">Zuhur</th>
+                <th colspan="2" style="width: 38%;">Ashar</th>
             </tr>
             <tr>
-                <th class="th-sub" style="width:15%">Adzan</th>
-                <th class="th-sub" style="width:15%">Pembacaan Kitab</th>
-                <th class="th-sub" style="width:15%">Adzan</th>
-                <th class="th-sub" style="width:15%">Pembacaan Kitab</th>
+                <th style="width: 19%;">Adzan</th>
+                <th style="width: 19%;">Pembacaan Kitab</th>
+                <th style="width: 19%;">Adzan</th>
+                <th style="width: 19%;">Pembacaan Kitab</th>
             </tr>
         </thead>
         <tbody>
-            @foreach ($grouped as $tgl => $slots)
+            @foreach ($groupedAdzan as $tgl => $slots)
                 @php
-                    $carbon       = \Carbon\Carbon::parse($tgl);
-                    $dhuhrAdzan   = $slots['dhuhr_adzan']   ?? null;
-                    $dhuhrKajian  = $slots['dhuhr_kajian']  ?? null;
-                    $asrAdzan     = $slots['asr_adzan']     ?? null;
-                    $asrKajian    = $slots['asr_kajian']    ?? null;
+                    $carbon = \Carbon\Carbon::parse($tgl);
+                    $dhuhrAdzan  = $slots['dhuhr_adzan']  ?? null;
+                    $dhuhrKajian = $slots['dhuhr_kajian'] ?? null;
+                    $asrAdzan    = $slots['asr_adzan']    ?? null;
+                    $asrKajian   = $slots['asr_kajian']   ?? null;
 
-                    // Helper untuk format nama + tim
-                    $fmt = fn($row) => $row
-                        ? ($row->personil?->nama ?? 'â€”') . "\n(" . ($row->personil?->tim?->nama_tim ?? 'â€”') . ")"
-                        : 'â€”';
+                    $fmt = function($row) {
+                        if (! $row || ! $row->personil) {
+                            return '-';
+                        }
+                        return $row->personil->nama . '<br><span style="font-size: 7.5pt; color: #333;">(' . ($row->personil->tim->nama_tim ?? '—') . ')</span>';
+                    };
                 @endphp
                 <tr>
-                    <td>{{ $carbon->format('d F Y') }}</td>
-                    <td class="center" style="font-weight:bold;text-transform:uppercase">
-                        {{ $carbon->translatedFormat('l') }}
-                    </td>
-                    <td style="white-space:pre-line">{{ $fmt($dhuhrAdzan) }}</td>
-                    <td style="white-space:pre-line">{{ $fmt($dhuhrKajian) }}</td>
-                    <td style="white-space:pre-line">{{ $fmt($asrAdzan) }}</td>
-                    <td style="white-space:pre-line">{{ $fmt($asrKajian) }}</td>
+                    <td class="text-center">{{ $carbon->translatedFormat('d F Y') }}</td>
+                    <td class="text-center font-bold" style="text-transform: uppercase;">{{ $carbon->translatedFormat('l') }}</td>
+                    <td class="text-center">{!! $fmt($dhuhrAdzan) !!}</td>
+                    <td class="text-center">{!! $fmt($dhuhrKajian) !!}</td>
+                    <td class="text-center">{!! $fmt($asrAdzan) !!}</td>
+                    <td class="text-center">{!! $fmt($asrKajian) !!}</td>
                 </tr>
             @endforeach
         </tbody>
     </table>
 @endif
-
-{{-- â”€â”€ JADWAL BRIEFING â”€â”€ --}}
-@if ($briefing->isNotEmpty())
-    <h2>Jadwal Briefing</h2>
-    <table>
-        <thead>
-            <tr>
-                <th class="left" style="width:12%">Tanggal</th>
-                <th class="left" style="width:10%">Hari</th>
-                <th class="left" style="width:8%">Sesi</th>
-                <th class="left" style="width:25%">Perwakilan</th>
-                <th class="left" style="width:25%">Tim</th>
-                <th class="center" style="width:10%">Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach ($briefing as $j)
-                <tr>
-                    <td>{{ $j->tanggal->format('d/m/Y') }}</td>
-                    <td style="font-weight:bold;text-transform:uppercase">{{ $j->tanggal->translatedFormat('l') }}</td>
-                    <td>{{ ucfirst($j->sesi) }}</td>
-                    <td>{{ $j->personil?->nama ?? 'â€”' }}</td>
-                    <td>{{ $j->tim?->nama_tim ?? 'â€”' }}</td>
-                    <td class="center">
-                        <span class="badge badge-{{ $j->status_konfirmasi }}">{{ ucfirst($j->status_konfirmasi) }}</span>
-                    </td>
-                </tr>
-            @endforeach
-        </tbody>
-    </table>
-@endif
-
-{{-- â”€â”€ ALOKASI RUANGAN â”€â”€ --}}
-@if ($ruangan->isNotEmpty())
-    <h2>Alokasi Ruangan</h2>
-    <table>
-        <thead>
-            <tr>
-                <th class="left" style="width:12%">Tanggal</th>
-                <th class="left" style="width:10%">Hari</th>
-                <th class="left" style="width:30%">Tim</th>
-                <th class="left" style="width:25%">Ruangan</th>
-                <th class="center" style="width:13%">Kapasitas</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach ($ruangan as $j)
-                <tr>
-                    <td>{{ $j->tanggal->format('d/m/Y') }}</td>
-                    <td style="font-weight:bold;text-transform:uppercase">{{ $j->tanggal->translatedFormat('l') }}</td>
-                    <td>{{ $j->tim?->nama_tim ?? 'â€”' }}</td>
-                    <td>{{ $j->ruangan?->nama_ruangan ?? 'â€”' }}</td>
-                    <td class="center">{{ $j->ruangan?->kapasitas }} orang</td>
-                </tr>
-            @endforeach
-        </tbody>
-    </table>
-@endif
-
-<div class="footer">
-    Sistem Manajemen Jadwal Kegiatan Internal â€” PT Inovindo Digital Media
-</div>
 
 </body>
 </html>
-
-

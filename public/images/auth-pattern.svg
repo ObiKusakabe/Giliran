@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800" fill="none">
+  <defs>
+    <radialGradient id="rg1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3B71CA" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#12314F" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#12314F" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="rg2" cx="30%" cy="70%" r="60%">
+      <stop offset="0%" stop-color="#2FA84F" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#12314F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255, 255, 255, 0.05)" stroke-width="1"/>
+      <circle cx="40" cy="40" r="1.5" fill="rgba(255, 255, 255, 0.1)"/>
+    </pattern>
+    <pattern id="dots" width="80" height="80" patternUnits="userSpaceOnUse">
+      <circle cx="40" cy="40" r="2" fill="rgba(59, 113, 202, 0.25)"/>
+    </pattern>
+  </defs>
+
+  <!-- Ambient Glows -->
+  <rect width="800" height="800" fill="url(#rg1)"/>
+  <circle cx="200" cy="600" r="300" fill="url(#rg2)"/>
+
+  <!-- Grid Overlay -->
+  <rect width="800" height="800" fill="url(#grid)"/>
+  <rect width="800" height="800" fill="url(#dots)"/>
+
+  <!-- Geometric Decorative Curves and Nodes -->
+  <g stroke="rgba(255, 255, 255, 0.08)" stroke-width="1.5" fill="none">
+    <circle cx="400" cy="400" r="160" stroke-dasharray="8 8"/>
+    <circle cx="400" cy="400" r="260" stroke="rgba(59, 113, 202, 0.15)"/>
+    <circle cx="400" cy="400" r="340" stroke-dasharray="4 12"/>
+    <path d="M 100 400 Q 400 200 700 400" stroke="rgba(47, 168, 79, 0.15)" stroke-width="2"/>
+    <path d="M 100 400 Q 400 600 700 400" stroke="rgba(59, 113, 202, 0.2)" stroke-width="2"/>
+  </g>
+
+  <!-- Floating Accent Rings -->
+  <g>
+    <circle cx="240" cy="240" r="32" stroke="rgba(59, 113, 202, 0.3)" stroke-width="2" fill="rgba(59, 113, 202, 0.05)"/>
+    <circle cx="240" cy="240" r="4" fill="#3B71CA"/>
+    <circle cx="580" cy="280" r="48" stroke="rgba(47, 168, 79, 0.25)" stroke-width="2" fill="rgba(47, 168, 79, 0.03)"/>
+    <circle cx="580" cy="280" r="5" fill="#2FA84F"/>
+    <circle cx="500" cy="560" r="40" stroke="rgba(242, 163, 64, 0.25)" stroke-width="2" fill="rgba(242, 163, 64, 0.03)"/>
+    <circle cx="500" cy="560" r="4" fill="#F2A340"/>
+  </g>
+</svg>

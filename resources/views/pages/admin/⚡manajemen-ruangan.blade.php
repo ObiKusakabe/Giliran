@@ -29,6 +29,30 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
             ->toArray();
     }
 
+    #[Computed]
+    public function totalRuangan(): int
+    {
+        return Ruangan::count();
+    }
+
+    #[Computed]
+    public function totalRuanganTersedia(): int
+    {
+        return Ruangan::where('status', 'tersedia')->count();
+    }
+
+    #[Computed]
+    public function totalRuanganTidakTersedia(): int
+    {
+        return Ruangan::where('status', 'tidak_tersedia')->count();
+    }
+
+    #[Computed]
+    public function totalKapasitas(): int
+    {
+        return (int) Ruangan::where('status', 'tersedia')->sum('kapasitas');
+    }
+
     public function bukaFormTambah(): void
     {
         $this->resetForm();
@@ -69,7 +93,7 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
 
         $this->modal('form-ruangan')->close();
         $this->resetForm();
-        unset($this->semuaRuangan);
+        unset($this->semuaRuangan, $this->totalRuangan, $this->totalRuanganTersedia, $this->totalRuanganTidakTersedia, $this->totalKapasitas);
     }
 
     public function konfirmasiHapus(int $id): void
@@ -88,7 +112,7 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
         Flux::toast(variant: 'success', text: 'Ruangan berhasil dihapus.');
         $this->modal('hapus-ruangan')->close();
         $this->hapusId = null;
-        unset($this->semuaRuangan);
+        unset($this->semuaRuangan, $this->totalRuangan, $this->totalRuanganTersedia, $this->totalRuanganTidakTersedia, $this->totalKapasitas);
     }
 
     private function resetForm(): void
@@ -154,23 +178,67 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
         <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus" class="flex-shrink-0">Tambah Ruangan</flux:button>
     </div>
 
+    {{-- Quick Info Cards with Watermark Icons --}}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
+            <div class="relative z-10 pr-6">
+                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Total Ruangan</flux:text>
+                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+                    {{ $this->totalRuangan }}
+                </flux:heading>
+            </div>
+            <flux:icon icon="home-modern" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-blue-500/10 dark:text-blue-400/10 pointer-events-none" />
+        </flux:card>
+
+        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
+            <div class="relative z-10 pr-6">
+                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Tersedia</flux:text>
+                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                    {{ $this->totalRuanganTersedia }}
+                </flux:heading>
+            </div>
+            <flux:icon icon="check-circle" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-emerald-500/10 dark:text-emerald-400/10 pointer-events-none" />
+        </flux:card>
+
+        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
+            <div class="relative z-10 pr-6">
+                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Tidak Tersedia</flux:text>
+                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-zinc-600 dark:text-zinc-400">
+                    {{ $this->totalRuanganTidakTersedia }}
+                </flux:heading>
+            </div>
+            <flux:icon icon="x-circle" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-zinc-500/10 dark:text-zinc-400/10 pointer-events-none" />
+        </flux:card>
+
+        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
+            <div class="relative z-10 pr-6">
+                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Kapasitas Kursi</flux:text>
+                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-purple-600 dark:text-purple-400">
+                    {{ $this->totalKapasitas }}
+                </flux:heading>
+            </div>
+            <flux:icon icon="user-group" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-purple-500/10 dark:text-purple-400/10 pointer-events-none" />
+        </flux:card>
+    </div>
+
     <div class="flex gap-3">
         <div class="relative flex-1">
             <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             <input x-model="q" type="text" placeholder="Cari nama ruangan…"
                 class="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-brand dark:text-zinc-100" />
-            <button x-show="q" @click="q = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+            <button x-show="q" @click="q = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
         </div>
+
         <div
             x-data="{ open: false }"
             @click.outside="open = false"
-            class="relative w-44"
+            class="relative w-40 sm:w-44"
         >
             <button type="button" @click="open = !open"
                 :class="open ? 'ring-2 ring-brand border-brand' : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-500'"
-                class="w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-left transition-colors focus:outline-none"
+                class="w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-left transition-colors focus:outline-none cursor-pointer"
             >
                 <span x-text="filterStatus === '' ? 'Semua Status' : (filterStatus === 'tersedia' ? 'Tersedia' : 'Tidak Tersedia')"
                       class="text-zinc-900 dark:text-zinc-100"></span>
@@ -183,7 +251,7 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
                 <template x-for="opt in [{value:'',label:'Semua Status'},{value:'tersedia',label:'Tersedia'},{value:'tidak_tersedia',label:'Tidak Tersedia'}]" :key="opt.value">
                     <button type="button" @click="filterStatus = opt.value; page = 1; open = false"
                         :class="filterStatus === opt.value ? 'bg-brand/10 text-brand font-medium' : 'text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700'"
-                        class="w-full text-left px-3 py-2 text-sm flex items-center justify-between"
+                        class="w-full text-left px-3 py-2 text-sm flex items-center justify-between cursor-pointer"
                     >
                         <span x-text="opt.label"></span>
                         <svg x-show="filterStatus === opt.value" class="h-4 w-4 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
@@ -193,7 +261,7 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
         </div>
     </div>
 
-    <flux:card class="p-0 overflow-hidden">
+    <flux:card class="p-0 overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
         {{-- Card-list: mobile only (< sm) --}}
         <div class="sm:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
             <template x-if="displayed.length === 0">
@@ -223,38 +291,48 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
         </div>
 
         {{-- Tabel: sm dan lebih lebar --}}
-        <div class="hidden sm:block overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead class="border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">
-                    <tr>
-                        @foreach([['nama_ruangan','Nama Ruangan','left'],['kapasitas','Kapasitas','center'],['status','Status','center']] as [$f,$l,$a])
-                        <th @click="toggleSort('{{ $f }}')"
-                            class="px-4 py-3 text-{{ $a }} font-medium text-zinc-600 dark:text-zinc-400 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
-                            <span class="inline-flex items-center {{ $a==='center' ? 'justify-center' : '' }} gap-1">
-                                {{ $l }}
-                                <svg x-show="sortField==='{{ $f }}' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
-                                <svg x-show="sortField==='{{ $f }}' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                                <svg x-show="sortField!=='{{ $f }}'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
-                            </span>
-                        </th>
-                        @endforeach
-                        <th class="px-4 py-3 text-right font-medium text-zinc-600 dark:text-zinc-400">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
+        <div class="hidden sm:block px-5">
+            <flux:table>
+                <flux:table.columns class="sticky top-0 z-10 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-700">
+                    <flux:table.column @click="toggleSort('nama_ruangan')" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
+                        <span class="inline-flex items-center gap-1">Nama Ruangan
+                            <svg x-show="sortField==='nama_ruangan' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                            <svg x-show="sortField==='nama_ruangan' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg x-show="sortField!=='nama_ruangan'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                        </span>
+                    </flux:table.column>
+                    <flux:table.column @click="toggleSort('kapasitas')" align="center" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
+                        <span class="inline-flex items-center justify-center gap-1">Kapasitas
+                            <svg x-show="sortField==='kapasitas' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                            <svg x-show="sortField==='kapasitas' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg x-show="sortField!=='kapasitas'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                        </span>
+                    </flux:table.column>
+                    <flux:table.column @click="toggleSort('status')" align="center" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
+                        <span class="inline-flex items-center justify-center gap-1">Status
+                            <svg x-show="sortField==='status' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                            <svg x-show="sortField==='status' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg x-show="sortField!=='status'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                        </span>
+                    </flux:table.column>
+                    <flux:table.column align="end">Aksi</flux:table.column>
+                </flux:table.columns>
+                <flux:table.rows>
                     <template x-if="displayed.length === 0">
-                        <tr><td colspan="4" class="px-4 py-8 text-center text-zinc-400 text-sm">Tidak ada ruangan yang cocok.</td></tr>
+                        <flux:table.row>
+                            <flux:table.cell colspan="4" class="text-center text-zinc-400 text-sm py-8">Tidak ada ruangan yang cocok.</flux:table.cell>
+                        </flux:table.row>
                     </template>
                     <template x-for="r in displayed" :key="r.id">
-                        <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                            <td class="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100" x-text="r.nama_ruangan"></td>
-                            <td class="px-4 py-3 text-center text-zinc-500" x-text="r.kapasitas + ' orang'"></td>
-                            <td class="px-4 py-3 text-center">
-                                <span :class="r.status==='tersedia' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'"
-                                      class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                        <flux:table.row>
+                            <flux:table.cell class="font-medium text-zinc-900 dark:text-zinc-100" x-text="r.nama_ruangan"></flux:table.cell>
+                            <flux:table.cell align="center" class="text-zinc-500" x-text="r.kapasitas + ' orang'"></flux:table.cell>
+                            <flux:table.cell align="center">
+                                <span :class="r.status==='tersedia' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' : 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400'"
+                                      class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
                                       x-text="r.status==='tersedia' ? 'Tersedia' : 'Tidak Tersedia'"></span>
-                            </td>
-                            <td class="px-4 py-3 text-right">
+                            </flux:table.cell>
+                            <flux:table.cell align="end">
                                 <flux:dropdown>
                                     <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
                                     <flux:menu>
@@ -263,11 +341,11 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
                                         <flux:menu.item icon="trash" variant="danger" @click="$wire.konfirmasiHapus(r.id)">Hapus</flux:menu.item>
                                     </flux:menu>
                                 </flux:dropdown>
-                            </td>
-                        </tr>
+                            </flux:table.cell>
+                        </flux:table.row>
                     </template>
-                </tbody>
-            </table>
+                </flux:table.rows>
+            </flux:table>
         </div>
         {{-- Pagination bar --}}
         <div class="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3">

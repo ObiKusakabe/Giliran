@@ -13,11 +13,21 @@
 ])
 
 <div
+    wire:ignore
     x-data="{
         fp: null,
         from: @js($valueFrom ?? ''),
         to: @js($valueTo ?? ''),
-        observer: null,
+
+        syncDates() {
+            if (!this.fp) return;
+            const dates = [this.from, this.to].filter(Boolean);
+            if (dates.length > 0) {
+                this.fp.setDate(dates, false);
+            } else {
+                this.fp.clear();
+            }
+        },
 
         initFp() {
             if (this.fp) {
@@ -30,7 +40,6 @@
                 return;
             }
 
-            const dialogEl = this.$refs.fpInput.closest('dialog');
             const wireFrom = @js($wireFrom);
             const wireTo = @js($wireTo);
 
@@ -42,12 +51,13 @@
                 maxDate: @js($maxDate),
                 allowInput: false,
                 disableMobile: true,
-                appendTo: dialogEl ?? document.body,
-                onOpen: function(selectedDates, dateStr, instance) {
-                    // Force z-index above modal backdrop (9999)
-                    const fpContainer = instance.calendarContainer;
-                    if (fpContainer) {
-                        fpContainer.style.zIndex = '10000';
+                static: true,
+                monthSelectorType: 'static',
+                onOpen: (selectedDates, dateStr, instance) => {
+                    if (instance.calendarContainer) {
+                        instance.calendarContainer.style.zIndex = '999999';
+                        instance.calendarContainer.style.visibility = 'visible';
+                        instance.calendarContainer.style.opacity = '1';
                     }
                 },
                 onChange: (dates) => {
@@ -71,23 +81,27 @@
                 },
             });
 
-            if (this.observer) {
-                this.observer.disconnect();
-                this.observer = null;
-            }
+            this.syncDates();
         }
     }"
     x-init="
         $nextTick(() => initFp());
-        observer = new MutationObserver(() => {
-            if ($refs.fpInput && !fp && typeof window.flatpickr !== 'undefined') {
-                initFp();
-            }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
+
+        @if($wireFrom)
+            $watch('$wire.{{ $wireFrom }}', (val) => {
+                from = val || '';
+                syncDates();
+            });
+        @endif
+
+        @if($wireTo)
+            $watch('$wire.{{ $wireTo }}', (val) => {
+                to = val || '';
+                syncDates();
+            });
+        @endif
     "
     x-on:livewire:navigating.window="
-        if (observer) { observer.disconnect(); observer = null; }
         if (fp) { fp.destroy(); fp = null; }
     "
     class="w-full"
@@ -99,12 +113,13 @@
         </label>
     @endif
 
-    <div class="relative">
+    <div class="relative w-full">
         <input
             x-ref="fpInput"
             type="text"
             placeholder="Pilih rentang tanggal…"
             readonly
+            @click="if (fp) { fp.open(); } else { initFp(); fp && fp.open(); }"
             class="w-full rounded-lg border border-zinc-300 dark:border-zinc-600
                    bg-white dark:bg-zinc-800 px-3 py-2 pl-9 text-sm
                    text-zinc-900 dark:text-zinc-100 placeholder-zinc-400
@@ -118,8 +133,8 @@
         <button
             x-show="from"
             type="button"
-            @click="fp && fp.clear(); from = ''; to = ''"
-            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+            @click.stop="fp && fp.clear(); from = ''; to = '';"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 z-10"
         >
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>

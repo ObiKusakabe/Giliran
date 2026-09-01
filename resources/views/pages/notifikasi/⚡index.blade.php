@@ -94,7 +94,7 @@ new #[Title('Notifikasi')] #[Layout('layouts.auth')] class extends Component {
 
 <div class="min-h-screen bg-zinc-50 dark:bg-zinc-900">
     {{-- Topbar --}}
-    <header class="sticky top-0 z-10 border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 h-14 flex items-center px-4 gap-3">
+    <header class="sticky top-0 z-20 border-b border-zinc-200/60 dark:border-zinc-700/60 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md h-14 flex items-center px-4 gap-3">
         <a
             href="{{ auth()->user()->isAdmin() ? route('admin.dashboard') : route('tim.jadwal') }}"
             wire:navigate

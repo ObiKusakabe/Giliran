@@ -7,14 +7,6 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
-/**
- * Seeder akun demo — 2 role: admin dan tim.
- *
- * Kredensial:
- *   Admin — admin@giliran.test   / password
- *   Tim 1 — tim.pnj@giliran.test / password  (Tim Politeknik Negeri Jakarta)
- *   Tim 2 — tim@giliran.test     / password  (Tim SMKN 1 Jakarta)
- */
 class DemoUserSeeder extends Seeder
 {
     public function run(): void
@@ -32,32 +24,52 @@ class DemoUserSeeder extends Seeder
             ]
         );
 
-        // Tim PNJ
-        $timPnj = Tim::where('nama_tim', 'Tim Politeknik Negeri Jakarta')->first();
-        User::updateOrCreate(
-            ['email' => 'tim.pnj@giliran.test'],
-            [
-                'name' => 'Tim Politeknik Negeri Jakarta',
-                'username' => 'tim_pnj',
-                'password' => Hash::make('password'),
-                'role' => 'tim',
-                'tim_id' => $timPnj?->id,
-                'email_verified_at' => now(),
-            ]
-        );
+        // Akun untuk tim SMK Yapiim Indramayu
+        $tim1 = Tim::where('nama_tim', 'SMK Yapiim Indramayu')->first();
+        if ($tim1) {
+            User::updateOrCreate(
+                ['email' => 'yapiim@giliran.test'],
+                [
+                    'name' => 'SMK Yapiim Indramayu',
+                    'username' => 'tim_yapiim',
+                    'password' => Hash::make('inovindojaya'),
+                    'role' => 'tim',
+                    'tim_id' => $tim1->id,
+                    'email_verified_at' => now(),
+                ]
+            );
+        }
 
-        // Tim SMKN 1
-        $timSmkn = Tim::where('nama_tim', 'Tim SMKN 1 Jakarta')->first();
-        User::updateOrCreate(
-            ['email' => 'tim@giliran.test'],
-            [
-                'name' => 'Tim SMKN 1 Jakarta',
-                'username' => 'tim_smkn1',
-                'password' => Hash::make('password'),
-                'role' => 'tim',
-                'tim_id' => $timSmkn?->id,
-                'email_verified_at' => now(),
-            ]
-        );
+        // Akun untuk SMKN 2 Kota Sukabumi
+        $tim2 = Tim::where('nama_tim', 'SMKN 2 Kota Sukabumi')->first();
+        if ($tim2) {
+            User::updateOrCreate(
+                ['email' => 'smkn2sukabumi@giliran.test'],
+                [
+                    'name' => 'SMKN 2 Kota Sukabumi',
+                    'username' => 'tim_smkn2sukabumi',
+                    'password' => Hash::make('inovindojaya'),
+                    'role' => 'tim',
+                    'tim_id' => $tim2->id,
+                    'email_verified_at' => now(),
+                ]
+            );
+        }
+
+        // Akun untuk Univ Telkom Purwakerto
+        $tim3 = Tim::where('nama_tim', 'Univ Telkom Purwakerto')->first();
+        if ($tim3) {
+            User::updateOrCreate(
+                ['email' => 'telkom@giliran.test'],
+                [
+                    'name' => 'Univ Telkom Purwakerto',
+                    'username' => 'tim_telkom',
+                    'password' => Hash::make('inovindojaya'),
+                    'role' => 'tim',
+                    'tim_id' => $tim3->id,
+                    'email_verified_at' => now(),
+                ]
+            );
+        }
     }
 }

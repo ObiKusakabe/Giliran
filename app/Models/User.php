@@ -86,6 +86,11 @@ class User extends Authenticatable implements PasskeyUser
 
     // ── Role helpers ──────────────────────────────────────────────
 
+    public function hasRole(string $role): bool
+    {
+        return $this->role === $role;
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
@@ -100,6 +105,22 @@ class User extends Authenticatable implements PasskeyUser
     public function isTim(): bool
     {
         return $this->role === 'tim';
+    }
+
+    /**
+     * Cek apakah user role tim perlu melengkapi profil tim (onboarding).
+     */
+    public function needsOnboarding(): bool
+    {
+        if (! $this->isTim()) {
+            return false;
+        }
+
+        if (! $this->tim_id || ! $this->tim) {
+            return true;
+        }
+
+        return false;
     }
 
     // ── Misc ──────────────────────────────────────────────────────

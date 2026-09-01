@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\ExportController;
 use App\Http\Controllers\Admin\KalenderController;
 use App\Http\Controllers\HomeController;
+use App\Http\Middleware\EnsureTeamOnboardingCompleted;
 use Illuminate\Support\Facades\Route;
 
 // ── Halaman publik ────────────────────────────────────────────────────────────
@@ -22,17 +23,23 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::livewire('/ruangan', 'pages::admin.manajemen-ruangan')->name('ruangan');
     Route::livewire('/periode-wfo', 'pages::admin.manajemen-periode-wfo')->name('periode-wfo');
     Route::livewire('/jadwal-wfo', 'pages::admin.jadwal-wfo-grid')->name('jadwal-wfo');
+    Route::livewire('/alokasi-ruangan', 'pages::admin.alokasi-ruangan-grid')->name('alokasi-ruangan');
     Route::livewire('/generate-jadwal', 'pages::admin.generate-jadwal')->name('generate-jadwal');
-    Route::livewire('/kalender', 'pages::admin.kalender')->name('kalender');
+
+    // Redirect kalender to dashboard (kalender now integrated in dashboard)
+    Route::redirect('/kalender', '/admin/dashboard')->name('kalender');
     Route::get('/kalender/events', [KalenderController::class, 'events'])->name('kalender.events');
+
     Route::get('/export', [ExportController::class, 'form'])->name('export');
-    Route::post('/export/pdf', [ExportController::class, 'pdf'])->name('export.pdf');
+    Route::match(['get', 'post'], '/export/pdf', [ExportController::class, 'pdf'])->name('export.pdf');
 });
 
 // ── Tim portal — jadwal seluruh tim + alokasi ruangan (role tim, 1 akun per instansi) ──
-Route::middleware(['auth', 'role:tim'])->name('tim.')->group(function () {
+Route::middleware(['auth', 'role:tim', EnsureTeamOnboardingCompleted::class])->name('tim.')->group(function () {
+    Route::livewire('/tim/onboarding', 'pages::tim.onboarding')->name('onboarding');
     Route::livewire('/jadwal-tim', 'pages::tim.jadwal-tim')->name('jadwal');
     Route::livewire('/tim/ruangan', 'pages::tim.ruangan')->name('ruangan');
+    Route::livewire('/tim/profil', 'pages::tim.profil')->name('profil');
 });
 
 // ── Redirect lama /jadwal-saya → /jadwal-tim (backward compat) ────────────────
