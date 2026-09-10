@@ -64,10 +64,11 @@ Route::middleware('auth')->name('notifikasi.')->group(function () {
 });
 
 // ── Dev Mode API (admin & tim role) ──────────────────────────────────────────
-Route::middleware('auth')->prefix('api/dev-mode')->group(function () {
-    Route::post('/set-time', [DevModeController::class, 'setTime']);
-    Route::post('/reset-time', [DevModeController::class, 'resetTime']);
-    Route::get('/get-time', [DevModeController::class, 'getTime']);
-});
+// COMMENTED OUT - Not for production/mentor review
+// Route::middleware('auth')->prefix('api/dev-mode')->group(function () {
+//     Route::post('/set-time', [DevModeController::class, 'setTime']);
+//     Route::post('/reset-time', [DevModeController::class, 'resetTime']);
+//     Route::get('/get-time', [DevModeController::class, 'getTime']);
+// });
 
 require __DIR__.'/settings.php';

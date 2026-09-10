@@ -137,7 +137,7 @@
                 @endif
             </flux:sidebar.nav>
 
-            {{-- Dev Mode Toggle (Sidebar Footer) - Available for all authenticated users --}}
+            {{-- Dev Mode Toggle - COMMENTED OUT for production/mentor review
             <div 
                 class="mt-auto border-t border-zinc-200 dark:border-zinc-700 p-4"
                 x-data="{
@@ -210,7 +210,6 @@
                     </label>
                 </div>
                 
-                {{-- Time Picker --}}
                 <div x-show="devMode" x-transition x-cloak class="mt-3">
                     <label class="block text-[11px] font-medium text-zinc-600 dark:text-zinc-400 mb-1">
                         Simulasi Waktu
@@ -226,6 +225,7 @@
                     </p>
                 </div>
             </div>
+            --}}
         </flux:sidebar>
 
         {{-- Navbar Atas --}}
@@ -318,7 +318,7 @@
 
             <flux:spacer />
 
-            {{-- Dev Mode Indicator (when active) --}}
+            {{-- Dev Mode Indicator - COMMENTED OUT for production/mentor review
             <div 
                 x-data="{ 
                     devMode: localStorage.getItem('devMode') === 'true',
@@ -334,6 +334,7 @@
                     <span class="text-amber-600 dark:text-amber-400 ml-1" x-text="devTime ? '(' + new Date(devTime).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) + ')' : ''"></span>
                 </div>
             </div>
+            --}}
 
             <div class="flex items-center gap-2">
                 <livewire:notifikasi-dropdown />
