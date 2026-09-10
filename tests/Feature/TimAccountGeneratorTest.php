@@ -4,6 +4,7 @@ use App\Models\Tim;
 use App\Models\User;
 use App\Services\TimAccountGenerator;
 use Illuminate\Support\Facades\Hash;
+use Livewire\Livewire;
 
 test('tim account generator creates valid username with YYYY_MM_XXX format', function () {
     $generator = new TimAccountGenerator;
@@ -42,7 +43,10 @@ test('admin can view manajemen tim page with quick stats and generate account', 
     $this->actingAs($admin);
 
     $this->get(route('admin.tim'))
-        ->assertStatus(200)
+        ->assertStatus(200);
+
+    Livewire::withoutLazyLoading()
+        ->test('pages::admin.manajemen-tim')
         ->assertSee('Total Tim')
         ->assertSee('Tim Aktif')
         ->assertSee('Memiliki Akun');

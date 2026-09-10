@@ -261,7 +261,7 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
         </div>
     </div>
 
-    <flux:card class="p-0 overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
+    <flux:card class="p-0 overflow-visible table-sticky-card border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
         {{-- Card-list: mobile only (< sm) --}}
         <div class="sm:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
             <template x-if="displayed.length === 0">
@@ -293,7 +293,7 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
         {{-- Tabel: sm dan lebih lebar --}}
         <div class="hidden sm:block px-5">
             <flux:table>
-                <flux:table.columns class="sticky top-0 z-10 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-700">
+                <flux:table.columns class="bg-white dark:bg-zinc-900">
                     <flux:table.column @click="toggleSort('nama_ruangan')" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
                         <span class="inline-flex items-center gap-1">Nama Ruangan
                             <svg x-show="sortField==='nama_ruangan' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
@@ -371,8 +371,8 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
         <div class="flex flex-col gap-5 p-1">
             <flux:heading size="lg">{{ $editingId ? 'Edit Ruangan' : 'Tambah Ruangan' }}</flux:heading>
             <form wire:submit="simpan" class="flex flex-col gap-4">
-                <flux:input wire:model.live="nama_ruangan" label="Nama Ruangan" placeholder="cth. Ruang Meeting A" required />
-                <flux:input wire:model.live="kapasitas" label="Kapasitas (orang)" type="number" min="1" placeholder="cth. 10" required />
+                <flux:input wire:model.blur="nama_ruangan" label="Nama Ruangan" placeholder="cth. Ruang Meeting A" required />
+                <flux:input wire:model.blur="kapasitas" label="Kapasitas (orang)" type="number" min="1" placeholder="cth. 10" required />
                 {{-- Status — styled dropdown --}}
                 <div>
                     <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Status <span class="text-red-500">*</span></label>

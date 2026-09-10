@@ -26,7 +26,7 @@
         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
         x-transition:leave-end="opacity-0 translate-y-1 scale-95"
         x-cloak
-        class="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-800 z-50 overflow-hidden"
+        class="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-800 z-[200] overflow-hidden"
     >
         {{-- Header --}}
         <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50">
@@ -75,7 +75,7 @@
                             {{ $item->pesan }}
                         </p>
                         <span class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1 block">
-                            {{ $item->terkirim_pada ? $item->terkirim_pada->diffForHumans() : $item->created_at->diffForHumans() }}
+                            {{ ($item->terkirim_pada ?? $item->created_at)->translatedFormat('l, d F Y') }}
                         </span>
                     </div>
 

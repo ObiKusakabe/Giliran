@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import '../../vendor/livewire/flux/dist/flux.css';
 @import 'flatpickr/dist/flatpickr.min.css';
+@import 'flatpickr/dist/plugins/monthSelect/style.css';
 
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -219,53 +220,173 @@ ui-modal:has(.flatpickr-wrapper),
 ui-modal dialog {
     overflow: visible !important;
 }
-/* ── Universal Modal & Dialog Backdrop Blur Effect ── */
+/* ══════════════════════════════════════════════════════════════════
+   Universal Modal & Dialog Backdrop Blur Effect
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Flux Modal Backdrop - Dialog Native Backdrop */
+[data-flux-modal] > dialog::backdrop {
+    background-color: rgba(15, 23, 42, 0.50) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+}
+
+.dark [data-flux-modal] > dialog::backdrop {
+    background-color: rgba(0, 0, 0, 0.70) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+}
+
+/* Flux Modal Open State - Ensure blur persists */
+[data-flux-modal] > dialog[open]::backdrop {
+    background-color: rgba(15, 23, 42, 0.50) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+}
+
+.dark [data-flux-modal] > dialog[open]::backdrop {
+    background-color: rgba(0, 0, 0, 0.70) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+}
+
+/* Generic Dialog & Modal Fallback */
 dialog::backdrop,
-[data-flux-modal]::backdrop,
 [data-flux-flyout]::backdrop,
-ui-modal::backdrop,
-[data-flux-sidebar-backdrop] {
+ui-modal::backdrop {
     background-color: rgba(15, 23, 42, 0.45) !important;
     backdrop-filter: blur(8px) !important;
     -webkit-backdrop-filter: blur(8px) !important;
 }
 
 .dark dialog::backdrop,
-.dark [data-flux-modal]::backdrop,
 .dark [data-flux-flyout]::backdrop,
-.dark ui-modal::backdrop,
-.dark [data-flux-sidebar-backdrop] {
+.dark ui-modal::backdrop {
     background-color: rgba(0, 0, 0, 0.65) !important;
     backdrop-filter: blur(8px) !important;
     -webkit-backdrop-filter: blur(8px) !important;
 }
 
-/* ── Primary Button Styles (Inovindo Blue #3B71CA) ── */
+/* Flux Sidebar Backdrop (non-native backdrop) */
+[data-flux-sidebar-backdrop],
+[data-flux-modal-overlay],
+[data-flux-overlay] {
+    background-color: rgba(15, 23, 42, 0.45) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+.dark [data-flux-sidebar-backdrop],
+.dark [data-flux-modal-overlay],
+.dark [data-flux-overlay] {
+    background-color: rgba(0, 0, 0, 0.65) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Primary Button Styles (Inovindo Blue #3B71CA)
+   High specificity to override Flux defaults
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════════
+   Sidebar Active Menu Styles (Inovindo Blue #3B71CA)
+   Load early to prevent color flash (FOUC)
+   ══════════════════════════════════════════════════════════════════ */
+   
+/* Sidebar active item - Inovindo Primary Blue */
+[data-flux-sidebar-item][data-current] {
+    background-color: #3B71CA !important;
+    color: white !important;
+}
+
+/* Sidebar active item hover - Inovindo Dark Blue */
+[data-flux-sidebar-item][data-current]:hover {
+    background-color: #2d5db3 !important;
+    color: white !important;
+}
+
+/* Ensure icon also becomes white in active state */
+[data-flux-sidebar-item][data-current] svg {
+    color: white !important;
+}
+
+/* Dark mode - same Inovindo blue for consistency */
+.dark [data-flux-sidebar-item][data-current] {
+    background-color: #3B71CA !important;
+    color: white !important;
+}
+
+.dark [data-flux-sidebar-item][data-current]:hover {
+    background-color: #2d5db3 !important;
+    color: white !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Primary Button Styles (Inovindo Blue #3B71CA)
+   High specificity to override Flux defaults
+   ══════════════════════════════════════════════════════════════════ */
+   
+/* Base primary button state */
 [data-flux-button][data-variant="primary"],
+[data-flux-button].bg-\[var\(--color-accent\)\],
 .btn-primary {
     background-color: #3B71CA !important;
     color: #ffffff !important;
     border-color: transparent !important;
 }
 
-[data-flux-button][data-variant="primary"]:hover:not(:disabled),
-.btn-primary:hover:not(:disabled) {
+/* Hover state - LIGHT MODE (Darken to Inovindo Dark Blue #2d5db3) */
+:not(.dark) [data-flux-button][data-variant="primary"]:hover:not(:disabled),
+:not(.dark) [data-flux-button].bg-\[var\(--color-accent\)\]:hover:not(:disabled),
+:not(.dark) .btn-primary:hover:not(:disabled) {
     background-color: #2d5db3 !important;
     color: #ffffff !important;
+    border-color: transparent !important;
 }
 
+/* Hover state - DARK MODE */
+.dark [data-flux-button][data-variant="primary"]:hover:not(:disabled),
+.dark [data-flux-button].bg-\[var\(--color-accent\)\]:hover:not(:disabled),
+.dark .btn-primary:hover:not(:disabled) {
+    background-color: #2d5db3 !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+}
+
+/* Active/pressed state - ALL MODES */
 [data-flux-button][data-variant="primary"]:active:not(:disabled),
+[data-flux-button].bg-\[var\(--color-accent\)\]:active:not(:disabled),
 .btn-primary:active:not(:disabled) {
     background-color: #1e4b9e !important;
     color: #ffffff !important;
+    border-color: transparent !important;
 }
 
+/* Disabled state - ALL MODES */
 [data-flux-button][data-variant="primary"]:disabled,
+[data-flux-button].bg-\[var\(--color-accent\)\]:disabled,
 .btn-primary:disabled {
     opacity: 0.65 !important;
     background-color: #3B71CA !important;
     color: #ffffff !important;
     cursor: not-allowed !important;
+}
+
+/* Icons inside primary buttons always stay white */
+[data-flux-button][data-variant="primary"] svg,
+[data-flux-button][data-variant="primary"]:hover svg,
+[data-flux-button].bg-\[var\(--color-accent\)\] svg,
+[data-flux-button].bg-\[var\(--color-accent\)\]:hover svg,
+.btn-primary svg,
+.btn-primary:hover svg {
+    color: #ffffff !important;
+}
+
+/* Danger button icons stay white */
+[data-flux-button][data-variant="danger"] svg,
+[data-flux-button][data-variant="danger"]:hover svg {
+    color: #ffffff !important;
 }
 
 /* Ensure menu items inside flux dropdowns are NEVER styled as primary buttons */
@@ -290,39 +411,345 @@ ui-modal::backdrop,
     color: var(--color-zinc-100, #f4f4f5) !important;
 }
 
-/* Button hover states di tema Inovindo light mode - lebih visible */
-.inovindo button:hover:not([disabled]):not([data-variant="primary"]),
-.inovindo [role="button"]:hover:not([disabled]) {
-    background-color: #f5f5f5 !important; /* zinc-100 */
-}
-
-/* Primary button hover di Inovindo - darker blue, text tetap white */
-.inovindo [data-flux-button][data-variant="primary"]:hover:not([disabled]) {
-    background-color: #2d5db3 !important; /* brand-dark */
-    color: white !important;
-}
-
-/* Ghost button hover di Inovindo - lebih kontras */
-.inovindo [data-flux-button][data-variant="ghost"]:hover:not([disabled]) {
-    background-color: #e5e5e5 !important; /* zinc-200 */
-}
-
-/* Icon button / badge close button hover di Inovindo */
-.inovindo button[type="button"]:hover svg,
-.inovindo [role="button"]:hover svg {
-    color: #171717 !important; /* zinc-900 - dark grey */
-}
-
 /* ══════════════════════════════════════════════════════════════════
-   Sidebar collapsed state: only reveal expand toggle on header hover
+   Sidebar collapsed state: reveal expand toggle ONLY on logo hover
    ══════════════════════════════════════════════════════════════════ */
+/* Hide expand icon by default when sidebar collapsed */
 [data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-collapse] {
     display: none !important;
 }
-[data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-header]:hover [data-flux-sidebar-collapse] {
+
+/* Show expand icon ONLY when hovering the brand/logo area */
+[data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-brand]:hover + [data-flux-sidebar-collapse],
+[data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-collapse]:hover {
     display: flex !important;
 }
-[data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-header]:hover [data-flux-sidebar-brand] {
+
+/* Hide logo ONLY when hovering the brand/logo area */
+[data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-brand]:hover {
     display: none !important;
 }
+
+
+
+/* Sticky Table Headers - Notion Style */
+@layer components {
+    /* Make table headers stick below the navbar */
+    /* Navbar height is approximately 53px (Flux header default) */
+    .sticky-table-header {
+        position: sticky;
+        top: 53px; /* Actual Flux header height */
+        z-index: 10;
+        background-color: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    }
+
+    .dark .sticky-table-header {
+        background-color: rgba(39, 39, 42, 0.95);
+    }
+
+    /* For Flux table columns that already have sticky class */
+    [data-flux-table] thead th.sticky,
+    [data-flux-table] .sticky.top-0 {
+        top: 53px !important;
+    }
+
+    /* Calculate navbar height dynamically and stick below it */
+    .sticky-table-container {
+        position: relative;
+        overflow-y: auto;
+        max-height: calc(100vh - 180px); /* Viewport minus navbar/padding */
+    }
+
+    /* Sticky header with backdrop blur */
+    .sticky-header {
+        position: sticky;
+        top: 53px; /* Below navbar - actual Flux header height */
+        z-index: 10;
+        background-color: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    }
+
+    .dark .sticky-header {
+        background-color: rgba(39, 39, 42, 0.95);
+    }
+
+    /* Smooth scroll for tables */
+    .sticky-table-container {
+        scroll-behavior: smooth;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Enhanced shadow when scrolled */
+    .sticky-header.is-scrolled {
+        box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.12);
+    }
+    
+    /* Search highlight - matching alokasi ruangan hover style */
+    .search-highlight {
+        background-color: rgba(250, 204, 21, 0.3) !important; /* yellow-400 with opacity */
+        border-radius: 0.25rem;
+        padding: 0.125rem 0.25rem;
+        font-weight: 500;
+    }
+    
+    .dark .search-highlight {
+        background-color: rgba(202, 138, 4, 0.4) !important; /* yellow-600 with opacity in dark mode */
+    }
+}
+
+/* ===================================================================
+   Fix: Flux Table Cell Padding - Text mentok border
+   Issue: Flux table internal wrapper resets padding
+   Solution: Force padding with !important
+   =================================================================== */
+[data-flux-table] td {
+    padding-left: 1rem !important;   /* 16px */
+    padding-right: 1rem !important;
+    padding-top: 0.75rem !important; /* 12px */
+    padding-bottom: 0.75rem !important;
+}
+
+[data-flux-table] th {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-top: 0.75rem !important;
+    padding-bottom: 0.75rem !important;
+}
+
+/* Preserve text alignment */
+[data-flux-table] td[align="center"],
+[data-flux-table] th[align="center"] {
+    text-align: center;
+}
+
+[data-flux-table] td[align="right"],
+[data-flux-table] th[align="right"] {
+    text-align: right;
+}
+
+/* ===================================================================
+   Fix: Table Text Wrapping - No word break di tengah nama
+   Requirement: Text wrap at spaces, not mid-word
+   No horizontal scroll unless absolutely necessary
+   =================================================================== */
+
+/* Remove fixed min-width from columns - let them shrink naturally */
+[data-flux-table] th[class*="min-w-"],
+table th[class*="min-w-"] {
+    min-width: unset !important;
+}
+
+/* Proper word wrapping - break at spaces only */
+[data-flux-table] td,
+[data-flux-table] th,
+table td,
+table th {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    word-break: normal !important; /* DON'T break mid-word */
+    hyphens: none !important; /* No hyphens */
+}
+
+/* For very long words without spaces (URLs, etc), allow break */
+[data-flux-table] td > div,
+table td > div {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+/* Prevent table from forcing horizontal scroll */
+table.table-auto {
+    table-layout: auto !important;
+}
+
+/* Max width for personil name cells to encourage wrapping */
+table td:has(> div) {
+    max-width: 200px;
+}
+
+/* ===================================================================
+   Mobile Bottom Navigation - Safe Area Support for iOS Notch/Gesture Bar
+   =================================================================== */
+.safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Ensure bottom nav has minimum height + safe area */
+nav.safe-area-bottom {
+    min-height: calc(4rem + env(safe-area-inset-bottom)); /* 4rem = h-16 */
+}
+
+/* Prevent content from being hidden behind bottom nav on mobile */
+@media (max-width: 640px) {
+    body:has(nav.safe-area-bottom) main {
+        padding-bottom: calc(5rem + env(safe-area-inset-bottom)) !important; /* Extra padding for content */
+    }
+}
+
+/* ===================================================================
+   Sidebar Smooth Animations - Desktop Look
+   =================================================================== */
+
+/* Animate sidebar collapse/expand */
+[data-flux-sidebar] {
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Animate sidebar mobile toggle (slide in/out) */
+@media (max-width: 1024px) {
+    [data-flux-sidebar]:not([data-flux-sidebar-collapsed-mobile]) {
+        animation: slideInFromLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+}
+
+@keyframes slideInFromLeft {
+    from {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Smooth backdrop fade in/out */
+[data-flux-sidebar-backdrop] {
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                backdrop-filter 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Animate sidebar items */
+[data-flux-sidebar-item] {
+    transition: all 0.15s ease-in-out;
+}
+
+/* Smooth sidebar brand logo/text */
+[data-flux-sidebar-brand] {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth collapse toggle button */
+[data-flux-sidebar-collapse] {
+    transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+}
+
+/* Rotate icon saat sidebar expand/collapse */
+[data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-collapse] {
+    transform: rotate(180deg);
+}
+
+
+/* ── UI Preference Radio Cards - Responsive Layout ──────────────────────── */
+/* Force vertical layout on mobile */
+@media (max-width: 639px) {
+    .ui-preference-radio-wrapper [data-flux-radio-group] > div,
+    .ui-preference-radio-wrapper [data-flux-radio-cards],
+    .ui-preference-radio-wrapper fieldset > div {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+    }
+    
+    .ui-preference-radio-wrapper [data-flux-radio-group] > div > *,
+    .ui-preference-radio-wrapper [data-flux-radio-cards] > *,
+    .ui-preference-radio-wrapper fieldset > div > * {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+}
+
+@media (min-width: 640px) {
+    .ui-preference-radio-wrapper [data-flux-radio-cards] {
+        flex-direction: row;
+    }
+}
+
+
+/* ── Livewire Navigate - FOUC Prevention ──────────────────────────────────── */
+/* Prevent flash of unstyled content during page transitions */
+
+/* Hide content briefly during navigation to prevent flash */
+html.livewire-navigating body {
+    opacity: 0.96;
+    transition: opacity 0.05s ease-in;
+}
+
+/* Smooth fade-in after navigation complete */
+html:not(.livewire-navigating) body {
+    opacity: 1;
+    transition: opacity 0.15s ease-out;
+}
+
+/* Prevent Alpine components from flashing before hydration */
+[x-cloak] {
+    display: none !important;
+}
+
+/* Ensure critical layout doesn't shift during navigation */
+.safe-area-bottom,
+[data-flux-modal],
+[data-flux-sidebar] {
+    will-change: transform, opacity;
+}
+
+/* ── Sticky Table Header (Freeze on Navbar Collision) ─────────────────────── */
+:root {
+    --navbar-height: 56px;
+}
+
+/* Unclip containers to allow viewport sticky positioning */
+.table-sticky-card,
+[data-flux-card]:has([data-flux-table]),
+[data-flux-card]:has(table.table-sticky) {
+    overflow: visible !important;
+}
+
+ui-table-scroll-area,
+ui-table-scroll-area.overflow-auto,
+.table-sticky-container ui-table-scroll-area {
+    display: block !important;
+    overflow: visible !important;
+}
+
+/* Sticky thead and th styling for Flux single-row tables */
+[data-flux-table] thead,
+[data-flux-table] [data-flux-columns] {
+    position: sticky !important;
+    top: var(--navbar-height, 56px) !important;
+    z-index: 15 !important;
+}
+
+[data-flux-table] thead th,
+[data-flux-table] [data-flux-columns] th {
+    position: sticky !important;
+    top: var(--navbar-height, 56px) !important;
+    z-index: 15 !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 1px 0 0 rgba(228, 228, 231, 0.9) !important;
+}
+
+:is(.dark) [data-flux-table] thead th,
+:is(.dark) [data-flux-table] [data-flux-columns] th {
+    background-color: #18181b !important; /* zinc-900 */
+    box-shadow: 0 1px 0 0 rgba(39, 39, 42, 0.9) !important;
+}
+
+:is(.inovindo) [data-flux-table] thead th,
+:is(.inovindo) [data-flux-table] [data-flux-columns] th {
+    background-color: #ffffff !important;
+}
+
+:is(.dark.inovindo) [data-flux-table] thead th,
+:is(.dark.inovindo) [data-flux-table] [data-flux-columns] th {
+    background-color: #18181b !important;
+}
+
 

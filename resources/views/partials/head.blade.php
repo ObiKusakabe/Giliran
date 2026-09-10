@@ -1,15 +1,37 @@
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+<meta name="theme-color" content="#ffffff" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Giliran" />
 
 <title>
-    {{ filled($title ?? null) ? $title.' - '.config('app.name', 'Laravel') : config('app.name', 'Laravel') }}
+    {{ filled($title ?? null) ? $title.' - Giliran' : 'Giliran - Sistem Penjadwalan' }}
 </title>
 
-<link rel="icon" href="/favicon.ico" sizes="any">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+{{-- Favicon - SVG only (modern browsers) --}}
+<link rel="icon" href="/favicon.svg?v={{ time() }}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v={{ config('app.asset_version', '1') }}">
+<link rel="manifest" href="/site.webmanifest">
 
 @fonts
+
+{{-- Dark Mode Init - BEFORE ANY STYLES --}}
+<script>
+    // Prevent FOUC by applying dark mode class immediately (before any CSS loads)
+    (function() {
+        const appearance = localStorage.getItem('flux-appearance');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        
+        // Apply dark class if user preference is dark OR system prefers dark (and no explicit light preference)
+        if (appearance === 'dark' || (!appearance && prefersDark)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    })();
+</script>
 
 @vite(['resources/css/app.css', 'resources/js/app.js'])
 @fluxAppearance
@@ -63,6 +85,28 @@
                     transform 300ms cubic-bezier(0.4, 0.0, 0.2, 1);
     }
 
+    /* Only swap logo with collapse toggle when hovering directly over the header in collapsed desktop sidebar */
+    [data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-brand] {
+        opacity: 1 !important;
+        position: relative !important;
+        pointer-events: auto !important;
+    }
+    [data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-collapse] {
+        opacity: 0 !important;
+        position: absolute !important;
+        pointer-events: none !important;
+    }
+    [data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-header]:hover [data-flux-sidebar-brand] {
+        opacity: 0 !important;
+        position: absolute !important;
+        pointer-events: none !important;
+    }
+    [data-flux-sidebar-collapsed-desktop] [data-flux-sidebar-header]:hover [data-flux-sidebar-collapse] {
+        opacity: 1 !important;
+        position: relative !important;
+        pointer-events: auto !important;
+    }
+
     /* Fix collapsed button sizing - force square dimensions */
     [data-flux-sidebar][data-flux-collapsed="true"] button[data-flux-sidebar-item],
     [data-flux-sidebar][data-flux-collapsed="true"] a[data-flux-sidebar-item] {
@@ -87,50 +131,6 @@
     [data-flux-sidebar][data-flux-collapsed="true"] a[data-flux-sidebar-item] span:not(.sr-only) {
         display: none !important;
     }
-
-    /* Sidebar active state: blue background + white text (sama kayak collapsed icons) */
-    /* Target dengan specificity tinggi */
-    [data-flux-sidebar] a[aria-current="page"],
-    [data-flux-sidebar] button[aria-current="page"],
-    [data-flux-sidebar] [aria-current="page"],
-    nav[data-flux-sidebar-nav] a[aria-current="page"],
-    nav[data-flux-sidebar-nav] button[aria-current="page"],
-    nav[data-flux-sidebar-nav] [aria-current="page"] {
-        background-color: rgb(37 99 235) !important; /* bg-blue-600 */
-        color: white !important;
-    }
-    
-    [data-flux-sidebar] a[aria-current="page"]:hover,
-    [data-flux-sidebar] button[aria-current="page"]:hover,
-    [data-flux-sidebar] [aria-current="page"]:hover,
-    nav[data-flux-sidebar-nav] a[aria-current="page"]:hover,
-    nav[data-flux-sidebar-nav] button[aria-current="page"]:hover,
-    nav[data-flux-sidebar-nav] [aria-current="page"]:hover {
-        background-color: rgb(29 78 216) !important; /* bg-blue-700 */
-    }
-    
-    /* Icon color untuk active state */
-    [data-flux-sidebar] [aria-current="page"] svg,
-    nav[data-flux-sidebar-nav] [aria-current="page"] svg {
-        color: white !important;
-        stroke: currentColor !important;
-    }
-    
-    /* Text color untuk active state */
-    [data-flux-sidebar] [aria-current="page"] span,
-    nav[data-flux-sidebar-nav] [aria-current="page"] span {
-        color: white !important;
-    }
-    
-    /* Remove Flux default active indicator (border/underline) */
-    [data-flux-sidebar] [aria-current="page"]::before,
-    [data-flux-sidebar] [aria-current="page"]::after,
-    nav[data-flux-sidebar-nav] [aria-current="page"]::before,
-    nav[data-flux-sidebar-nav] [aria-current="page"]::after {
-        display: none !important;
-        background: none !important;
-    }
-    
     /* Avatar profile button jadi rounded-md (bukan full circle) */
     [data-flux-sidebar-profile] {
         border-radius: 0.5rem !important; /* rounded-lg */
@@ -205,21 +205,37 @@
     button[data-flux-button]:disabled:hover {
         background-color: inherit !important;
     }
+    
+    /* Flux modal backdrop blur */
+    [data-flux-modal-overlay] {
+        backdrop-filter: blur(4px) !important;
+        -webkit-backdrop-filter: blur(4px) !important;
+    }
 </style>
 
-{{-- Script Inovindo: jalankan SETELAH @fluxAppearance --}}
+{{-- Script Inovindo: Force Light Mode Always --}}
 <script>
     (function () {
-        function applyInovindoTheme() {
+        function forceLightMode() {
+            // Always force light mode
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('flux-appearance', 'light');
+            
+            // Apply Inovindo theme if set
             if (localStorage.getItem('theme-inovindo') === 'true') {
                 document.documentElement.classList.add('inovindo');
-                document.documentElement.classList.remove('dark');
-                localStorage.setItem('flux-appearance', 'light');
             } else {
                 document.documentElement.classList.remove('inovindo');
             }
         }
-        applyInovindoTheme();
-        document.addEventListener('livewire:navigated', applyInovindoTheme);
+        
+        // Run immediately
+        forceLightMode();
+        
+        // Run on Livewire navigation
+        document.addEventListener('livewire:navigated', forceLightMode);
+        
+        // Run on DOM ready
+        document.addEventListener('DOMContentLoaded', forceLightMode);
     }());
 </script>

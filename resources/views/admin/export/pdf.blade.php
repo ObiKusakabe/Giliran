@@ -9,7 +9,7 @@
     <title>Jadwal WFO & Petugas Internal — PT Inovindo Digital Media</title>
     <style>
         @page {
-            margin: 18mm 18mm 18mm 18mm;
+            margin: 18mm 18mm 30mm 18mm; /* Increased bottom margin for footer */
             size: a4 portrait;
         }
 
@@ -20,6 +20,31 @@
             line-height: 1.4;
             margin: 0;
             padding: 0;
+        }
+
+        /* Footer Watermark */
+        .pdf-footer {
+            position: fixed;
+            bottom: 5mm;
+            left: 0;
+            right: 0;
+            height: 18mm;
+            text-align: center;
+            font-size: 8pt;
+            color: #666666;
+            border-top: 1px solid #cccccc;
+            padding-top: 6px;
+            font-family: 'Times New Roman', Times, Georgia, serif;
+        }
+
+        .pdf-footer .watermark-text {
+            font-weight: bold;
+            color: #333333;
+            font-family: 'Times New Roman', Times, Georgia, serif;
+        }
+
+        .pdf-footer .page-number:before {
+            content: counter(page);
         }
 
         .page-break {
@@ -187,6 +212,13 @@
     </style>
 </head>
 <body>
+
+<!-- Footer Watermark - Appears on every page -->
+<div class="pdf-footer">
+    <div class="watermark-text">Website Giliran</div>
+    <div>Sistem Manajemen Jadwal PT Inovindo Digital Media</div>
+    <div>Halaman <span class="page-number"></span> | Generated: {{ now()->translatedFormat('d F Y, H:i') }} WIB</div>
+</div>
 
 {{-- ========================================================================= --}}
 {{-- HALAMAN 1: SURAT RESMI PEMBERITAHUAN JADWAL WFO                            --}}

@@ -23,9 +23,17 @@ class JadwalBriefing extends Model
     protected $fillable = [
         'tim_id',
         'personil_id',
+        'moderator_id',
+        'doa_id',
         'tanggal',
         'sesi',
         'status_konfirmasi',
+        'is_notulen',
+        'alasan_berhalangan',
+        'is_switched',
+        'original_personil_id',
+        'switch_reason',
+        'switched_at',
     ];
 
     protected function casts(): array
@@ -33,6 +41,20 @@ class JadwalBriefing extends Model
         return [
             'tanggal' => 'date',
         ];
+    }
+
+    /**
+     * Boot method - Add global scope for tim isolation.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('tim_isolation', function ($builder) {
+            $user = auth()->user();
+
+            if ($user && $user->isTim()) {
+                $builder->where('tim_id', $user->tim_id);
+            }
+        });
     }
 
     /** @return BelongsTo<Tim, $this> */
@@ -45,5 +67,23 @@ class JadwalBriefing extends Model
     public function personil(): BelongsTo
     {
         return $this->belongsTo(Personil::class, 'personil_id');
+    }
+
+    /** FASE 4.3: @return BelongsTo<Personil, $this> */
+    public function moderator(): BelongsTo
+    {
+        return $this->belongsTo(Personil::class, 'moderator_id');
+    }
+
+    /** FASE 4.3: @return BelongsTo<Personil, $this> */
+    public function doa(): BelongsTo
+    {
+        return $this->belongsTo(Personil::class, 'doa_id');
+    }
+
+    /** @return BelongsTo<Personil, $this> */
+    public function originalPersonil(): BelongsTo
+    {
+        return $this->belongsTo(Personil::class, 'original_personil_id');
     }
 }

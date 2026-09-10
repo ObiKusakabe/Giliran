@@ -8,10 +8,11 @@ use App\Models\PeriodeWfo;
 use App\Models\Tim;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('')] #[Layout('layouts.admin')] class extends Component {
+new #[Title('')] #[Layout('layouts.admin')] #[Lazy] class extends Component {
 
     // Calendar filters
     public string $filterJenis = '';
@@ -24,12 +25,22 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
     public string $tabelBulan = '';
 
     // Modal states
-    public bool $modalGenerate = false;
     public bool $modalExport = false;
     
     public function mount(): void
     {
         $this->tabelBulan = now()->format('Y-m');
+    }
+
+    public function placeholder(): string
+    {
+        return <<<'HTML'
+        <div class="flex flex-col gap-6 p-6">
+            <x-skeletons.page-header />
+            <x-skeletons.stat-cards />
+            <x-skeletons.calendar />
+        </div>
+        HTML;
     }
 
     public function updatedFilterJenis(): void
@@ -63,7 +74,7 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
     {
         [$mulai, $selesai] = $this->rentangBulan();
 
-        $query = JadwalAdzanKitab::with('personil.tim')
+        $query = JadwalAdzanKitab::with(['personil.tim', 'originalPersonil'])
             ->whereBetween('tanggal', [$mulai, $selesai])
             ->orderBy('tanggal')
             ->orderBy('waktu_sholat');
@@ -88,7 +99,7 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
     {
         [$mulai, $selesai] = $this->rentangBulan();
 
-        $query = JadwalBriefing::with('personil', 'tim')
+        $query = JadwalBriefing::with('personil', 'tim', 'originalPersonil')
             ->whereBetween('tanggal', [$mulai, $selesai])
             ->orderBy('tanggal')
             ->orderBy('sesi');
@@ -139,7 +150,14 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
         return AlokasiRuangan::where('tanggal', now()->toDateString())->count();
     }
 
-    /** DSB-03: Konfirmasi tertunda (status masih menunggu, jadwal mendatang) */
+    /** Total tim terdaftar di sistem */
+    #[Computed]
+    public function totalTim(): int
+    {
+        return Tim::count();
+    }
+
+    /** DSB-03: Konfirmasi tertunda (deprecated/fallback) */
     #[Computed]
     public function konfirmasiTertunda(): int
     {
@@ -193,7 +211,14 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
             ->get()
             ->map(fn ($j) => [
                 'nama'    => $j->personil?->nama ?? '—',
-                'jenis'   => ucfirst($j->jenis_tugas).' '.strtoupper($j->waktu_sholat),
+                'jenis'   => ucfirst($j->jenis_tugas).' '.match($j->waktu_sholat) {
+                    'dhuhr' => 'Zuhur',
+                    'asr' => 'Ashar',
+                    'fajr' => 'Subuh',
+                    'maghrib' => 'Maghrib',
+                    'isha' => 'Isya',
+                    default => strtoupper($j->waktu_sholat),
+                },
                 'tanggal' => $j->tanggal,
                 'tipe'    => 'Adzan/Kajian',
             ]);
@@ -212,15 +237,6 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
             ]);
 
         return $adzan->merge($briefing)->sortBy('tanggal')->take(10)->values();
-    }
-
-    public function bukaGenerate(): void
-    {
-        if (! $this->periodeAktif) {
-            $this->dispatch('notify', type: 'error', message: 'Tidak ada periode WFO aktif.');
-            return;
-        }
-        $this->modalGenerate = true;
     }
 
     public function generateJadwal(): void
@@ -250,112 +266,7 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-6" 
-    wire:poll="60000"
-    x-data="{
-        calendar: null,
-        modalOpen: false,
-        selectedEvent: null,
-        filterJenis: '',
-        filterTimId: '',
-        currentView: 'dayGridMonth',
-        activeDateLabel: '',
-        isSaturday: false,
-
-        initCalendar() {
-            this.calendar = new FullCalendar.Calendar(this.$refs.kalender, {
-                initialView: 'dayGridMonth',
-                locale: FullCalendar.idLocale,
-                plugins: [
-                    FullCalendar.dayGridPlugin,
-                    FullCalendar.timeGridPlugin,
-                    FullCalendar.listPlugin,
-                    FullCalendar.interactionPlugin,
-                ],
-                buttonText: {
-                    today: 'Hari Ini',
-                    month: 'Bulan',
-                    week:  'Minggu',
-                    day:   'Harian',
-                },
-                dayHeaderFormat: { weekday: 'long' },
-                slotMinTime: '09:00:00',
-                slotMaxTime: '17:00:00',
-                allDaySlot: true,
-                allDayText: 'WFO / Ruangan',
-                slotLabelFormat: {
-                    hour:   '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                },
-                headerToolbar: {
-                    left: 'prev,next today',
-                    center: 'title',
-                    right: 'dayGridMonth,timeGridDay'
-                },
-                navLinks: true,
-                navLinkDayClick: (date) => {
-                    this.calendar.changeView('timeGridDay', date);
-                },
-                dateClick: (info) => {
-                    if (this.currentView === 'dayGridMonth') {
-                        this.calendar.changeView('timeGridDay', info.dateStr);
-                    }
-                },
-                datesSet: (info) => {
-                    this.currentView = info.view.type;
-                    const dateObj = info.view.currentStart;
-                    const dayOfWeek = dateObj.getDay(); // 0 = Sun, 6 = Sat
-                    this.isSaturday = (dayOfWeek === 6);
-
-                    // Format tanggal Bahasa Indonesia
-                    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-                    this.activeDateLabel = dateObj.toLocaleDateString('id-ID', options);
-
-                    // Dinamis jam kerja: Sabtu s/d 14:00, Senin-Jumat s/d 17:00
-                    if (this.currentView === 'timeGridDay') {
-                        if (this.isSaturday) {
-                            this.calendar.setOption('slotMaxTime', '14:00:00');
-                        } else {
-                            this.calendar.setOption('slotMaxTime', '17:00:00');
-                        }
-                    }
-                },
-                events: (info, successCb, failureCb) => {
-                    const url = `/admin/kalender/events?start=${info.startStr}&end=${info.endStr}&tim_id=${this.filterTimId}`;
-                    fetch(url)
-                        .then(r => r.json())
-                        .then(data => {
-                            if (this.filterJenis) {
-                                data = data.filter(e => e.extendedProps.jenis === this.filterJenis);
-                            }
-                            successCb(data);
-                        })
-                        .catch(failureCb);
-                },
-                eventClick: (info) => {
-                    this.selectedEvent = {
-                        title: info.event.title,
-                        ...info.event.extendedProps,
-                        tanggal: info.event.startStr,
-                    };
-                    this.modalOpen = true;
-                },
-                eventDisplay: 'block',
-                dayMaxEvents: 4,
-                height: 'auto',
-            });
-            this.calendar.render();
-        },
-
-        refetchEvents() {
-            if (this.calendar) this.calendar.refetchEvents();
-        }
-    }"
-    x-init="$nextTick(() => { if ($wire.viewMode === 'kalender') initCalendar() }); $watch('$wire.viewMode', v => { if (v === 'kalender') $nextTick(() => initCalendar()) })"
-    @filter-changed.window="filterJenis = $event.detail.jenis; filterTimId = String($event.detail.timId ?? ''); refetchEvents()"
-    @sidebar-toggled.window="setTimeout(() => { if (calendar) calendar.updateSize() }, 220)"
->
+<div class="flex flex-col gap-6" wire:poll="60000">
     {{-- DreamsPOS-style Welcome Header --}}
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -372,7 +283,7 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
                 {{ $salam }}, {{ auth()->user()->name ?? 'Admin' }}
             </flux:heading>
             <flux:text class="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Kelola rotasi kerja, jadwal WFO, petugas adzan & briefing hari ini — <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ now()->translatedFormat('l, d F Y') }}</span>
+                Kelola rotasi kerja, jadwal WFO, petugas adzan & briefing hari ini - <span class="font-medium text-zinc-700 dark:text-zinc-300">{{ now()->locale('id')->translatedFormat('l, d F Y') }}</span>
             </flux:text>
         </div>
 
@@ -384,9 +295,11 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
                     <span>{{ $this->periodeAktif->tanggal_mulai->format('d/m/Y') }} – {{ $this->periodeAktif->tanggal_selesai->format('d/m/Y') }}</span>
                 </div>
             @endif
-            <flux:button variant="primary" icon="sparkles" wire:click="bukaGenerate">
-                Generate Jadwal
-            </flux:button>
+            <flux:modal.trigger name="modal-generate-jadwal">
+                <flux:button variant="primary" icon="sparkles">
+                    Generate Jadwal
+                </flux:button>
+            </flux:modal.trigger>
             <flux:button variant="filled" icon="arrow-down-tray" wire:click="exportPDF">
                 Export PDF
             </flux:button>
@@ -404,75 +317,135 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
         </flux:callout>
     @endif
 
-    {{-- 4 Stat Cards with Watermark Background Icons --}}
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
-            <div class="relative z-10 pr-6">
-                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Personil Terjadwal</flux:text>
-                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-                    {{ $this->personilTerjadwalHariIni }}
-                </flux:heading>
-                <div class="mt-2 flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-medium">
-                    <span class="size-1.5 rounded-full bg-blue-500"></span>
-                    <span>Hari ini</span>
-                </div>
+    {{-- 4 Clickable Stat Shortcut Cards with 2-Layer 3D Lift Animation --}}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-8">
+        {{-- Card 1: Personil Terjadwal -> Admin Personil --}}
+        <a href="{{ route('admin.personil') }}" wire:navigate.hover class="relative block group cursor-pointer select-none">
+            {{-- Layer Belakang (Base layer - stays static, reveals shortcut text on hover) --}}
+            <div class="absolute inset-0 rounded-2xl bg-blue-100/80 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/60 flex items-end justify-between px-4 pb-2.5 text-xs font-semibold text-blue-700 dark:text-blue-300 shadow-xs">
+                <span>Pergi ke Personil</span>
+                <span class="inline-flex items-center gap-1">
+                    <flux:icon icon="arrow-right" class="size-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+                </span>
             </div>
-            <flux:icon icon="user-group" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-blue-500/10 dark:text-blue-400/10 pointer-events-none" />
-        </flux:card>
 
-        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
-            <div class="relative z-10 pr-6">
-                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Ruang Teralokasi</flux:text>
-                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
-                    {{ $this->ruanganTeralokasHariIni }}
-                </flux:heading>
-                <div class="mt-2 flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                    <span class="size-1.5 rounded-full bg-emerald-500"></span>
-                    <span>Terisi</span>
+            {{-- Layer Utama (Top card - lifts up on hover) --}}
+            <div class="relative z-10 overflow-hidden rounded-2xl p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs transition-all duration-300 ease-out group-hover:-translate-y-8 group-hover:shadow-xl group-hover:border-blue-400 dark:group-hover:border-blue-500">
+                <div class="relative z-10 pr-6">
+                    <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Personil Terjadwal</flux:text>
+                    <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+                        {{ $this->personilTerjadwalHariIni }}
+                    </flux:heading>
+                    <div class="mt-2 flex items-center gap-1.5 text-[11px] text-[#3B71CA] dark:text-[#3B71CA] font-medium">
+                        <span class="size-1.5 rounded-full bg-[#3B71CA]"></span>
+                        <span>Hari ini</span>
+                    </div>
                 </div>
+                <flux:icon icon="user-group" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-blue-500/10 dark:text-blue-400/10 pointer-events-none group-hover:scale-105 transition-transform duration-300" />
             </div>
-            <flux:icon icon="building-office-2" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-emerald-500/10 dark:text-emerald-400/10 pointer-events-none" />
-        </flux:card>
+        </a>
 
-        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
-            <div class="relative z-10 pr-6">
-                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Konfirmasi Tertunda</flux:text>
-                <flux:heading size="xl" class="mt-2 font-bold tracking-tight {{ $this->konfirmasiTertunda > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-900 dark:text-zinc-100' }}">
-                    {{ $this->konfirmasiTertunda }}
-                </flux:heading>
-                <div class="mt-2 flex items-center gap-1 text-[11px] {{ $this->konfirmasiTertunda > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400' }} font-medium">
-                    <span class="size-1.5 rounded-full {{ $this->konfirmasiTertunda > 0 ? 'bg-amber-500' : 'bg-zinc-400' }}"></span>
-                    <span>Menunggu respon</span>
-                </div>
+        {{-- Card 2: Ruang Teralokasi -> Alokasi Ruangan --}}
+        <a href="{{ route('admin.alokasi-ruangan') }}" wire:navigate.hover class="relative block group cursor-pointer select-none">
+            {{-- Layer Belakang (Base layer) --}}
+            <div class="absolute inset-0 rounded-2xl bg-emerald-100/80 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 flex items-end justify-between px-4 pb-2.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-xs">
+                <span>Pergi ke Ruangan</span>
+                <span class="inline-flex items-center gap-1">
+                    <flux:icon icon="arrow-right" class="size-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+                </span>
             </div>
-            <flux:icon icon="clock" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-amber-500/10 dark:text-amber-400/10 pointer-events-none" />
-        </flux:card>
 
-        <flux:card variant="soft" class="relative overflow-hidden p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs">
-            <div class="relative z-10 pr-6">
-                <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Tim WFO Hari Ini</flux:text>
-                <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-purple-600 dark:text-purple-400">
-                    {{ $this->timWfoHariIni }}
-                </flux:heading>
-                <div class="mt-2 flex items-center gap-1 text-[11px] text-purple-600 dark:text-purple-400 font-medium">
-                    <span class="size-1.5 rounded-full bg-purple-500"></span>
-                    <span>Aktif di kantor</span>
+            {{-- Layer Utama (Top card) --}}
+            <div class="relative z-10 overflow-hidden rounded-2xl p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs transition-all duration-300 ease-out group-hover:-translate-y-8 group-hover:shadow-xl group-hover:border-emerald-400 dark:group-hover:border-emerald-500">
+                <div class="relative z-10 pr-6">
+                    <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Ruang Teralokasi</flux:text>
+                    <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                        {{ $this->ruanganTeralokasHariIni }}
+                    </flux:heading>
+                    <div class="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                        <span class="size-1.5 rounded-full bg-emerald-500"></span>
+                        <span>Terisi hari ini</span>
+                    </div>
                 </div>
+                <flux:icon icon="building-office-2" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-emerald-500/10 dark:text-emerald-400/10 pointer-events-none group-hover:scale-105 transition-transform duration-300" />
             </div>
-            <flux:icon icon="calendar-days" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-purple-500/10 dark:text-purple-400/10 pointer-events-none" />
-        </flux:card>
+        </a>
+
+        {{-- Card 3: Total Tim -> Manajemen Tim --}}
+        <a href="{{ route('admin.tim') }}" wire:navigate.hover class="relative block group cursor-pointer select-none">
+            {{-- Layer Belakang (Base layer) --}}
+            <div class="absolute inset-0 rounded-2xl bg-amber-100/80 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/60 flex items-end justify-between px-4 pb-2.5 text-xs font-semibold text-amber-700 dark:text-amber-300 shadow-xs">
+                <span>Pergi ke Tim</span>
+                <span class="inline-flex items-center gap-1">
+                    <flux:icon icon="arrow-right" class="size-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+                </span>
+            </div>
+
+            {{-- Layer Utama (Top card) --}}
+            <div class="relative z-10 overflow-hidden rounded-2xl p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs transition-all duration-300 ease-out group-hover:-translate-y-8 group-hover:shadow-xl group-hover:border-amber-400 dark:group-hover:border-amber-500">
+                <div class="relative z-10 pr-6">
+                    <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Total Tim</flux:text>
+                    <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-amber-600 dark:text-amber-400">
+                        {{ $this->totalTim }}
+                    </flux:heading>
+                    <div class="mt-2 flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                        <span class="size-1.5 rounded-full bg-amber-500"></span>
+                        <span>Tim terdaftar</span>
+                    </div>
+                </div>
+                <flux:icon icon="users" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-amber-500/10 dark:text-amber-400/10 pointer-events-none group-hover:scale-105 transition-transform duration-300" />
+            </div>
+        </a>
+
+        {{-- Card 4: Tim WFO Hari Ini -> Jadwal WFO --}}
+        <a href="{{ route('admin.jadwal-wfo') }}" wire:navigate.hover class="relative block group cursor-pointer select-none">
+            {{-- Layer Belakang (Base layer) --}}
+            <div class="absolute inset-0 rounded-2xl bg-purple-100/80 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800/60 flex items-end justify-between px-4 pb-2.5 text-xs font-semibold text-purple-700 dark:text-purple-300 shadow-xs">
+                <span>Pergi ke Jadwal WFO</span>
+                <span class="inline-flex items-center gap-1">
+                    <flux:icon icon="arrow-right" class="size-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+                </span>
+            </div>
+
+            {{-- Layer Utama (Top card) --}}
+            <div class="relative z-10 overflow-hidden rounded-2xl p-4 sm:p-5 border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xs transition-all duration-300 ease-out group-hover:-translate-y-8 group-hover:shadow-xl group-hover:border-purple-400 dark:group-hover:border-purple-500">
+                <div class="relative z-10 pr-6">
+                    <flux:text class="truncate font-medium text-xs text-zinc-500 dark:text-zinc-400">Tim WFO Hari Ini</flux:text>
+                    <flux:heading size="xl" class="mt-2 font-bold tracking-tight text-purple-600 dark:text-purple-400">
+                        {{ $this->timWfoHariIni }}
+                    </flux:heading>
+                    <div class="mt-2 flex items-center gap-1.5 text-[11px] text-purple-600 dark:text-purple-400 font-medium">
+                        <span class="size-1.5 rounded-full bg-purple-500"></span>
+                        <span>Aktif di kantor</span>
+                    </div>
+                </div>
+                <flux:icon icon="calendar-days" class="absolute -bottom-3 -right-3 size-20 sm:size-24 text-purple-500/10 dark:text-purple-400/10 pointer-events-none group-hover:scale-105 transition-transform duration-300" />
+            </div>
+        </a>
     </div>
 
     {{-- Kalender Section --}}
-    <flux:card class="p-0 overflow-hidden">
-        <div class="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+    <flux:card class="p-0 overflow-visible table-sticky-card">
+        <div class="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-                <flux:heading size="sm">Kalender Jadwal</flux:heading>
-                <flux:text class="text-xs text-zinc-400">Adzan/kajian, briefing, dan alokasi ruangan</flux:text>
+                <flux:heading size="sm">
+                    @if ($viewMode === 'kalender')
+                        Kalender Jadwal
+                    @else
+                        Jadwal Adzan, Kajian & Briefing
+                    @endif
+                </flux:heading>
+                <flux:text class="text-xs text-zinc-400">
+                    @if ($viewMode === 'kalender')
+                        Adzan/kajian, briefing, dan alokasi ruangan
+                    @else
+                        Bulan {{ $this->bulanLabel() }}
+                    @endif
+                </flux:text>
             </div>
 
             {{-- Toggle & Filters --}}
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 flex-wrap">
                 {{-- Toggle Kalender / Tabel Segmented Control (Matching Settings Appearance) --}}
                 <flux:radio.group
                     variant="segmented"
@@ -520,150 +493,11 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
 
         {{-- VIEW: KALENDER --}}
         @if ($viewMode === 'kalender')
-            <div class="p-4">
-            <style>
-                /* FullCalendar styling - matching kalender page */
-                .fc .fc-col-header-cell-cushion {
-                    color: #71717a !important;
-                    font-size: 0.75rem; font-weight: 500;
-                    text-transform: uppercase; letter-spacing: 0.05em;
-                    text-decoration: none !important;
-                }
-                .fc .fc-daygrid-day-number {
-                    color: #71717a;
-                    text-decoration: none !important;
-                    font-size: 0.75rem;
-                }
-                .fc-theme-standard td,
-                .fc-theme-standard th,
-                .fc-theme-standard .fc-scrollgrid {
-                    border-color: var(--color-zinc-200, #e5e5e5) !important;
-                }
-                .dark .fc-theme-standard td,
-                .dark .fc-theme-standard th,
-                .dark .fc-theme-standard .fc-scrollgrid {
-                    border-color: #3f3f46 !important;
-                }
-                .fc .fc-col-header-cell {
-                    background-color: var(--color-zinc-50, #fafafa) !important;
-                }
-                .dark .fc .fc-col-header-cell {
-                    background-color: #18181b !important;
-                }
-                .fc .fc-daygrid-day,
-                .fc .fc-daygrid-body,
-                .fc .fc-timegrid-slot,
-                .fc .fc-timegrid-col {
-                    background-color: transparent !important;
-                }
-
-                /* Hari Minggu - Tanda Libur */
-                .fc .fc-daygrid-day.fc-day-sun {
-                    background-color: rgba(254, 242, 242, 0.45) !important;
-                }
-                .dark .fc .fc-daygrid-day.fc-day-sun {
-                    background-color: rgba(239, 68, 68, 0.04) !important;
-                }
-                .fc .fc-daygrid-day.fc-day-sun .fc-daygrid-day-number {
-                    color: #ef4444 !important;
-                    font-weight: 600;
-                }
-                .fc .fc-daygrid-day.fc-day-sun .fc-daygrid-day-top::after {
-                    content: 'Libur';
-                    font-size: 9px;
-                    font-weight: 600;
-                    color: #dc2626;
-                    background: rgba(239, 68, 68, 0.12);
-                    padding: 1px 4px;
-                    border-radius: 4px;
-                    margin-right: 4px;
-                }
-
-                /* Pointer hover on Month Grid */
-                .fc-daygrid-day-frame {
-                    cursor: pointer;
-                    transition: background-color 0.15s ease;
-                }
-                .fc-daygrid-day-frame:hover {
-                    background-color: rgba(59, 113, 202, 0.06);
-                }
-                .dark .fc-daygrid-day-frame:hover {
-                    background-color: rgba(59, 113, 202, 0.12);
-                }
-
-                .fc .fc-daygrid-day.fc-day-today {
-                    background-color: rgba(59,113,202,0.08) !important;
-                }
-                .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
-                    color: #3B71CA !important;
-                    font-weight: 600;
-                }
-                .fc .fc-day-other .fc-daygrid-day-number { color: #a3a3a3 !important; }
-                .fc .fc-button, .fc .fc-button-primary {
-                    background-color: var(--color-zinc-100, #f5f5f5) !important;
-                    border-color: var(--color-zinc-200, #e5e5e5) !important;
-                    color: var(--color-zinc-700, #3f3f46) !important;
-                    font-size: 0.75rem; padding: 0.3rem 0.6rem; box-shadow: none !important;
-                    border-radius: 0.5rem !important;
-                }
-                .dark .fc .fc-button, .dark .fc .fc-button-primary {
-                    background-color: #27272a !important;
-                    border-color: #3f3f46 !important;
-                    color: #d4d4d8 !important;
-                }
-                .fc .fc-button:hover, .fc .fc-button-primary:hover {
-                    background-color: var(--color-zinc-200, #e5e5e5) !important;
-                    color: #111 !important;
-                }
-                .dark .fc .fc-button:hover, .dark .fc .fc-button-primary:hover {
-                    background-color: #3f3f46 !important;
-                    color: #fff !important;
-                }
-                .fc .fc-button-active,
-                .fc .fc-button-primary:not(:disabled).fc-button-active {
-                    background-color: #3B71CA !important;
-                    border-color: #3B71CA !important;
-                    color: #ffffff !important;
-                    font-weight: 600;
-                }
-                .fc .fc-toolbar-title {
-                    color: var(--color-zinc-900, #171717) !important;
-                    font-size: 1.1rem !important; font-weight: 600;
-                }
-                .dark .fc .fc-toolbar-title { color: #f4f4f5 !important; }
-                .fc .fc-daygrid-more-link { color: #3B71CA !important; font-size: 0.7rem; }
-                .fc .fc-timegrid-slot-label { color: #71717a; font-size: 0.7rem; }
-                .fc .fc-timegrid-now-indicator-line { border-color: #3B71CA; }
-                .fc .fc-all-day-text { color: #71717a; font-size: 0.7rem; }
-                .fc .fc-list-empty { color: #71717a; }
-            </style>
-
-            {{-- Breadcrumb Navigation saat di Mode Harian --}}
-            <div x-show="currentView === 'timeGridDay'" x-transition class="mb-4 flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/50">
-                <div class="flex items-center gap-2.5">
-                    <button
-                        type="button"
-                        @click="calendar.changeView('dayGridMonth')"
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 transition-all border border-zinc-200 dark:border-zinc-700 shadow-xs cursor-pointer"
-                    >
-                        <flux:icon icon="arrow-left" class="size-3.5 text-blue-600 dark:text-blue-400" />
-                        <span>← Kembali ke Tampilan Bulan</span>
-                    </button>
-                    <span class="text-zinc-300 dark:text-zinc-600">/</span>
-                    <span class="text-xs font-bold text-blue-700 dark:text-blue-300 capitalize" x-text="activeDateLabel"></span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
-                        <flux:icon icon="clock" class="size-3" />
-                        <span x-text="isSaturday ? 'Jam Operasional: 09:00 - 14:00 (Sabtu)' : 'Jam Operasional: 09:00 - 17:00 (Weekday)'"></span>
-                    </span>
-                </div>
-            </div>
-
-            <div wire:ignore x-init="initCalendar()">
-                <div x-ref="kalender"></div>
-            </div>
-        </div>
+            <livewire:admin.calendar-widget 
+                :filterJenis="$filterJenis" 
+                :filterTimId="$filterTimId" 
+                :key="'calendar-'.$filterJenis.'-'.$filterTimId"
+            />
         @endif
 
         {{-- VIEW: TABEL --}}
@@ -693,30 +527,69 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
 
             {{-- Tabel Adzan & Kajian --}}
             @if (count($this->tabelAdzan) > 0)
-                <div class="overflow-x-auto">
-                    <table class="w-full text-xs border-collapse">
-                        <thead>
+                <div x-data="{
+                    searchQuery: '',
+                    highlightMatch(text, query) {
+                        if (!query || !text) return text;
+                        const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                        return text.replace(regex, '<mark class=\'search-highlight\'>$1</mark>');
+                    },
+                    matchesSearch(row) {
+                        if (!this.searchQuery) return true;
+                        const query = this.searchQuery.toLowerCase();
+                        const text = row.textContent.toLowerCase();
+                        return text.includes(query);
+                    }
+                }">
+                    {{-- Search input --}}
+                    <div class="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+                        <div class="flex items-center gap-3">
+                            <div class="relative flex-1 max-w-md">
+                                <input 
+                                    type="text"
+                                    x-model="searchQuery"
+                                    placeholder="Cari nama tim atau personil..."
+                                    class="w-full px-3 py-2 pl-10 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-all"
+                                />
+                                <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                            <button 
+                                x-show="searchQuery"
+                                x-transition
+                                @click="searchQuery = ''"
+                                class="text-sm px-3 py-1.5 rounded-md bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-visible">
+                    <table class="w-full text-xs border-separate border-spacing-0 table-auto border-l border-t border-zinc-200 dark:border-zinc-700">
+                        <thead class="sticky top-[56px] z-15 shadow-xs">
                             {{-- Level 1: group header --}}
                             <tr>
-                                <th rowspan="2" class="border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-3 py-2 text-left text-zinc-700 dark:text-zinc-200 font-semibold w-28">
+                                <th rowspan="2" class="border-b border-r border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-4 py-2.5 text-left text-zinc-700 dark:text-zinc-200 font-semibold align-middle">
                                     Hari, Tanggal
                                 </th>
-                                <th rowspan="2" class="border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-3 py-2 text-center text-zinc-700 dark:text-zinc-200 font-semibold w-16">
+                                <th rowspan="2" class="border-b border-r border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-4 py-2.5 text-center text-zinc-700 dark:text-zinc-200 font-semibold w-20 align-middle">
                                     Hari
                                 </th>
-                                <th colspan="2" class="border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-3 py-2 text-center text-zinc-700 dark:text-zinc-200 font-semibold">
+                                <th colspan="2" class="border-b border-r border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-4 py-2 text-center text-zinc-700 dark:text-zinc-200 font-semibold">
                                     Zuhur
                                 </th>
-                                <th colspan="2" class="border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-3 py-2 text-center text-zinc-700 dark:text-zinc-200 font-semibold">
+                                <th colspan="2" class="border-b border-r border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-4 py-2 text-center text-zinc-700 dark:text-zinc-200 font-semibold">
                                     Ashar
                                 </th>
                             </tr>
                             {{-- Level 2: sub header --}}
                             <tr>
-                                <th class="border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/60 px-3 py-1.5 text-center text-zinc-600 dark:text-zinc-300 font-medium">Adzan</th>
-                                <th class="border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/60 px-3 py-1.5 text-center text-zinc-600 dark:text-zinc-300 font-medium">Pembacaan Kitab</th>
-                                <th class="border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/60 px-3 py-1.5 text-center text-zinc-600 dark:text-zinc-300 font-medium">Adzan</th>
-                                <th class="border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/60 px-3 py-1.5 text-center text-zinc-600 dark:text-zinc-300 font-medium">Pembacaan Kitab</th>
+                                <th class="border-b border-r border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/60 px-4 py-2 text-center text-zinc-600 dark:text-zinc-300 font-medium">Adzan</th>
+                                <th class="border-b border-r border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/60 px-4 py-2 text-center text-zinc-600 dark:text-zinc-300 font-medium">Pembacaan Kitab</th>
+                                <th class="border-b border-r border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/60 px-4 py-2 text-center text-zinc-600 dark:text-zinc-300 font-medium">Adzan</th>
+                                <th class="border-b border-r border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/60 px-4 py-2 text-center text-zinc-600 dark:text-zinc-300 font-medium">Pembacaan Kitab</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -729,25 +602,198 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
                                     $asrKajian   = $slots['asr_kajian']   ?? null;
                                     $isEven      = $loop->even;
 
-                                    $fmtPersonil = fn($row) => $row
-                                        ? ($row->personil?->nama ?? '—') . "\n(" . ($row->personil?->tim?->nama_tim ?? '—') . ")"
+                                    $fmtPersonilText = fn($row) => $row
+                                        ? e($row->personil?->nama ?? '—') . ' (' . e($row->personil?->tim?->nama_tim ?? '—') . ')'
                                         : '—';
                                 @endphp
-                                <tr class="{{ $isEven ? 'bg-zinc-50 dark:bg-zinc-800/40' : 'bg-white dark:bg-zinc-900/60' }} hover:bg-zinc-100 dark:hover:bg-zinc-800/70 transition-colors">
-                                    <td class="border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-zinc-900 dark:text-zinc-200">
-                                        {{ $carbon->translatedFormat('d F Y') }}
+                                <tr 
+                                    class="{{ $isEven ? 'bg-zinc-50 dark:bg-zinc-800/40' : 'bg-white dark:bg-zinc-900/60' }} hover:bg-zinc-100 dark:hover:bg-zinc-800/70 transition-colors"
+                                    x-show="matchesSearch($el)"
+                                    x-transition
+                                >
+                                    <td class="border-b border-r border-zinc-200 dark:border-zinc-700 px-4 py-3 text-zinc-900 dark:text-zinc-200">
+                                        {{ $carbon->locale('id')->translatedFormat('d F Y') }}
                                     </td>
-                                    <td class="border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-center font-bold text-zinc-900 dark:text-zinc-100 uppercase">
-                                        {{ strtoupper(substr($carbon->translatedFormat('l'), 0, 4)) }}
+                                    <td class="border-b border-r border-zinc-200 dark:border-zinc-700 px-4 py-3 text-center font-bold text-zinc-900 dark:text-zinc-100 uppercase">
+                                        @php
+                                            $namaHari = match($carbon->dayOfWeekIso) {
+                                                1 => 'SENIN', 2 => 'SELASA', 3 => 'RABU',
+                                                4 => 'KAMIS', 5 => 'JUMAT', 6 => 'SABTU',
+                                                7 => 'MINGGU',
+                                            };
+                                        @endphp
+                                        {{ $namaHari }}
                                     </td>
-                                    <td class="border border-zinc-200 dark:border-zinc-700 px-3 py-2 whitespace-pre-line text-zinc-700 dark:text-zinc-300">{{ $fmtPersonil($dhuhrAdzan) }}</td>
-                                    <td class="border border-zinc-200 dark:border-zinc-700 px-3 py-2 whitespace-pre-line text-zinc-700 dark:text-zinc-300">{{ $fmtPersonil($dhuhrKajian) }}</td>
-                                    <td class="border border-zinc-200 dark:border-zinc-700 px-3 py-2 whitespace-pre-line text-zinc-700 dark:text-zinc-300">{{ $fmtPersonil($asrAdzan) }}</td>
-                                    <td class="border border-zinc-200 dark:border-zinc-700 px-3 py-2 whitespace-pre-line text-zinc-700 dark:text-zinc-300">{{ $fmtPersonil($asrKajian) }}</td>
+                                    <td class="border-b border-r border-zinc-200 dark:border-zinc-700 px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                                        @if ($dhuhrAdzan)
+                                            <div class="flex items-start gap-2">
+                                                <div class="flex-1">
+                                                    <div x-html="highlightMatch('{{ e($dhuhrAdzan->personil?->nama ?? '—') }}', searchQuery)"></div>
+                                                    <div class="text-zinc-500 text-[11px]" x-html="'(' + highlightMatch('{{ e($dhuhrAdzan->personil?->tim?->nama_tim ?? '—') }}', searchQuery) + ')'"></div>
+                                                    @if ($dhuhrAdzan->is_switched)
+                                                        <button 
+                                                            x-data="{ showDetail: false }"
+                                                            @click="showDetail = !showDetail"
+                                                            @click.outside="showDetail = false"
+                                                            class="relative mt-1 text-left"
+                                                        >
+                                                            <flux:badge color="amber" size="xs" icon="arrow-path" class="cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors">
+                                                                Switched
+                                                            </flux:badge>
+                                                            
+                                                            {{-- Tooltip Detail --}}
+                                                            <div 
+                                                                x-show="showDetail" 
+                                                                x-cloak 
+                                                                x-transition
+                                                                class="absolute z-20 left-0 top-full mt-1 p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg text-xs w-64"
+                                                            >
+                                                                <div class="font-semibold text-amber-600 dark:text-amber-400 mb-2 flex items-center gap-1">
+                                                                    <flux:icon.exclamation-triangle class="size-4" />
+                                                                    Switched Assignment
+                                                                </div>
+                                                                <div class="space-y-1.5 text-zinc-600 dark:text-zinc-300">
+                                                                    <div><strong>Original:</strong> {{ $dhuhrAdzan->originalPersonil?->nama ?? '—' }}</div>
+                                                                    <div><strong>Reason:</strong> {{ $dhuhrAdzan->switch_reason ?? '—' }}</div>
+                                                                    <div><strong>Date:</strong> {{ $dhuhrAdzan->switched_at ? \Carbon\Carbon::parse($dhuhrAdzan->switched_at)->format('d M Y, H:i') : '—' }}</div>
+                                                                </div>
+                                                            </div>
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        @else
+                                            <div>—</div>
+                                        @endif
+                                    </td>
+                                    <td class="border-b border-r border-zinc-200 dark:border-zinc-700 px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                                        @if ($dhuhrKajian)
+                                            <div class="flex items-start gap-2">
+                                                <div class="flex-1">
+                                                    <div x-html="highlightMatch('{{ e($dhuhrKajian->personil?->nama ?? '—') }}', searchQuery)"></div>
+                                                    <div class="text-zinc-500 text-[11px]" x-html="'(' + highlightMatch('{{ e($dhuhrKajian->personil?->tim?->nama_tim ?? '—') }}', searchQuery) + ')'"></div>
+                                                    @if ($dhuhrKajian->is_switched)
+                                                        <button 
+                                                            x-data="{ showDetail: false }"
+                                                            @click="showDetail = !showDetail"
+                                                            @click.outside="showDetail = false"
+                                                            class="relative mt-1 text-left"
+                                                        >
+                                                            <flux:badge color="amber" size="xs" icon="arrow-path" class="cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors">
+                                                                Switched
+                                                            </flux:badge>
+                                                            
+                                                            <div 
+                                                                x-show="showDetail" 
+                                                                x-cloak 
+                                                                x-transition
+                                                                class="absolute z-20 left-0 top-full mt-1 p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg text-xs w-64"
+                                                            >
+                                                                <div class="font-semibold text-amber-600 dark:text-amber-400 mb-2 flex items-center gap-1">
+                                                                    <flux:icon.exclamation-triangle class="size-4" />
+                                                                    Switched Assignment
+                                                                </div>
+                                                                <div class="space-y-1.5 text-zinc-600 dark:text-zinc-300">
+                                                                    <div><strong>Original:</strong> {{ $dhuhrKajian->originalPersonil?->nama ?? '—' }}</div>
+                                                                    <div><strong>Reason:</strong> {{ $dhuhrKajian->switch_reason ?? '—' }}</div>
+                                                                    <div><strong>Date:</strong> {{ $dhuhrKajian->switched_at ? \Carbon\Carbon::parse($dhuhrKajian->switched_at)->format('d M Y, H:i') : '—' }}</div>
+                                                                </div>
+                                                            </div>
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        @else
+                                            <div>—</div>
+                                        @endif
+                                    </td>
+                                    <td class="border-b border-r border-zinc-200 dark:border-zinc-700 px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                                        @if ($asrAdzan)
+                                            <div class="flex items-start gap-2">
+                                                <div class="flex-1">
+                                                    <div x-html="highlightMatch('{{ e($asrAdzan->personil?->nama ?? '—') }}', searchQuery)"></div>
+                                                    <div class="text-zinc-500 text-[11px]" x-html="'(' + highlightMatch('{{ e($asrAdzan->personil?->tim?->nama_tim ?? '—') }}', searchQuery) + ')'"></div>
+                                                    @if ($asrAdzan->is_switched)
+                                                        <button 
+                                                            x-data="{ showDetail: false }"
+                                                            @click="showDetail = !showDetail"
+                                                            @click.outside="showDetail = false"
+                                                            class="relative mt-1 text-left"
+                                                        >
+                                                            <flux:badge color="amber" size="xs" icon="arrow-path" class="cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors">
+                                                                Switched
+                                                            </flux:badge>
+                                                            
+                                                            <div 
+                                                                x-show="showDetail" 
+                                                                x-cloak 
+                                                                x-transition
+                                                                class="absolute z-20 left-0 top-full mt-1 p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg text-xs w-64"
+                                                            >
+                                                                <div class="font-semibold text-amber-600 dark:text-amber-400 mb-2 flex items-center gap-1">
+                                                                    <flux:icon.exclamation-triangle class="size-4" />
+                                                                    Switched Assignment
+                                                                </div>
+                                                                <div class="space-y-1.5 text-zinc-600 dark:text-zinc-300">
+                                                                    <div><strong>Original:</strong> {{ $asrAdzan->originalPersonil?->nama ?? '—' }}</div>
+                                                                    <div><strong>Reason:</strong> {{ $asrAdzan->switch_reason ?? '—' }}</div>
+                                                                    <div><strong>Date:</strong> {{ $asrAdzan->switched_at ? \Carbon\Carbon::parse($asrAdzan->switched_at)->format('d M Y, H:i') : '—' }}</div>
+                                                                </div>
+                                                            </div>
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        @else
+                                            <div>—</div>
+                                        @endif
+                                    </td>
+                                    <td class="border-b border-r border-zinc-200 dark:border-zinc-700 px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                                        @if ($asrKajian)
+                                            <div class="flex items-start gap-2">
+                                                <div class="flex-1">
+                                                    <div x-html="highlightMatch('{{ e($asrKajian->personil?->nama ?? '—') }}', searchQuery)"></div>
+                                                    <div class="text-zinc-500 text-[11px]" x-html="'(' + highlightMatch('{{ e($asrKajian->personil?->tim?->nama_tim ?? '—') }}', searchQuery) + ')'"></div>
+                                                    @if ($asrKajian->is_switched)
+                                                        <button 
+                                                            x-data="{ showDetail: false }"
+                                                            @click="showDetail = !showDetail"
+                                                            @click.outside="showDetail = false"
+                                                            class="relative mt-1 text-left"
+                                                        >
+                                                            <flux:badge color="amber" size="xs" icon="arrow-path" class="cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-800 transition-colors">
+                                                                Switched
+                                                            </flux:badge>
+                                                            
+                                                            <div 
+                                                                x-show="showDetail" 
+                                                                x-cloak 
+                                                                x-transition
+                                                                class="absolute z-20 left-0 top-full mt-1 p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg text-xs w-64"
+                                                            >
+                                                                <div class="font-semibold text-amber-600 dark:text-amber-400 mb-2 flex items-center gap-1">
+                                                                    <flux:icon.exclamation-triangle class="size-4" />
+                                                                    Switched Assignment
+                                                                </div>
+                                                                <div class="space-y-1.5 text-zinc-600 dark:text-zinc-300">
+                                                                    <div><strong>Original:</strong> {{ $asrKajian->originalPersonil?->nama ?? '—' }}</div>
+                                                                    <div><strong>Reason:</strong> {{ $asrKajian->switch_reason ?? '—' }}</div>
+                                                                    <div><strong>Date:</strong> {{ $asrKajian->switched_at ? \Carbon\Carbon::parse($asrKajian->switched_at)->format('d M Y, H:i') : '—' }}</div>
+                                                                </div>
+                                                            </div>
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        @else
+                                            <div>—</div>
+                                        @endif
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
                     </table>
+                </div>
                 </div>
             @else
                 <div class="px-4 py-8">
@@ -755,42 +801,355 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
                 </div>
             @endif
 
-            {{-- Divider --}}
-            <div class="border-t-8 border-zinc-100 dark:border-zinc-800"></div>
+            {{-- Spacing between tables --}}
+            <div class="h-6 bg-zinc-50 dark:bg-zinc-900/50"></div>
 
-            {{-- Tabel Briefing --}}
+            {{-- Tabel Briefing - Accordion per Tanggal + Compact Table --}}
             @if ($this->tabelBriefing->isNotEmpty())
-                <div class="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                    <flux:heading size="sm">Jadwal Briefing</flux:heading>
-                    <flux:badge size="sm" color="zinc">{{ $this->tabelBriefing->count() }} Jadwal</flux:badge>
-                </div>
-                <div>
-                    <flux:table>
-                        <flux:table.columns>
-                            <flux:table.column>Tanggal</flux:table.column>
-                            <flux:table.column align="center">Hari</flux:table.column>
-                            <flux:table.column align="center">Sesi</flux:table.column>
-                            <flux:table.column>Perwakilan</flux:table.column>
-                            <flux:table.column>Tim</flux:table.column>
-                            <flux:table.column align="center">Status</flux:table.column>
-                        </flux:table.columns>
-                        <flux:table.rows>
-                            @foreach ($this->tabelBriefing as $j)
-                                <flux:table.row>
-                                    <flux:table.cell class="font-medium text-zinc-900 dark:text-zinc-200">{{ $j->tanggal->format('d/m/Y') }}</flux:table.cell>
-                                    <flux:table.cell align="center" class="font-bold uppercase text-xs">{{ strtoupper(substr($j->tanggal->translatedFormat('l'), 0, 4)) }}</flux:table.cell>
-                                    <flux:table.cell align="center">
-                                        <flux:badge size="sm" color="{{ $j->sesi === 'pagi' ? 'amber' : 'indigo' }}">{{ ucfirst($j->sesi) }}</flux:badge>
-                                    </flux:table.cell>
-                                    <flux:table.cell class="text-zinc-900 dark:text-zinc-200">{{ $j->personil?->nama ?? '—' }}</flux:table.cell>
-                                    <flux:table.cell class="text-zinc-500">{{ $j->tim?->nama_tim ?? '—' }}</flux:table.cell>
-                                    <flux:table.cell align="center">
-                                        <x-status-badge :status="$j->status_konfirmasi" />
-                                    </flux:table.cell>
-                                </flux:table.row>
-                            @endforeach
-                        </flux:table.rows>
-                    </flux:table>
+                @php
+                    // Group briefing by date
+                    $groupedBriefing = $this->tabelBriefing->groupBy(fn($j) => $j->tanggal->format('Y-m-d'));
+                    $allDateKeys = $groupedBriefing->keys()->values()->toArray();
+                    $todayKey = now()->format('Y-m-d');
+                    $tomorrowKey = now()->addDay()->format('Y-m-d');
+                    $initialExpanded = array_values(array_filter([$todayKey, $tomorrowKey], fn($k) => in_array($k, $allDateKeys)));
+                    if (empty($initialExpanded) && !empty($allDateKeys)) {
+                        $initialExpanded = [$allDateKeys[0]];
+                    }
+                    $searchDataMap = [];
+                    foreach ($groupedBriefing as $tglKey => $items) {
+                        $searchDataMap[$tglKey] = $items->map(function ($j) {
+                            $roles = ($j->is_notulen ? 'notulen notulensi ' : '')
+                                . ($j->moderator_id && $j->moderator_id === $j->personil_id ? 'moderator ' : '')
+                                . ($j->doa_id && $j->doa_id === $j->personil_id ? 'doa ' : '');
+
+                            return ($j->personil?->nama ?? '') . ' ' . ($j->tim?->nama_tim ?? '') . ' ' . $roles;
+                        })->implode(' ');
+                    }
+                @endphp
+                <div
+                    :key="'briefing-accordion-'.$tabelBulan"
+                    x-data="{
+                        searchQueryBriefing: '',
+                        allDateKeys: @js($allDateKeys),
+                        initialExpanded: @js($initialExpanded),
+                        searchData: @js($searchDataMap),
+                        expandedDates: [],
+
+                        init() {
+                            this.expandedDates = [...this.initialExpanded];
+                            this.$watch('searchQueryBriefing', (query) => {
+                                const q = (query || '').toLowerCase().trim();
+                                if (!q) {
+                                    this.expandedDates = [...this.initialExpanded];
+                                    return;
+                                }
+                                this.expandedDates = this.allDateKeys.filter(key => {
+                                    const text = (this.searchData[key] || '').toLowerCase();
+                                    return text.includes(q);
+                                });
+                            });
+                        },
+
+                        isExpanded(key) {
+                            return this.expandedDates.includes(key);
+                        },
+
+                        toggleDate(key) {
+                            if (this.isExpanded(key)) {
+                                this.expandedDates = this.expandedDates.filter(k => k !== key);
+                            } else {
+                                this.expandedDates.push(key);
+                            }
+                        },
+
+                        expandAll() {
+                            this.expandedDates = [...this.allDateKeys];
+                        },
+
+                        collapseAll() {
+                            this.expandedDates = [];
+                        },
+
+                        hasMatch(key) {
+                            const q = (this.searchQueryBriefing || '').toLowerCase().trim();
+                            if (!q) return true;
+                            return (this.searchData[key] || '').toLowerCase().includes(q);
+                        },
+
+                        highlightMatchBriefing(text, query) {
+                            if (!query || !text) return text;
+                            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')})`, 'gi');
+                            return text.replace(regex, '<mark class=\'search-highlight\'>$1</mark>');
+                        }
+                    }"
+                >
+                    <div class="p-4 border-b border-zinc-100 dark:border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div>
+                            <flux:heading size="sm">Jadwal Briefing</flux:heading>
+                            <flux:text class="text-xs text-zinc-400">{{ $this->tabelBriefing->count() }} Jadwal ({{ count($groupedBriefing) }} Tanggal)</flux:text>
+                        </div>
+
+                        {{-- Action Controls & Search --}}
+                        <div class="flex items-center gap-2.5 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+                            {{-- Expand Semua / Collapse Semua --}}
+                            <div class="inline-flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-0.5 shadow-2xs text-xs">
+                                <button
+                                    type="button"
+                                    @click="expandAll()"
+                                    class="px-2.5 py-1 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors font-medium flex items-center gap-1"
+                                    title="Buka semua tanggal"
+                                >
+                                    <svg class="size-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                    <span>Expand Semua</span>
+                                </button>
+                                <div class="h-3.5 w-px bg-zinc-200 dark:border-zinc-700"></div>
+                                <button
+                                    type="button"
+                                    @click="collapseAll()"
+                                    class="px-2.5 py-1 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors font-medium flex items-center gap-1"
+                                    title="Tutup semua tanggal"
+                                >
+                                    <svg class="size-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
+                                    </svg>
+                                    <span>Collapse Semua</span>
+                                </button>
+                            </div>
+
+                            {{-- Search input --}}
+                            <div class="relative flex-1 sm:flex-none sm:w-64">
+                                <input
+                                    type="text"
+                                    x-model="searchQueryBriefing"
+                                    placeholder="Cari personil atau tim..."
+                                    class="w-full px-3 py-1.5 pl-9 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-all"
+                                />
+                                <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                            <button
+                                x-show="searchQueryBriefing"
+                                x-transition
+                                @click="searchQueryBriefing = ''"
+                                class="text-xs px-2.5 py-1.5 rounded-md bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    {{-- Accordion List Layout --}}
+                    <div class="p-4 space-y-2.5">
+                        @foreach ($groupedBriefing as $tanggalKey => $jadwals)
+                            @php
+                                $firstJadwal = $jadwals->first();
+                                $carbonDate = $firstJadwal->tanggal;
+                                $isToday = $carbonDate->isToday();
+                                $isTomorrow = $carbonDate->isTomorrow();
+                                $namaHariBriefing = match($carbonDate->dayOfWeekIso) {
+                                    1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu',
+                                    4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu',
+                                    7 => 'Minggu',
+                                };
+
+                                $siapCount = $jadwals->where('status_konfirmasi', 'siap')->count();
+                                $menungguCount = $jadwals->where('status_konfirmasi', 'menunggu')->count();
+                                $berhalanganCount = $jadwals->where('status_konfirmasi', 'berhalangan')->count();
+                                $totalCount = $jadwals->count();
+                            @endphp
+
+                            <div
+                                x-show="hasMatch('{{ $tanggalKey }}')"
+                                x-transition
+                                class="border border-zinc-200 dark:border-zinc-700/80 rounded-xl overflow-hidden bg-white dark:bg-zinc-800/90 shadow-2xs transition-all"
+                                :class="isExpanded('{{ $tanggalKey }}') ? 'ring-1 ring-zinc-300 dark:ring-zinc-600' : 'hover:border-zinc-300 dark:hover:border-zinc-600'"
+                            >
+                                {{-- Accordion Header Bar --}}
+                                <button
+                                    type="button"
+                                    @click="toggleDate('{{ $tanggalKey }}')"
+                                    class="w-full px-4 py-2.5 text-left flex items-center justify-between gap-3 transition-colors select-none"
+                                    :class="isExpanded('{{ $tanggalKey }}')
+                                        ? 'bg-zinc-50/90 dark:bg-zinc-750/90 border-b border-zinc-200 dark:border-zinc-700'
+                                        : 'bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-750/50'"
+                                    :aria-expanded="isExpanded('{{ $tanggalKey }}')"
+                                >
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        {{-- Chevron Icon --}}
+                                        <div
+                                            class="size-5 rounded flex items-center justify-center text-zinc-400 transition-transform duration-200 shrink-0"
+                                            :class="isExpanded('{{ $tanggalKey }}') ? 'rotate-90 text-zinc-700 dark:text-zinc-200' : ''"
+                                        >
+                                            <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                                            </svg>
+                                        </div>
+
+                                        {{-- Mini Date Badge --}}
+                                        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg {{ $isToday ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800' : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-semibold' }} text-xs shrink-0">
+                                            <span class="text-sm font-bold leading-none">{{ $carbonDate->format('d') }}</span>
+                                            <span class="text-[10px] uppercase tracking-wider opacity-80 leading-none">{{ $carbonDate->format('M') }}</span>
+                                        </div>
+
+                                        {{-- Day & Full Date --}}
+                                        <div class="flex items-center gap-2 min-w-0 truncate">
+                                            <span class="font-semibold text-sm text-zinc-900 dark:text-zinc-100">{{ $namaHariBriefing }}</span>
+                                            <span class="text-xs text-zinc-500 dark:text-zinc-400 hidden sm:inline">• {{ $carbonDate->translatedFormat('d F Y') }}</span>
+                                            @if ($isToday)
+                                                <flux:badge color="blue" size="xs">Hari Ini</flux:badge>
+                                            @elseif ($isTomorrow)
+                                                <flux:badge color="zinc" size="xs">Besok</flux:badge>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    {{-- Right Summary Indicators --}}
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <span class="text-xs text-zinc-500 font-medium mr-1 hidden md:inline">{{ $totalCount }} Sesi</span>
+
+                                        <div class="flex items-center gap-1">
+                                            @if ($siapCount > 0)
+                                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60" title="{{ $siapCount }} Personil Siap">
+                                                    <span>{{ $siapCount }}</span>
+                                                    <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                                </span>
+                                            @endif
+                                            @if ($menungguCount > 0)
+                                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60" title="{{ $menungguCount }} Personil Menunggu">
+                                                    <span>{{ $menungguCount }}</span>
+                                                    <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                </span>
+                                            @endif
+                                            @if ($berhalanganCount > 0)
+                                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/60" title="{{ $berhalanganCount }} Personil Berhalangan">
+                                                    <span>{{ $berhalanganCount }}</span>
+                                                    <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                </span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </button>
+
+                                {{-- Compact Session Table --}}
+                                <div
+                                    x-show="isExpanded('{{ $tanggalKey }}')"
+                                    x-transition:enter="transition ease-out duration-150"
+                                    x-transition:enter-start="opacity-0 -translate-y-1"
+                                    x-transition:enter-end="opacity-100 translate-y-0"
+                                >
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-xs text-left border-collapse">
+                                            <thead>
+                                                <tr class="bg-zinc-50/80 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 font-semibold uppercase tracking-wider text-[10px]">
+                                                    <th class="py-2.5 px-4">Nama Personil</th>
+                                                    <th class="py-2.5 px-4">Tim</th>
+                                                    <th class="py-2.5 px-4 w-28 text-center">Waktu</th>
+                                                    <th class="py-2.5 px-4 w-28 text-center">Peran</th>
+                                                    <th class="py-2.5 px-4 w-28 text-right">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-zinc-100 dark:divide-zinc-700/60">
+                                                @foreach ($jadwals as $j)
+                                                    @php
+                                                        $pName = $j->personil?->nama ?? '—';
+                                                        $tName = $j->tim?->nama_tim ?? '—';
+                                                        $isMod = $j->moderator_id && $j->moderator_id === $j->personil_id;
+                                                        $isDoa = $j->doa_id && $j->doa_id === $j->personil_id;
+                                                        $rolesStr = ($j->is_notulen ? 'notulen notulensi ' : '') . ($isMod ? 'moderator ' : '') . ($isDoa ? 'doa ' : '') . ($j->is_switched ? 'pengganti ' : '');
+                                                        $rowSearch = strtolower(e($pName . ' ' . $tName . ' ' . $rolesStr));
+                                                    @endphp
+                                                    <tr
+                                                        data-briefing-row
+                                                        x-show="!searchQueryBriefing.trim() || '{{ $rowSearch }}'.includes(searchQueryBriefing.toLowerCase().trim())"
+                                                        class="hover:bg-zinc-50/70 dark:hover:bg-zinc-750/50 transition-colors"
+                                                    >
+                                                        <td class="py-2.5 px-4 font-medium text-zinc-900 dark:text-zinc-100">
+                                                            <span x-html="highlightMatchBriefing('{{ e($pName) }}', searchQueryBriefing)"></span>
+                                                        </td>
+                                                        <td class="py-2.5 px-4 text-zinc-600 dark:text-zinc-300">
+                                                            <span title="{{ $tName }}" class="truncate max-w-[240px] inline-block align-middle" x-html="highlightMatchBriefing('{{ e($tName) }}', searchQueryBriefing)"></span>
+                                                        </td>
+                                                        <td class="py-2.5 px-4 text-center">
+                                                            <flux:badge size="xs" color="{{ $j->sesi === 'pagi' ? 'amber' : 'indigo' }}" class="w-16 justify-center">
+                                                                {{ ucfirst($j->sesi) }}
+                                                            </flux:badge>
+                                                        </td>
+                                                        <td class="py-2.5 px-4 text-center">
+                                                            <div class="inline-flex items-center justify-center gap-1 flex-wrap">
+                                                                @if ($j->is_notulen)
+                                                                    <flux:badge color="amber" size="xs" icon="pencil">Notulen</flux:badge>
+                                                                @endif
+                                                                @if ($isMod)
+                                                                    <flux:badge color="indigo" size="xs" icon="user">Moderator</flux:badge>
+                                                                @endif
+                                                                @if ($isDoa)
+                                                                    <flux:badge color="emerald" size="xs" icon="sparkles">Doa</flux:badge>
+                                                                @endif
+                                                                @if (! $j->is_notulen && ! $isMod && ! $isDoa)
+                                                                    <span class="text-zinc-400 text-xs">—</span>
+                                                                @endif
+                                                            </div>
+                                                        </td>
+                                                        <td class="py-2.5 px-4 text-right">
+                                                            @if ($j->is_switched)
+                                                                {{-- Badge Pengganti (clickable) --}}
+                                                                <div x-data="{ showDetail: false }" class="inline-block">
+                                                                    <button 
+                                                                        @click="showDetail = !showDetail"
+                                                                        @click.outside="showDetail = false"
+                                                                        class="relative"
+                                                                    >
+                                                                        <flux:badge 
+                                                                            color="orange" 
+                                                                            size="xs" 
+                                                                            icon="arrow-path" 
+                                                                            class="cursor-pointer hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
+                                                                        />
+                                                                        
+                                                                        {{-- Tooltip Detail --}}
+                                                                        <div 
+                                                                            x-show="showDetail" 
+                                                                            x-cloak 
+                                                                            x-transition
+                                                                            class="absolute z-20 right-0 top-full mt-1 p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg text-xs w-64"
+                                                                        >
+                                                                            <div class="font-semibold text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-1">
+                                                                                <flux:icon.arrow-path class="size-4" />
+                                                                                Pengganti
+                                                                            </div>
+                                                                            <div class="space-y-1.5 text-zinc-600 dark:text-zinc-300">
+                                                                                <div><strong>Original:</strong> {{ $j->originalPersonil?->nama ?? '—' }}</div>
+                                                                                <div><strong>Alasan:</strong> {{ $j->switch_reason ?? '—' }}</div>
+                                                                                <div><strong>Tanggal:</strong> {{ $j->switched_at ? \Carbon\Carbon::parse($j->switched_at)->format('d M Y, H:i') : '—' }}</div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </button>
+                                                                </div>
+                                                            @elseif ($j->status_konfirmasi === 'berhalangan')
+                                                                <x-status-badge status="berhalangan" />
+                                                            @else
+                                                                {{-- Siap: tampilkan — atau kosong --}}
+                                                                <span class="text-zinc-400 text-xs">—</span>
+                                                            @endif
+                                                        </td>
+                                                    </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+
+                        {{-- Empty Search Result Indicator --}}
+                        <div x-show="searchQueryBriefing.trim() && allDateKeys.every(k => !hasMatch(k))" class="py-8 text-center text-zinc-400 text-sm">
+                            Tidak ada jadwal briefing yang cocok dengan "<span class="font-medium text-zinc-600 dark:text-zinc-300" x-text="searchQueryBriefing"></span>"
+                        </div>
+                    </div>
                 </div>
             @else
                 <div class="px-4 py-8">
@@ -800,95 +1159,10 @@ new #[Title('')] #[Layout('layouts.admin')] class extends Component {
         @endif
     </flux:card>
 
-    {{-- Tabel konfirmasi tertunda --}}
-    @if ($this->daftarKonfirmasiTertunda->isNotEmpty())
-        <flux:card class="p-0 overflow-hidden">
-            <div class="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                <div>
-                    <flux:heading size="sm">Konfirmasi Tertunda</flux:heading>
-                    <flux:text class="text-xs text-zinc-400">10 terdekat</flux:text>
-                </div>
-                <flux:badge size="sm" color="amber">{{ $this->daftarKonfirmasiTertunda->count() }} Menunggu</flux:badge>
-            </div>
-            <div>
-                <flux:table>
-                    <flux:table.columns>
-                        <flux:table.column>Personil</flux:table.column>
-                        <flux:table.column>Tugas</flux:table.column>
-                        <flux:table.column>Tim / Jenis</flux:table.column>
-                        <flux:table.column>Tanggal</flux:table.column>
-                    </flux:table.columns>
-                    <flux:table.rows>
-                        @foreach ($this->daftarKonfirmasiTertunda as $item)
-                            <flux:table.row>
-                                <flux:table.cell class="font-medium text-zinc-900 dark:text-zinc-100">{{ $item['nama'] }}</flux:table.cell>
-                                <flux:table.cell class="text-zinc-600 dark:text-zinc-400">{{ $item['jenis'] }}</flux:table.cell>
-                                <flux:table.cell class="text-zinc-500">{{ $item['tipe'] }}</flux:table.cell>
-                                <flux:table.cell class="text-zinc-500">
-                                    {{ \Carbon\Carbon::parse($item['tanggal'])->translatedFormat('d M Y') }}
-                                </flux:table.cell>
-                            </flux:table.row>
-                        @endforeach
-                    </flux:table.rows>
-                </flux:table>
-            </div>
-        </flux:card>
-    @endif
-
-    {{-- Modal: Calendar Event Detail --}}
-    <div
-        x-show="modalOpen"
-        x-transition
-        @keydown.escape.window="modalOpen = false"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-        style="display: none;"
-    >
-        <div
-            @click.outside="modalOpen = false"
-            class="bg-white dark:bg-zinc-800 rounded-xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4"
-        >
-            <div class="flex items-start justify-between">
-                <div>
-                    <h3 class="font-semibold text-zinc-900 dark:text-zinc-100" x-text="selectedEvent?.title"></h3>
-                    <p class="text-sm text-zinc-500 mt-0.5" x-text="selectedEvent?.tanggal"></p>
-                </div>
-                <button @click="modalOpen = false" class="text-zinc-400 hover:text-zinc-600 p-1">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
-            <dl class="text-sm flex flex-col gap-2">
-                <template x-if="selectedEvent?.jenis === 'adzan'">
-                    <div class="flex flex-col gap-1">
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Personil</dt><dd x-text="selectedEvent?.personil"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Tim</dt><dd x-text="selectedEvent?.tim"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Waktu</dt><dd x-text="selectedEvent?.waktu_sholat?.toUpperCase()"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Tugas</dt><dd x-text="selectedEvent?.jenis_tugas"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Status</dt><dd x-text="selectedEvent?.status_konfirmasi"></dd></div>
-                    </div>
-                </template>
-                <template x-if="selectedEvent?.jenis === 'briefing'">
-                    <div class="flex flex-col gap-1">
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Personil</dt><dd x-text="selectedEvent?.personil"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Tim</dt><dd x-text="selectedEvent?.tim"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Sesi</dt><dd x-text="selectedEvent?.sesi"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Status</dt><dd x-text="selectedEvent?.status_konfirmasi"></dd></div>
-                    </div>
-                </template>
-                <template x-if="selectedEvent?.jenis === 'ruangan'">
-                    <div class="flex flex-col gap-1">
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Tim</dt><dd x-text="selectedEvent?.tim"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Ruangan</dt><dd x-text="selectedEvent?.ruangan"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Kapasitas</dt><dd x-text="selectedEvent?.kapasitas + ' orang'"></dd></div>
-                    </div>
-                </template>
-            </dl>
-        </div>
-    </div>
+    {{-- Modal handled by calendar-widget component --}}
 
     {{-- Modal: Generate Jadwal Confirmation --}}
-    <flux:modal wire:model="modalGenerate" class="max-w-md">
+    <flux:modal name="modal-generate-jadwal" class="max-w-md">
         <div class="flex flex-col gap-4">
             <flux:heading size="lg">Generate Jadwal</flux:heading>
             

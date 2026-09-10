@@ -5,16 +5,21 @@ use App\Models\Personil;
 use App\Models\Tim;
 use Flux\Flux;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
-new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class extends Component {
+new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app')] class extends Component {
+    use WithFileUploads;
+
     // Edit Tim Form State
     public string $nama_tim = '';
     public string $keterangan = '';
+    public $foto_bersama = null;
 
     // Personil Modal Form State
     public ?int $editingPersonilId = null;
@@ -29,6 +34,9 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
     public string $password_baru = '';
     public string $password_baru_confirmation = '';
 
+    // UI Preference State
+    public string $ui_preference = 'auto';
+
     public function mount(): void
     {
         $user = auth()->user();
@@ -36,6 +44,9 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
             $this->nama_tim = $user->tim->nama_tim;
             $this->keterangan = $user->tim->keterangan ?? '';
         }
+        
+        // Load current UI preference
+        $this->ui_preference = auth()->user()->ui_preference ?? 'auto';
     }
 
     #[Computed]
@@ -75,23 +86,53 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
         $this->validate([
             'nama_tim' => 'required|string|max:100',
             'keterangan' => 'nullable|string|max:500',
+            'foto_bersama' => 'nullable|image|max:5120',
         ]);
 
         if (! $this->tim) {
             Flux::toast(variant: 'danger', text: 'Data tim tidak ditemukan.');
+
             return;
         }
 
-        $this->tim->update([
+        $data = [
             'nama_tim' => $this->nama_tim,
             'keterangan' => $this->keterangan ?: null,
-        ]);
+        ];
+
+        if ($this->foto_bersama) {
+            if ($this->tim->foto_bersama && Storage::disk('public')->exists($this->tim->foto_bersama)) {
+                Storage::disk('public')->delete($this->tim->foto_bersama);
+            }
+            $path = $this->foto_bersama->store('tim-photos', 'public');
+            $data['foto_bersama'] = $path;
+            $this->foto_bersama = null;
+        }
+
+        $this->tim->update($data);
 
         Flux::toast(variant: 'success', text: 'Informasi tim berhasil diperbarui.');
         unset($this->tim);
     }
 
-    public function bukaModalTambahPersonil(): void
+    public function hapusFotoBersama(): void
+    {
+        if (! $this->tim) {
+            return;
+        }
+
+        if ($this->tim->foto_bersama && Storage::disk('public')->exists($this->tim->foto_bersama)) {
+            Storage::disk('public')->delete($this->tim->foto_bersama);
+        }
+
+        $this->tim->update(['foto_bersama' => null]);
+        $this->foto_bersama = null;
+        unset($this->tim);
+
+        Flux::toast(variant: 'success', text: 'Foto bersama berhasil dihapus.');
+    }
+
+    public function resetFormPersonil(): void
     {
         $this->editingPersonilId = null;
         $this->personil_nama = '';
@@ -99,10 +140,9 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
         $this->personil_no_hp = '';
         $this->personil_status = 'aktif';
         $this->resetValidation();
-        $this->modal('modal-personil')->show();
     }
 
-    public function bukaModalEditPersonil(int $id): void
+    public function loadPersonilData(int $id): void
     {
         $personil = Personil::where('tim_id', $this->tim?->id)->findOrFail($id);
         $this->editingPersonilId = $personil->id;
@@ -111,6 +151,11 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
         $this->personil_no_hp = $personil->no_hp ?? '';
         $this->personil_status = $personil->status;
         $this->resetValidation();
+    }
+
+    public function bukaModalEditPersonil(int $id): void
+    {
+        $this->loadPersonilData($id);
         $this->modal('modal-personil')->show();
     }
 
@@ -192,6 +237,34 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
             Flux::toast(variant: 'success', text: 'Password akun tim berhasil diperbarui!');
         }
     }
+
+    public function updateUiPreference(): void
+    {
+        $this->validate([
+            'ui_preference' => 'required|in:auto,desktop,mobile',
+        ]);
+
+        $user = auth()->user();
+        if (!$user) {
+            return;
+        }
+
+        // Direct DB update to ensure it saves
+        \DB::table('users')
+            ->where('id', $user->id)
+            ->update(['ui_preference' => $this->ui_preference]);
+
+        // Log untuk debug
+        logger()->info('UI Preference updated via direct query', [
+            'user_id' => $user->id,
+            'new_preference' => $this->ui_preference,
+        ]);
+
+        Flux::toast(variant: 'success', text: 'Preferensi tampilan berhasil disimpan! Halaman akan di-reload...');
+        
+        // Force redirect with full URL to bypass any cache
+        $this->js("window.location.href = window.location.href.split('?')[0] + '?t=' + Date.now()");
+    }
 }; ?>
 
 <div class="space-y-6">
@@ -204,11 +277,6 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
             <flux:text class="text-zinc-500 dark:text-zinc-400 mt-0.5">
                 Kelola informasi tim, anggota personil yang terdaftar, dan keamanan akun login.
             </flux:text>
-        </div>
-        <div class="flex items-center gap-2">
-            <flux:button variant="primary" icon="plus" wire:click="bukaModalTambahPersonil">
-                Tambah Anggota
-            </flux:button>
         </div>
     </div>
 
@@ -253,9 +321,13 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
                         <flux:heading size="md">Daftar Anggota Personil</flux:heading>
                         <flux:text class="text-xs text-zinc-500">Anggota ini yang akan dirotasikan ke dalam jadwal WFO, briefing, dan adzan.</flux:text>
                     </div>
-                    <flux:button size="xs" variant="primary" icon="plus" wire:click="bukaModalTambahPersonil">
-                        Tambah
-                    </flux:button>
+                    @if ($this->personilList->isNotEmpty())
+                        <flux:modal.trigger name="modal-personil" wire:click="resetFormPersonil">
+                            <flux:button size="xs" variant="primary" icon="plus">
+                                Tambah
+                            </flux:button>
+                        </flux:modal.trigger>
+                    @endif
                 </div>
 
                 @if ($this->personilList->isEmpty())
@@ -265,19 +337,21 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
                         </div>
                         <div>
                             <p class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Belum ada anggota personil</p>
-                            <p class="text-xs text-zinc-400">Tambahkan anggota tim kamu agar dapat terjadwal secara otomatis.</p>
+                            <p class="text-xs text-zinc-400">Tambahkan anggota tim agar dapat terjadwal secara otomatis.</p>
                         </div>
-                        <flux:button size="sm" variant="primary" wire:click="bukaModalTambahPersonil">
-                            Tambah Anggota Sekarang
-                        </flux:button>
+                        <flux:modal.trigger name="modal-personil" wire:click="resetFormPersonil">
+                            <flux:button size="sm" variant="primary">
+                                Tambah Anggota Sekarang
+                            </flux:button>
+                        </flux:modal.trigger>
                     </div>
                 @else
                     <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
                         @foreach ($this->personilList as $p)
                             <div class="p-4 flex items-center justify-between gap-4 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors" wire:key="personil-{{ $p->id }}">
                                 <div class="flex items-center gap-3.5 min-w-0">
-                                    <div class="flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-sm shadow-xs flex-shrink-0">
-                                        {{ strtoupper(substr($p->nama, 0, 1)) }}
+                                    <div class="flex size-10 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 flex-shrink-0">
+                                        <flux:icon icon="user" class="size-5" />
                                     </div>
                                     <div class="min-w-0">
                                         <div class="flex items-center gap-2 flex-wrap">
@@ -312,13 +386,14 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
                                 </div>
 
                                 <div class="flex items-center gap-1">
-                                    <flux:button
-                                        size="sm"
-                                        variant="ghost"
-                                        icon="pencil"
-                                        wire:click="bukaModalEditPersonil({{ $p->id }})"
-                                        title="Edit anggota"
-                                    />
+                                    <flux:modal.trigger name="modal-personil" wire:click="loadPersonilData({{ $p->id }})">
+                                        <flux:button
+                                            size="sm"
+                                            variant="ghost"
+                                            icon="pencil"
+                                            title="Edit anggota"
+                                        />
+                                    </flux:modal.trigger>
                                     <flux:button
                                         size="sm"
                                         variant="ghost"
@@ -337,11 +412,86 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
 
         {{-- Right Column: Profil Tim & Password (Span 1) --}}
         <div class="space-y-6">
-            {{-- Form Edit Info Tim --}}
+            {{-- Form Edit Info Tim & Foto Bersama --}}
             <flux:card class="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-4">
                 <div>
-                    <flux:heading size="md">Informasi Tim</flux:heading>
-                    <flux:subheading class="text-xs">Ubah nama atau instansi asal tim kamu</flux:subheading>
+                    <flux:heading size="md">Informasi & Foto Tim</flux:heading>
+                    <flux:subheading class="text-xs">Ubah nama, keterangan, dan unggah foto bersama tim</flux:subheading>
+                </div>
+
+                {{-- Foto Bersama Preview & Upload --}}
+                <div class="space-y-3">
+                    <flux:label>Foto Bersama Tim</flux:label>
+                    
+                    <div class="relative overflow-hidden rounded-xl border-2 border-dashed border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-3 text-center transition-all hover:border-zinc-300 dark:hover:border-zinc-600">
+                        @if ($foto_bersama)
+                            {{-- Temporary uploaded preview --}}
+                            <div class="relative group">
+                                <img src="{{ $foto_bersama->temporaryUrl() }}" alt="Preview Foto Bersama" class="w-full h-44 object-cover rounded-lg shadow-xs" />
+                                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                                    <span class="text-xs font-semibold text-white bg-black/60 px-2.5 py-1 rounded-full">Foto Siap Disimpan</span>
+                                </div>
+                            </div>
+                        @elseif ($this->tim?->foto_bersama)
+                            {{-- Existing saved photo --}}
+                            <div class="relative group">
+                                <img src="{{ \Illuminate\Support\Facades\Storage::url($this->tim->foto_bersama) }}" alt="Foto Bersama {{ $this->tim->nama_tim }}" class="w-full h-44 object-cover rounded-lg shadow-xs" />
+                                <div class="absolute top-2 right-2">
+                                    <button 
+                                        type="button" 
+                                        wire:click="hapusFotoBersama" 
+                                        wire:confirm="Yakin ingin menghapus foto bersama tim?" 
+                                        class="p-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md transition-colors"
+                                        title="Hapus foto"
+                                    >
+                                        <flux:icon icon="trash" class="size-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        @else
+                            {{-- Placeholder when no photo is uploaded --}}
+                            <div class="py-5 flex flex-col items-center justify-center space-y-2 text-zinc-400">
+                                <div class="size-12 rounded-full bg-zinc-200/70 dark:bg-zinc-700/60 flex items-center justify-center text-zinc-500 dark:text-zinc-400">
+                                    <flux:icon icon="camera" class="size-6" />
+                                </div>
+                                <div class="text-xs font-medium text-zinc-600 dark:text-zinc-300">Belum ada foto bersama</div>
+                                <div class="text-[11px] text-zinc-400 max-w-[200px] leading-tight">Foto ini akan tampil di daftar tim admin sebagai identitas & kenang-kenangan.</div>
+                            </div>
+                        @endif
+
+                        {{-- Upload Control --}}
+                        <div class="mt-3 flex items-center justify-center gap-2">
+                            <label for="foto-bersama-input" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer shadow-2xs transition-all">
+                                <flux:icon icon="arrow-up-tray" class="size-3.5 text-zinc-500" />
+                                <span>{{ $this->tim?->foto_bersama || $foto_bersama ? 'Ganti Foto' : 'Unggah Foto' }}</span>
+                            </label>
+                            <input 
+                                id="foto-bersama-input" 
+                                type="file" 
+                                wire:model="foto_bersama" 
+                                accept="image/jpeg,image/png,image/webp,image/jpg" 
+                                class="hidden" 
+                            />
+                            
+                            @if ($foto_bersama)
+                                <button 
+                                    type="button" 
+                                    wire:click="$set('foto_bersama', null)" 
+                                    class="px-2.5 py-1.5 text-xs text-zinc-500 hover:text-red-600 transition-colors"
+                                >
+                                    Batal
+                                </button>
+                            @endif
+                        </div>
+
+                        {{-- Loading Indicator --}}
+                        <div wire:loading wire:target="foto_bersama" class="text-xs text-blue-500 dark:text-blue-400 mt-2 font-medium">
+                            Mengunggah pratinjau foto...
+                        </div>
+                        @error('foto_bersama')
+                            <div class="text-xs text-red-500 mt-1.5">{{ $message }}</div>
+                        @enderror
+                    </div>
                 </div>
 
                 <form wire:submit="updateProfilTim" class="space-y-4">
@@ -396,6 +546,45 @@ new #[Title('Profil & Anggota Tim')] #[Layout('layouts.app.sidebar')] class exte
                     <div class="pt-1">
                         <flux:button type="submit" variant="filled" class="w-full">
                             Perbarui Password
+                        </flux:button>
+                    </div>
+                </form>
+            </flux:card>
+
+            {{-- UI Preference Settings --}}
+            <flux:card class="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-4">
+                <div>
+                    <flux:heading size="md">Pengaturan Tampilan</flux:heading>
+                    <flux:subheading class="text-xs">Pilih mode tampilan yang sesuai untuk perangkat</flux:subheading>
+                </div>
+
+                <form wire:submit="updateUiPreference" class="space-y-4">
+                    <flux:radio.group wire:model.live="ui_preference" label="Mode Tampilan" variant="cards">
+                        <flux:radio value="auto" icon="device-tablet">
+                            <div>
+                                <div class="font-medium">Auto (Recommended)</div>
+                                <div class="text-xs text-zinc-500 dark:text-zinc-400">Otomatis sesuai ukuran layar perangkat</div>
+                            </div>
+                        </flux:radio>
+                        
+                        <flux:radio value="desktop" icon="computer-desktop">
+                            <div>
+                                <div class="font-medium">Desktop Look</div>
+                                <div class="text-xs text-zinc-500 dark:text-zinc-400">Sidebar navigasi di samping (klasik)</div>
+                            </div>
+                        </flux:radio>
+                        
+                        <flux:radio value="mobile" icon="device-phone-mobile">
+                            <div>
+                                <div class="font-medium">Mobile Look</div>
+                                <div class="text-xs text-zinc-500 dark:text-zinc-400">Bottom navigation bar (app-style)</div>
+                            </div>
+                        </flux:radio>
+                    </flux:radio.group>
+
+                    <div class="pt-1">
+                        <flux:button type="submit" variant="primary" class="w-full">
+                            Simpan Pengaturan
                         </flux:button>
                     </div>
                 </form>

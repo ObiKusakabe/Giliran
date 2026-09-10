@@ -38,21 +38,20 @@ class TimAccountGenerator
     }
 
     /**
-     * Buat akun login untuk tim.
+     * Buat akun login untuk tim (username-only, no email).
      */
     public function createAccount(Tim $tim): User
     {
         $username = $this->generateUsername();
-        $email = "{$username}@inovindo.local";
 
         return User::create([
             'name' => $tim->nama_tim,
             'username' => $username,
-            'email' => $email,
+            'email' => null, // No email initially
             'password' => Hash::make('inovindojaya'),
             'role' => 'tim',
             'tim_id' => $tim->id,
-            'email_verified_at' => now(),
+            'email_verified_at' => null,
         ]);
     }
 
@@ -62,16 +61,15 @@ class TimAccountGenerator
     public function createStandaloneAccount(): User
     {
         $username = $this->generateUsername();
-        $email = "{$username}@inovindo.local";
 
         return User::create([
             'name' => "Akun Tim ({$username})",
             'username' => $username,
-            'email' => $email,
+            'email' => null, // No email initially
             'password' => Hash::make('inovindojaya'),
             'role' => 'tim',
             'tim_id' => null,
-            'email_verified_at' => now(),
+            'email_verified_at' => null,
         ]);
     }
 

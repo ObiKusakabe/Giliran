@@ -9,6 +9,7 @@
 
 @php
     $selectedLabel = collect($options)->firstWhere('value', (string) $modelValue)['label'] ?? '';
+    $wireModelName = $attributes->wire('model')->value();
 @endphp
 
 <div
@@ -31,7 +32,13 @@
             this.selectedLabel = option.label;
             this.open = false;
             this.q = '';
-            // Trigger native change event supaya wire:model.live pick up
+            
+            // Direct Livewire update if wire:model is present
+            if ('{{ $wireModelName }}' && typeof $wire !== 'undefined') {
+                $wire.set('{{ $wireModelName }}', option.value);
+            }
+
+            // Trigger native change event
             this.$nextTick(() => {
                 const input = this.$el.querySelector('input[data-hidden]');
                 if (input) {

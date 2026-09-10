@@ -2,6 +2,10 @@
     <flux:sidebar.profile
         :name="auth()->user()->name"
         :initials="auth()->user()->initials()"
+        {{-- Tambah foto profil dari tim atau fallback ke avatar --}}
+        @if(auth()->user()->personil?->tim?->foto_bersama)
+            :src="asset('storage/' . auth()->user()->personil->tim->foto_bersama)"
+        @endif
         icon:trailing="chevrons-up-down"
         data-test="sidebar-menu-button"
     />
@@ -11,6 +15,10 @@
             <flux:avatar
                 :name="auth()->user()->name"
                 :initials="auth()->user()->initials()"
+                {{-- Tambah foto profil di dropdown juga --}}
+                @if(auth()->user()->personil?->tim?->foto_bersama)
+                    :src="asset('storage/' . auth()->user()->personil->tim->foto_bersama)"
+                @endif
             />
             <div class="grid flex-1 text-start text-sm leading-tight">
                 <flux:heading class="truncate">{{ auth()->user()->name }}</flux:heading>

@@ -30,7 +30,7 @@ class KirimNotifikasiH1 extends Command
         $totalDikirim = 0;
 
         // Notifikasi jadwal adzan/kajian
-        $adzanBesok = JadwalAdzanKitab::with('personil.user')
+        $adzanBesok = JadwalAdzanKitab::with('personil')
             ->where('tanggal', $besok)
             ->where('status_konfirmasi', 'menunggu')
             ->get();
@@ -54,11 +54,10 @@ class KirimNotifikasiH1 extends Command
 
             Notifikasi::create([
                 'personil_id' => $personil->id,
-                'user_id' => $personil->user?->id,
                 'tipe' => 'jadwal',
-                'pesan' => "Kamu bertugas {$jadwal->jenis_tugas} "
+                'pesan' => "{$personil->nama} bertugas {$jadwal->jenis_tugas} "
                     .strtoupper($jadwal->waktu_sholat)
-                    .' besok, '.Carbon::parse($besok)->translatedFormat('l d M Y').'.',
+                    .' besok, '.Carbon::parse($besok)->locale('id')->translatedFormat('l d M Y').'.',
                 'data_id' => $jadwal->id,
                 'dibaca' => false,
                 'terkirim_pada' => now(),
@@ -68,7 +67,7 @@ class KirimNotifikasiH1 extends Command
         }
 
         // Notifikasi jadwal briefing
-        $briefingBesok = JadwalBriefing::with('personil.user', 'tim')
+        $briefingBesok = JadwalBriefing::with('personil', 'tim')
             ->where('tanggal', $besok)
             ->where('status_konfirmasi', 'menunggu')
             ->get();
@@ -91,11 +90,10 @@ class KirimNotifikasiH1 extends Command
 
             Notifikasi::create([
                 'personil_id' => $personil->id,
-                'user_id' => $personil->user?->id,
                 'tipe' => 'jadwal',
-                'pesan' => "Kamu mewakili {$jadwal->tim->nama_tim} untuk briefing "
+                'pesan' => "{$personil->nama} mewakili {$jadwal->tim->nama_tim} untuk briefing "
                     .ucfirst($jadwal->sesi)
-                    .' besok, '.Carbon::parse($besok)->translatedFormat('l d M Y').'.',
+                    .' besok, '.Carbon::parse($besok)->locale('id')->translatedFormat('l d M Y').'.',
                 'data_id' => $jadwal->id,
                 'dibaca' => false,
                 'terkirim_pada' => now(),

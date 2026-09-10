@@ -1,4 +1,5 @@
 {
+    "These credentials do not match our records.": "Email/username atau password salah.",
     "Two-factor authentication": "Autentikasi Dua Faktor",
     "Manage your two-factor authentication settings": "Kelola pengaturan autentikasi dua faktor Anda",
     "You will be prompted for a secure, random pin during login, which you can retrieve from the TOTP-supported application on your phone.": "Anda akan diminta PIN acak yang aman saat login, yang bisa Anda dapatkan dari aplikasi TOTP di ponsel Anda.",

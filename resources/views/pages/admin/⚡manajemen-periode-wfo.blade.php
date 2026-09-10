@@ -18,7 +18,7 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
     public string $sortField = 'tanggal_mulai';
     public string $sortDir   = 'desc';
 
-    public function sort(string $field): void
+    public function sortBy(string $field): void
     {
         if ($this->sortField === $field) {
             $this->sortDir = $this->sortDir === 'asc' ? 'desc' : 'asc';
@@ -142,7 +142,7 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
     <div class="flex items-center justify-between">
         <div>
             <flux:heading size="xl">Periode WFO</flux:heading>
-            <flux:text class="text-zinc-500">Kelola periode rotasi WFO — 1 periode aktif menjadi acuan penjadwalan.</flux:text>
+            <flux:text class="text-zinc-500">Kelola periode rotasi WFO - 1 periode aktif menjadi acuan penjadwalan.</flux:text>
         </div>
         <flux:button variant="primary" wire:click="bukaTambah" icon="plus">Buat Periode Baru</flux:button>
     </div>
@@ -194,10 +194,10 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
         </flux:card>
     </div>
 
-    <flux:card class="p-0 overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
+    <flux:card class="p-0 overflow-visible table-sticky-card border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
         <div class="px-5">
             <flux:table>
-                <flux:table.columns class="sticky top-0 z-10 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-700">
+                <flux:table.columns class="bg-white dark:bg-zinc-900">
                     <flux:table.column>Keterangan</flux:table.column>
                     <flux:table.column class="cursor-pointer select-none" wire:click="sortBy('tanggal_mulai')">
                         <span class="inline-flex items-center gap-1">Tanggal Mulai
@@ -231,11 +231,33 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
                             <flux:table.cell align="center"><x-status-badge :status="$periode->status" /></flux:table.cell>
                             <flux:table.cell align="end">
                                 <div class="flex items-center justify-end gap-1.5">
-                                    <flux:button size="xs" variant="ghost" icon="pencil" wire:click="bukaEdit({{ $periode->id }})" title="Edit Periode">
-                                        Edit
+                                    <flux:button 
+                                        size="xs" 
+                                        variant="ghost" 
+                                        icon="pencil" 
+                                        wire:click="bukaEdit({{ $periode->id }})" 
+                                        wire:loading.attr="disabled" 
+                                        wire:target="bukaEdit({{ $periode->id }})"
+                                        title="Edit Periode"
+                                    >
+                                        <span wire:loading.remove wire:target="bukaEdit({{ $periode->id }})">Edit</span>
+                                        <span wire:loading wire:target="bukaEdit({{ $periode->id }})">
+                                            <flux:icon icon="arrow-path" class="size-4 animate-spin" />
+                                        </span>
                                     </flux:button>
                                     @if (! $periode->isAktif())
-                                        <flux:button size="xs" variant="primary" wire:click="konfirmasiAktifkan({{ $periode->id }})">Aktifkan</flux:button>
+                                        <flux:button 
+                                            size="xs" 
+                                            variant="primary" 
+                                            wire:click="konfirmasiAktifkan({{ $periode->id }})"
+                                            wire:loading.attr="disabled" 
+                                            wire:target="konfirmasiAktifkan({{ $periode->id }})"
+                                        >
+                                            <span wire:loading.remove wire:target="konfirmasiAktifkan({{ $periode->id }})">Aktifkan</span>
+                                            <span wire:loading wire:target="konfirmasiAktifkan({{ $periode->id }})">
+                                                <flux:icon icon="arrow-path" class="size-4 animate-spin" />
+                                            </span>
+                                        </flux:button>
                                     @else
                                         <span class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold px-2">Sedang Aktif</span>
                                     @endif

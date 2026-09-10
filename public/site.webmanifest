@@ -1,0 +1,22 @@
+{
+    "name": "Giliran - Sistem Penjadwalan",
+    "short_name": "Giliran",
+    "description": "Sistem penjadwalan rotasi tim berbasis LRA algorithm",
+    "start_url": "/",
+    "display": "standalone",
+    "theme_color": "#ffffff",
+    "background_color": "#ffffff",
+    "icons": [
+        {
+            "src": "/favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/apple-touch-icon.png",
+            "sizes": "180x180",
+            "type": "image/png"
+        }
+    ]
+}

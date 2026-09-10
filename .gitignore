@@ -25,11 +25,13 @@ yarn-error.log
 /.vscode
 /.zed
 
-# Markdown files (except README)
-*.md
-!README.md
-!README*.md
-BATCH_LOG.md
+# Markdown files at root (except README and AGENTS)
+/*.md
+!/README.md
+!/AGENTS.md
+
+# Docs folder
+/docs/
 
 # Session and temp framework files
 /sess_*

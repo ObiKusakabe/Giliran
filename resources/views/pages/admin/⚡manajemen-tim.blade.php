@@ -1,50 +1,110 @@
 <?php
 
 use App\Models\Tim;
+use App\Models\User;
+use App\Services\TimAccountGenerator;
+use App\Services\TimNamingService;
 use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
+new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
+{
+    public ?int $editingId = null;
 
-    public ?int $editingId    = null;
-    public string $nama_tim   = '';
+    public string $nama_tim = '';
+
     public string $keterangan = '';
-    public string $status     = 'active'; // Default status
-    public ?int $hapusId      = null;
+
+    public string $status = 'active'; // Default status
+
+    public ?int $hapusId = null;
+
     public string $filterStatus = 'active'; // 'all', 'active', 'inactive', 'has_account', 'no_account'
+
     public ?int $toggleStatusId = null; // ID tim yang akan toggle status
 
     public ?int $generateTimId = null;
+
     public ?string $generateTimNama = null;
 
     public int $jumlahGenerate = 1;
+
     public array $akunBaruGenerated = [];
+
+    // Foto Modal State
+    public bool $showFotoModal = false;
+
+    public ?int $fotoTimId = null;
 
     #[Computed]
     public function semuaTim(): array
     {
-        return Tim::with('user')->withCount('personil')
-            ->orderBy('nama_tim')
+        // Map English day names to Indonesian lowercase
+        $dayMap = [
+            'Monday' => 'senin',
+            'Tuesday' => 'selasa',
+            'Wednesday' => 'rabu',
+            'Thursday' => 'kamis',
+            'Friday' => 'jumat',
+            'Saturday' => 'sabtu',
+            'Sunday' => 'minggu',
+        ];
+        
+        $hariIni = $dayMap[now()->format('l')] ?? 'senin';
+        
+        // Get active periode_wfo_id
+        $periodeAktif = \App\Models\PeriodeWfo::where('status', 'aktif')->first();
+        
+        return Tim::with('user')
+            ->withCount('personil')
+            ->when($periodeAktif, function ($query) use ($periodeAktif, $hariIni) {
+                $query->leftJoin('jadwal_wfo', function ($join) use ($periodeAktif, $hariIni) {
+                    $join->on('tim.id', '=', 'jadwal_wfo.tim_id')
+                        ->where('jadwal_wfo.periode_wfo_id', $periodeAktif->id)
+                        ->where('jadwal_wfo.hari', $hariIni);
+                })
+                ->selectRaw('tim.*, IF(jadwal_wfo.id IS NOT NULL, 1, 0) as is_wfo_today')
+                ->orderByDesc('is_wfo_today');
+            })
+            ->orderBy('tim.nama_tim')
             ->get()
             ->map(fn ($t) => [
-                'id'             => $t->id,
-                'nama_tim'       => $t->nama_tim,
-                'keterangan'     => $t->keterangan ?? '',
-                'status'         => $t->status,
+                'id' => $t->id,
+                'nama_tim' => $t->nama_tim,
+                'keterangan' => $t->keterangan ?? '',
+                'status' => $t->status,
                 'personil_count' => $t->personil_count,
-                'has_account'    => $t->user !== null,
-                'account_user'   => $t->user?->username ?? $t->user?->email,
+                'has_account' => $t->user !== null,
+                'account_user' => $t->user?->username ?? $t->user?->email,
+                'foto_bersama' => $t->foto_bersama,
+                'is_wfo_today' => $t->is_wfo_today ?? false,
             ])
             ->toArray();
+    }
+
+    public function showFotoModal(int $timId): void
+    {
+        $this->fotoTimId = $timId;
+        $this->showFotoModal = true;
+    }
+
+    #[Computed]
+    public function selectedTim(): ?Tim
+    {
+        if (! $this->fotoTimId) {
+            return null;
+        }
+
+        return Tim::find($this->fotoTimId);
     }
 
     #[Computed]
     public function akunMenunggu(): array
     {
-        return \App\Models\User::where('role', 'tim')
+        return User::where('role', 'tim')
             ->whereNull('tim_id')
             ->orderByDesc('id')
             ->get()
@@ -83,7 +143,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
     #[Computed]
     public function totalMenungguOnboarding(): int
     {
-        return \App\Models\User::where('role', 'tim')->whereNull('tim_id')->count();
+        return User::where('role', 'tim')->whereNull('tim_id')->count();
     }
 
     public function bukaFormTambah(): void
@@ -105,7 +165,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
             'jumlahGenerate' => 'required|integer|min:1|max:10',
         ]);
 
-        $generator = app(\App\Services\TimAccountGenerator::class);
+        $generator = app(TimAccountGenerator::class);
         $createdUsers = $generator->createMultipleStandaloneAccounts($this->jumlahGenerate);
 
         $this->akunBaruGenerated = array_map(fn ($u) => [
@@ -116,7 +176,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
 
         Flux::toast(
             variant: 'success',
-            text: count($createdUsers)." Akun tim berhasil di-generate! Berikan kredensial ke anak magang."
+            text: count($createdUsers).' Akun tim berhasil di-generate! Berikan kredensial ke anak magang.'
         );
 
         unset($this->akunMenunggu, $this->totalMenungguOnboarding);
@@ -124,7 +184,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
 
     public function hapusAkunStandalone(int $id): void
     {
-        $user = \App\Models\User::where('role', 'tim')->whereNull('tim_id')->find($id);
+        $user = User::where('role', 'tim')->whereNull('tim_id')->find($id);
         if ($user) {
             $user->delete();
             Flux::toast(variant: 'success', text: 'Akun tim yang belum terpakai berhasil dihapus.');
@@ -134,43 +194,43 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
 
     public function bukaFormEdit(int $id): void
     {
-        $tim              = Tim::findOrFail($id);
-        $this->editingId  = $id;
-        $this->nama_tim   = $tim->nama_tim;
+        $tim = Tim::findOrFail($id);
+        $this->editingId = $id;
+        $this->nama_tim = $tim->nama_tim;
         $this->keterangan = $tim->keterangan ?? '';
-        $this->status     = $tim->status;
+        $this->status = $tim->status;
         $this->modal('form-tim')->show();
     }
 
     public function simpan(): void
     {
         $this->validate([
-            'nama_tim'   => 'required|string|max:100',
+            'nama_tim' => 'required|string|max:100',
             'keterangan' => 'nullable|string',
-            'status'     => 'required|in:active,inactive',
+            'status' => 'required|in:active,inactive',
         ]);
 
         // Auto-generate nama dengan suffix gelombang jika create baru
         $namaTim = $this->nama_tim;
-        if (!$this->editingId && !str_contains($this->nama_tim, '-' . now()->year . '-')) {
-            $naming = app(\App\Services\TimNamingService::class);
+        if (! $this->editingId && ! str_contains($this->nama_tim, '-'.now()->year.'-')) {
+            $naming = app(TimNamingService::class);
             $namaTim = $naming->generateNamaGelombang($this->nama_tim);
         }
 
         if ($this->editingId) {
             Tim::findOrFail($this->editingId)->update([
-                'nama_tim'   => $namaTim,
+                'nama_tim' => $namaTim,
                 'keterangan' => $this->keterangan ?: null,
-                'status'     => $this->status,
+                'status' => $this->status,
             ]);
             Flux::toast(variant: 'success', text: 'Tim berhasil diperbarui.');
         } else {
             Tim::create([
-                'nama_tim'   => $namaTim,
+                'nama_tim' => $namaTim,
                 'keterangan' => $this->keterangan ?: null,
-                'status'     => $this->status,
+                'status' => $this->status,
             ]);
-            Flux::toast(variant: 'success', text: 'Tim berhasil ditambahkan dengan nama: ' . $namaTim);
+            Flux::toast(variant: 'success', text: 'Tim berhasil ditambahkan dengan nama: '.$namaTim);
         }
 
         $this->modal('form-tim')->close();
@@ -186,7 +246,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
 
     public function toggleStatus(): void
     {
-        if (!$this->toggleStatusId) {
+        if (! $this->toggleStatusId) {
             return;
         }
 
@@ -225,10 +285,11 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
         if ($tim->user) {
             Flux::toast(variant: 'warning', text: 'Tim ini sudah memiliki akun login.');
             $this->modal('konfirmasi-generate-akun')->close();
+
             return;
         }
 
-        $generator = app(\App\Services\TimAccountGenerator::class);
+        $generator = app(TimAccountGenerator::class);
         $user = $generator->createAccount($tim);
 
         Flux::toast(
@@ -273,10 +334,10 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
 
     private function resetForm(): void
     {
-        $this->editingId  = null;
-        $this->nama_tim   = '';
+        $this->editingId = null;
+        $this->nama_tim = '';
         $this->keterangan = '';
-        $this->status     = 'active'; // Reset to default
+        $this->status = 'active'; // Reset to default
         $this->resetValidation();
     }
 }; ?>
@@ -344,7 +405,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
             <flux:text class="text-zinc-500">Kelola data tim peserta PKL/magang dan akun login mandiri.</flux:text>
         </div>
         <div class="flex items-center gap-2.5">
-            <flux:button variant="subtle" wire:click="bukaModalGenerateAkunBaru" icon="sparkles">
+            <flux:button variant="subtle" @click="$wire.bukaModalGenerateAkunBaru()" icon="sparkles">
                 Generate Akun Baru
             </flux:button>
             <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus" class="flex-shrink-0">
@@ -500,7 +561,13 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
                 <div class="flex items-center gap-3 px-4 py-3">
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
-                            <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate" x-text="tim.nama_tim"></p>
+                            <a 
+                                :href="`/admin/personil?tim=${tim.id}`"
+                                wire:navigate
+                                class="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer underline decoration-transparent hover:decoration-current"
+                                x-text="tim.nama_tim"
+                                title="Lihat personil tim ini"
+                            ></a>
                             <span x-show="tim.status === 'active'" class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">Active</span>
                             <span x-show="tim.status === 'inactive'" class="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-700 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-400">Inactive</span>
                         </div>
@@ -545,31 +612,31 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
                 <flux:table.columns class="sticky top-0 z-10 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-700">
                     <flux:table.column @click="toggleSort('nama_tim')" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
                         <span class="inline-flex items-center gap-1">Nama Tim
-                            <svg x-show="sortField==='nama_tim' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
-                            <svg x-show="sortField==='nama_tim' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                            <svg x-show="sortField!=='nama_tim'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                            <svg x-show="sortField === 'nama_tim' && sortDir === 'asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                            <svg x-show="sortField === 'nama_tim' && sortDir === 'desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg x-show="sortField !== 'nama_tim'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
                         </span>
                     </flux:table.column>
                     <flux:table.column @click="toggleSort('status')" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
                         <span class="inline-flex items-center gap-1">Status
-                            <svg x-show="sortField==='status' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
-                            <svg x-show="sortField==='status' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                            <svg x-show="sortField!=='status'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                            <svg x-show="sortField === 'status' && sortDir === 'asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                            <svg x-show="sortField === 'status' && sortDir === 'desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg x-show="sortField !== 'status'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
                         </span>
                     </flux:table.column>
                     <flux:table.column @click="toggleSort('has_account')" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
                         <span class="inline-flex items-center gap-1">Akun Login
-                            <svg x-show="sortField==='has_account' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
-                            <svg x-show="sortField==='has_account' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                            <svg x-show="sortField!=='has_account'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                            <svg x-show="sortField === 'has_account' && sortDir === 'asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                            <svg x-show="sortField === 'has_account' && sortDir === 'desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg x-show="sortField !== 'has_account'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
                         </span>
                     </flux:table.column>
                     <flux:table.column>Keterangan</flux:table.column>
                     <flux:table.column @click="toggleSort('personil_count')" align="center" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
                         <span class="inline-flex items-center justify-center gap-1">Personil
-                            <svg x-show="sortField==='personil_count' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
-                            <svg x-show="sortField==='personil_count' && sortDir==='desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
-                            <svg x-show="sortField!=='personil_count'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+                            <svg x-show="sortField === 'personil_count' && sortDir === 'asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                            <svg x-show="sortField === 'personil_count' && sortDir === 'desc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg x-show="sortField !== 'personil_count'" class="h-3.5 w-3.5 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
                         </span>
                     </flux:table.column>
                     <flux:table.column align="end">Aksi</flux:table.column>
@@ -582,17 +649,70 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
                     </template>
                     <template x-for="tim in displayed" :key="tim.id">
                         <flux:table.row>
-                            <flux:table.cell class="font-medium text-zinc-900 dark:text-zinc-100" x-text="tim.nama_tim"></flux:table.cell>
+                            {{-- Nama Tim dengan Foto Thumbnail --}}
+                            <flux:table.cell>
+                                <div class="flex items-center gap-3">
+                                    {{-- Foto/Avatar --}}
+                                    <button 
+                                        type="button"
+                                        @click="$wire.showFotoModal(tim.id)" 
+                                        class="relative group flex-shrink-0"
+                                        x-show="tim.foto_bersama"
+                                    >
+                                        <img 
+                                            :src="'/storage/' + tim.foto_bersama" 
+                                            :alt="'Foto ' + tim.nama_tim"
+                                            class="size-10 rounded-lg object-cover border border-zinc-200 dark:border-zinc-700 group-hover:ring-2 group-hover:ring-brand transition-all cursor-pointer"
+                                        />
+                                        <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                                            <flux:icon icon="magnifying-glass-plus" class="size-4 text-white" />
+                                        </div>
+                                    </button>
+                                    <div x-show="!tim.foto_bersama" class="size-10 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm font-semibold text-zinc-400 flex-shrink-0" x-text="tim.nama_tim.charAt(0)"></div>
+                                    
+                                    {{-- Nama Tim + Badge WFO --}}
+                                    <div class="flex flex-col gap-1">
+                                        <a 
+                                            :href="`/admin/personil?tim=${tim.id}`"
+                                            wire:navigate
+                                            class="font-medium text-zinc-900 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer underline decoration-transparent hover:decoration-current"
+                                            x-text="tim.nama_tim"
+                                            title="Lihat personil tim ini"
+                                        ></a>
+                                        <span x-show="tim.is_wfo_today" class="inline-flex items-center gap-1 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300 w-fit">
+                                            <flux:icon icon="building-office" class="size-3" />
+                                            WFO Hari Ini
+                                        </span>
+                                    </div>
+                                </div>
+                            </flux:table.cell>
                             <flux:table.cell>
                                 <span x-show="tim.status === 'active'" class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">Active</span>
                                 <span x-show="tim.status === 'inactive'" class="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-700 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-400">Inactive</span>
                             </flux:table.cell>
                             <flux:table.cell>
                                 <template x-if="tim.has_account">
-                                    <span class="inline-flex items-center gap-1.5 rounded-md bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/50 px-2.5 py-1 text-xs font-medium text-purple-700 dark:text-purple-300">
-                                        <flux:icon icon="key" class="size-3.5 text-purple-500" />
-                                        <span x-text="tim.account_user"></span>
-                                    </span>
+                                    <div class="relative">
+                                        <div
+                                            x-data="{ hovering: false, copied: false }"
+                                            @mouseenter="hovering = true"
+                                            @mouseleave="hovering = false; copied = false"
+                                            @click="navigator.clipboard.writeText(tim.account_user); copied = true; setTimeout(() => copied = false, 1500);"
+                                            :class="copied ? 'bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-800/50 text-green-700 dark:text-green-300' : 'bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800/50 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50'"
+                                            class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium cursor-pointer transition-colors"
+                                        >
+                                            <svg x-show="! hovering && ! copied" class="size-3.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.169.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                                            </svg>
+                                            <svg x-show="hovering && ! copied" class="size-3.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+                                            </svg>
+                                            <svg x-show="copied" class="size-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                            </svg>
+                                            <span x-text="copied ? 'Tercopy!' : tim.account_user"></span>
+                                        </div>
+                                    </div>
                                 </template>
                                 <template x-if="!tim.has_account">
                                     <flux:button size="xs" variant="subtle" icon="key" @click="$wire.konfirmasiGenerateAkun(tim.id)">
@@ -754,10 +874,10 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
 
     {{-- Modal Generate Akun Standalone / Batch --}}
     <flux:modal name="modal-generate-standalone" class="max-w-lg">
-        <div class="flex flex-col gap-5 p-1" x-data="{ copied: false }">
+        <div class="flex flex-col gap-5 p-1" x-data="{ copied: false, copiedUser: null }">
             <div class="flex items-center gap-3">
-                <div class="flex size-10 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-md">
-                    <flux:icon icon="sparkles" class="size-5" />
+                <div class="flex size-10 items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800/50">
+                    <flux:icon icon="sparkles" class="size-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
                     <flux:heading size="lg">Generate Akun Tim Magang</flux:heading>
@@ -822,11 +942,28 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
                     </div>
 
                     <div class="max-h-60 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800">
-                        @foreach ($akunBaruGenerated as $acc)
-                            <div class="p-3 flex items-center justify-between text-xs">
-                                <div>
-                                    <div class="font-mono font-bold text-purple-600 dark:text-purple-400">{{ $acc['username'] }}</div>
+                        @foreach ($akunBaruGenerated as $idx => $acc)
+                            <div class="p-3 flex items-center justify-between text-xs gap-3">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <div class="font-mono font-bold text-purple-600 dark:text-purple-400">{{ $acc['username'] }}</div>
+                                        <button
+                                            type="button"
+                                            @click="navigator.clipboard.writeText('{{ $acc['username'] }}'); copiedUser = '{{ $acc['username'] }}'; setTimeout(() => copiedUser = null, 2000);"
+                                            class="text-zinc-400 hover:text-purple-600 dark:hover:text-purple-400 transition"
+                                        >
+                                            <svg x-show="copiedUser !== '{{ $acc['username'] }}'" class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                            <svg x-show="copiedUser === '{{ $acc['username'] }}'" class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                     <div class="text-zinc-400 text-[11px]">Email: {{ $acc['email'] }}</div>
+                                    <div class="text-emerald-600 dark:text-emerald-400 text-[10px] font-medium mt-0.5" x-show="copiedUser === '{{ $acc['username'] }}'" x-transition>
+                                        ✓ Tercopy ke clipboard!
+                                    </div>
                                 </div>
                                 <div class="text-right">
                                     <span class="font-mono bg-zinc-100 dark:bg-zinc-700 px-2 py-0.5 rounded text-zinc-800 dark:text-zinc-200 font-medium">
@@ -843,5 +980,38 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component {
                 </div>
             @endif
         </div>
+    </flux:modal>
+
+    {{-- Modal: Foto Bersama Tim (Lightbox) --}}
+    <flux:modal wire:model="showFotoModal" class="max-w-3xl">
+        @if ($this->selectedTim && $this->selectedTim->foto_bersama)
+            <div class="space-y-4">
+                <div>
+                    <flux:heading size="lg">Foto Bersama {{ $this->selectedTim->nama_tim }}</flux:heading>
+                    @if ($this->selectedTim->keterangan)
+                        <flux:subheading class="mt-1 text-sm">{{ $this->selectedTim->keterangan }}</flux:subheading>
+                    @endif
+                </div>
+
+                <div class="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700">
+                    <img 
+                        src="{{ Storage::url($this->selectedTim->foto_bersama) }}" 
+                        alt="Foto Bersama Tim"
+                        class="w-full h-auto object-contain max-h-[70vh]"
+                    />
+                </div>
+
+                <div class="flex justify-end pt-2">
+                    <flux:button variant="ghost" wire:click="$set('showFotoModal', false)">
+                        Tutup
+                    </flux:button>
+                </div>
+            </div>
+        @else
+            <div class="text-center py-8 text-zinc-400">
+                <flux:icon icon="photo" class="size-12 mx-auto mb-3" />
+                <p class="text-sm">Tidak ada foto bersama untuk tim ini.</p>
+            </div>
+        @endif
     </flux:modal>
 </div>

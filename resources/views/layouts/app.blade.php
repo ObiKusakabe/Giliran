@@ -1,5 +1,5 @@
-<x-layouts::app.sidebar :title="$title ?? null">
-    <flux:main>
-        {{ $slot }}
-    </flux:main>
+@props(['title' => null, 'breadcrumbs' => []])
+
+<x-layouts::app.sidebar :title="$title" :breadcrumbs="$breadcrumbs">
+    {{ $slot }}
 </x-layouts::app.sidebar>

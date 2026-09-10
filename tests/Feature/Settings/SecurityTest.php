@@ -34,8 +34,8 @@ test('profile page displays security sections', function () {
 
     $response->assertOk();
     $response->assertSee('Passkeys');
-    $response->assertSee('No passkeys yet');
-    $response->assertSee('Two-factor authentication');
+    $response->assertSee(__('No passkeys yet'));
+    $response->assertSee(__('Two-factor authentication'));
 });
 
 test('two factor authentication disabled when confirmation abandoned between requests', function () {
@@ -69,13 +69,13 @@ test('password can be updated', function () {
 
     $response = Livewire::test('pages::settings.profile')
         ->set('current_password', 'password')
-        ->set('password', 'new-password')
-        ->set('password_confirmation', 'new-password')
+        ->set('password', 'New-password123')
+        ->set('password_confirmation', 'New-password123')
         ->call('updatePassword');
 
     $response->assertHasNoErrors();
 
-    expect(Hash::check('new-password', $user->refresh()->password))->toBeTrue();
+    expect(Hash::check('New-password123', $user->refresh()->password))->toBeTrue();
 });
 
 test('correct password must be provided to update password', function () {
@@ -87,8 +87,8 @@ test('correct password must be provided to update password', function () {
 
     $response = Livewire::test('pages::settings.profile')
         ->set('current_password', 'wrong-password')
-        ->set('password', 'new-password')
-        ->set('password_confirmation', 'new-password')
+        ->set('password', 'New-password123')
+        ->set('password_confirmation', 'New-password123')
         ->call('updatePassword');
 
     $response->assertHasErrors(['current_password']);

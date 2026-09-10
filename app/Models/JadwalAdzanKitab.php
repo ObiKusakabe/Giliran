@@ -26,6 +26,10 @@ class JadwalAdzanKitab extends Model
         'waktu_sholat',
         'jenis_tugas',
         'status_konfirmasi',
+        'is_switched',
+        'original_personil_id',
+        'switch_reason',
+        'switched_at',
     ];
 
     protected function casts(): array
@@ -39,5 +43,11 @@ class JadwalAdzanKitab extends Model
     public function personil(): BelongsTo
     {
         return $this->belongsTo(Personil::class, 'personil_id');
+    }
+
+    /** @return BelongsTo<Personil, $this> */
+    public function originalPersonil(): BelongsTo
+    {
+        return $this->belongsTo(Personil::class, 'original_personil_id');
     }
 }

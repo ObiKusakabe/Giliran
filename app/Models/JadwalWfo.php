@@ -24,6 +24,20 @@ class JadwalWfo extends Model
         'hari',
     ];
 
+    /**
+     * Boot method - Add global scope for tim isolation.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('tim_isolation', function ($builder) {
+            $user = auth()->user();
+
+            if ($user && $user->isTim()) {
+                $builder->where('tim_id', $user->tim_id);
+            }
+        });
+    }
+
     /** @return BelongsTo<PeriodeWfo, $this> */
     public function periodeWfo(): BelongsTo
     {

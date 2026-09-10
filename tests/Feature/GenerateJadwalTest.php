@@ -8,6 +8,7 @@ use App\Models\PeriodeWfo;
 use App\Models\Personil;
 use App\Models\Ruangan;
 use App\Models\Tim;
+use App\Models\User;
 use App\Services\LraScheduler;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -146,4 +147,15 @@ test('generate 1 minggu penuh: semua tabel terisi dan GEN-05 terpenuhi', functio
     expect(JadwalAdzanKitab::count())->toBeGreaterThan(0);
     expect(JadwalBriefing::count())->toBeGreaterThan(0);
     expect(AlokasiRuangan::count())->toBeGreaterThan(0);
+});
+
+test('halaman admin generate-jadwal dapat diakses dan dirender dengan 200 OK', function () {
+    $user = User::factory()->create(['role' => 'admin']);
+    setupPeriodeWfo();
+
+    $this->actingAs($user)
+        ->get(route('admin.generate-jadwal'))
+        ->assertOk()
+        ->assertSee('Generate Jadwal')
+        ->assertSee('Generate & Preview');
 });

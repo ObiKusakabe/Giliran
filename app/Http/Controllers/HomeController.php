@@ -25,7 +25,7 @@ class HomeController extends Controller
                 return redirect()->route('tim.onboarding');
             }
 
-            return redirect('/jadwal-tim');
+            return redirect()->route('tim.beranda');
         }
 
         return redirect('/login');

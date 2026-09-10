@@ -20,11 +20,19 @@ export default defineConfig({
                     optimizedFallbacks: false,
                 }),
             ],
+            // Disable preloading for fonts to avoid browser warnings
+            // Modern browsers cache fonts efficiently without preload hints
+            preload: (src) => !src.includes('.woff'),
         }),
         tailwindcss(),
     ],
     server: {
         cors: true,
+        strictPort: false,
+        hmr: {
+            host: 'localhost',
+            protocol: 'ws',
+        },
         watch: {
             ignored: ['**/storage/framework/views/**'],
         },

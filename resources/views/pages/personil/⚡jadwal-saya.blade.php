@@ -15,6 +15,16 @@ new #[Title('Jadwal Saya')] #[Layout('layouts.auth')] class extends Component {
     public ?int $konfirmasiId   = null;
     public string $konfirmasiTipe = ''; // 'adzan' | 'briefing'
 
+    // Modal berhalangan
+    public bool $modalBerhalangan = false;
+    public int $selectedJadwalId = 0;
+    public string $selectedJadwalTipe = '';
+    public string $alasanBerhalangan = '';
+    
+    // PHASE 3: Berhalangan scope (pagi/sore/both)
+    public string $berhalanganScope = 'single'; // 'single' or 'both'
+    public ?int $relatedJadwalId = null; // For "both" scenario
+
     #[Computed]
     public function personil()
     {
@@ -40,14 +50,26 @@ new #[Title('Jadwal Saya')] #[Layout('layouts.auth')] class extends Component {
                 'id'                => $j->id,
                 'tipe'              => 'adzan',
                 'tanggal'           => $j->tanggal,
-                'label'             => ucfirst($j->jenis_tugas).' '.strtoupper($j->waktu_sholat),
-                'keterangan'        => 'Adzan & Kajian',
+                'label'             => ucfirst($j->jenis_tugas).' '.match($j->waktu_sholat) {
+                    'dhuhr' => 'Zuhur',
+                    'asr' => 'Ashar',
+                    'fajr' => 'Subuh',
+                    'maghrib' => 'Maghrib',
+                    'isha' => 'Isya',
+                    default => strtoupper($j->waktu_sholat),
+                },
+                'keterangan'        => ucfirst($j->jenis_tugas),  // "Adzan" atau "Kajian" saja, bukan gabungan
                 'status_konfirmasi' => $j->status_konfirmasi,
+                'roles'             => [], // Empty untuk adzan
             ])
             ->toArray();
 
         $briefing = JadwalBriefing::with('tim')
-            ->where('personil_id', $personilId)
+            ->where(function ($query) use ($personilId) {
+                $query->where('personil_id', $personilId)
+                    ->orWhere('moderator_id', $personilId)
+                    ->orWhere('doa_id', $personilId);
+            })
             ->where('tanggal', '>=', $sekarang)
             ->orderBy('tanggal')
             ->get()
@@ -58,6 +80,12 @@ new #[Title('Jadwal Saya')] #[Layout('layouts.auth')] class extends Component {
                 'label'             => 'Briefing '.ucfirst($j->sesi),
                 'keterangan'        => $j->tim->nama_tim ?? '—',
                 'status_konfirmasi' => $j->status_konfirmasi,
+                // PHASE 4: Role labels - personil_id adalah notulensi
+                'roles'             => collect([
+                    $j->personil_id === $personilId ? 'Notulensi' : null,
+                    $j->moderator_id === $personilId ? 'Moderator' : null,
+                    $j->doa_id === $personilId ? 'Doa' : null,
+                ])->filter()->values()->toArray(),
             ])
             ->toArray();
 
@@ -80,39 +108,140 @@ new #[Title('Jadwal Saya')] #[Layout('layouts.auth')] class extends Component {
             ->count();
     }
 
-    public function konfirmasiSiap(int $id, string $tipe): void
+    public function openModalBerhalangan(int $id, string $tipe): void
     {
-        $this->updateStatusKonfirmasi($id, $tipe, 'siap');
-        Flux::toast(variant: 'success', text: 'Konfirmasi kehadiran berhasil disimpan.');
-        unset($this->tugasMendatang);
+        $this->selectedJadwalId = $id;
+        $this->selectedJadwalTipe = $tipe;
+        $this->alasanBerhalangan = '';
+        $this->berhalanganScope = 'single';
+        $this->relatedJadwalId = null;
+        
+        // PHASE 3: Check if personil punya jadwal di sesi lain di hari yang sama (only for briefing)
+        if ($tipe === 'briefing') {
+            $jadwal = JadwalBriefing::findOrFail($id);
+            $sesiLain = $jadwal->sesi === 'pagi' ? 'sore' : 'pagi';
+            
+            $relatedJadwal = JadwalBriefing::where('personil_id', $this->personil->id)
+                ->where('tanggal', $jadwal->tanggal)
+                ->where('sesi', $sesiLain)
+                ->where('status_konfirmasi', '!=', 'berhalangan')
+                ->first();
+            
+            $this->relatedJadwalId = $relatedJadwal?->id;
+        }
+        
+        $this->modalBerhalangan = true;
     }
 
-    public function konfirmasiBerhalangan(int $id, string $tipe): void
+    public function konfirmasiBerhalangan(): void
     {
+        $this->validate([
+            'alasanBerhalangan' => 'required|min:10|max:500',
+            'berhalanganScope' => 'required|in:single,both',
+        ], [
+            'alasanBerhalangan.required' => 'Alasan berhalangan wajib diisi.',
+            'alasanBerhalangan.min' => 'Alasan minimal 10 karakter.',
+            'alasanBerhalangan.max' => 'Alasan maksimal 500 karakter.',
+        ]);
+
         if (! $this->personil) {
             return;
         }
 
-        $autoSwap = app(AutoSwapService::class);
+        // PHASE 3 - PART 2: Check berhalangan counter PER-TIM (bukan per-personil)
+        // Formula: COUNT(DISTINCT tanggal) per tim per jenis per bulan
+        $jadwal = $this->selectedJadwalTipe === 'adzan' 
+            ? JadwalAdzanKitab::findOrFail($this->selectedJadwalId)
+            : JadwalBriefing::findOrFail($this->selectedJadwalId);
+        
+        $year = $jadwal->tanggal->year;
+        $month = $jadwal->tanggal->month;
+        
+        // Count berhalangan per TIM per jenis (adzan/briefing)
+        // IMPORTANT: COUNT(DISTINCT tanggal) untuk avoid double-count (pagi + sore = 1 quota)
+        if ($this->selectedJadwalTipe === 'adzan') {
+            // Count adzan/kitab berhalangan untuk TIM ini
+            $countBerhalangan = JadwalAdzanKitab::whereHas('personil', fn($q) => $q->where('tim_id', $this->personil->tim_id))
+                ->where('status_konfirmasi', 'berhalangan')
+                ->whereYear('tanggal', $year)
+                ->whereMonth('tanggal', $month)
+                ->distinct('tanggal')
+                ->count('tanggal');
+            
+            $maxQuota = 2;
+            $jenisLabel = 'Adzan/Kitab';
+        } else {
+            // Count briefing berhalangan untuk TIM ini
+            // NOTE: Count DISTINCT tanggal (pagi + sore di hari yang sama = 1 quota)
+            $countBerhalangan = JadwalBriefing::where('tim_id', $this->personil->tim_id)
+                ->where('status_konfirmasi', 'berhalangan')
+                ->whereYear('tanggal', $year)
+                ->whereMonth('tanggal', $month)
+                ->distinct('tanggal')
+                ->count('tanggal');
+            
+            $maxQuota = 2;
+            $jenisLabel = 'Briefing';
+        }
+        
+        // Check quota
+        if ($countBerhalangan >= $maxQuota) {
+            $bulanLabel = $jadwal->tanggal->translatedFormat('F Y');
+            
+            Flux::toast(
+                variant: 'danger',
+                heading: 'Kuota Tim Habis',
+                text: "Tim {$this->personil->tim->nama_tim} sudah berhalangan {$maxQuota}x untuk {$jenisLabel} di bulan {$bulanLabel}. Hubungi admin jika kondisi darurat.",
+                duration: 8000
+            );
+            
+            return;
+        }
 
-        $pesan = $tipe === 'adzan'
-            ? $autoSwap->berhalanganAdzan($id, $this->personil->id)
-            : $autoSwap->berhalanganBriefing($id, $this->personil->id);
+        // Update status + alasan untuk jadwal selected
+        $this->updateStatusKonfirmasi($this->selectedJadwalId, $this->selectedJadwalTipe, 'berhalangan', $this->alasanBerhalangan);
+
+        // Auto swap logic untuk jadwal selected
+        $autoSwap = app(AutoSwapService::class);
+        $pesan = $this->selectedJadwalTipe === 'adzan'
+            ? $autoSwap->berhalanganAdzan($this->selectedJadwalId, $this->personil->id, $this->alasanBerhalangan)
+            : $autoSwap->berhalanganBriefing($this->selectedJadwalId, $this->personil->id, $this->alasanBerhalangan);
+
+        // PHASE 3: If berhalangan "both", update related jadwal juga
+        if ($this->berhalanganScope === 'both' && $this->relatedJadwalId) {
+            $this->updateStatusKonfirmasi($this->relatedJadwalId, 'briefing', 'berhalangan', $this->alasanBerhalangan);
+            
+            // Auto swap untuk related jadwal
+            $pesanRelated = $autoSwap->berhalanganBriefing($this->relatedJadwalId, $this->personil->id, $this->alasanBerhalangan);
+            $pesan .= " & " . $pesanRelated;
+        }
 
         Flux::toast(variant: 'warning', text: "Berhalangan dicatat. {$pesan}");
+        
+        // Reset & close
+        $this->modalBerhalangan = false;
+        $this->alasanBerhalangan = '';
+        $this->berhalanganScope = 'single';
+        $this->relatedJadwalId = null;
         unset($this->tugasMendatang);
     }
 
-    private function updateStatusKonfirmasi(int $id, string $tipe, string $status): void
+    private function updateStatusKonfirmasi(int $id, string $tipe, string $status, ?string $alasan = null): void
     {
+        $data = ['status_konfirmasi' => $status];
+        
+        if ($alasan !== null) {
+            $data['alasan_berhalangan'] = $alasan;
+        }
+
         if ($tipe === 'adzan') {
             JadwalAdzanKitab::where('id', $id)
                 ->where('personil_id', $this->personil->id)
-                ->update(['status_konfirmasi' => $status]);
+                ->update($data);
         } else {
             JadwalBriefing::where('id', $id)
                 ->where('personil_id', $this->personil->id)
-                ->update(['status_konfirmasi' => $status]);
+                ->update($data);
         }
     }
 }; ?>
@@ -152,13 +281,13 @@ new #[Title('Jadwal Saya')] #[Layout('layouts.auth')] class extends Component {
         @if (! $this->personil)
             <flux:callout variant="warning" icon="exclamation-triangle">
                 <flux:callout.heading>Akun belum terhubung ke data personil</flux:callout.heading>
-                <flux:callout.text>Hubungi admin untuk menghubungkan akun kamu ke data personil.</flux:callout.text>
+                <flux:callout.text>Hubungi admin untuk menghubungkan akun ke data personil.</flux:callout.text>
             </flux:callout>
         @elseif (empty($this->tugasMendatang))
             <x-empty-state
                 icon="calendar-days"
                 title="Tidak ada tugas mendatang"
-                description="Kamu belum memiliki jadwal tugas ke depan."
+                description="Belum ada jadwal tugas ke depan."
             />
         @else
             <div class="flex flex-col gap-3">
@@ -189,8 +318,28 @@ new #[Title('Jadwal Saya')] #[Layout('layouts.auth')] class extends Component {
                         <div class="flex-1 min-w-0">
                             <p class="font-medium text-zinc-900 dark:text-zinc-100">{{ $tugas['label'] }}</p>
                             <p class="text-sm text-zinc-500">
-                                {{ $tugas['keterangan'] }} · {{ $tanggal->translatedFormat('l') }}
+                                {{ $tugas['keterangan'] }} · {{ $tanggal->locale('id')->translatedFormat('l') }}
                             </p>
+                            
+                            {{-- Role badges untuk briefing --}}
+                            @if ($tugas['tipe'] === 'briefing' && !empty($tugas['roles']))
+                                <div class="flex flex-wrap gap-1.5 mt-2">
+                                    @foreach ($tugas['roles'] as $role)
+                                        <flux:badge 
+                                            size="sm" 
+                                            :color="match($role) {
+                                                'Notulensi' => 'blue',
+                                                'Moderator' => 'purple',
+                                                'Doa' => 'emerald',
+                                                default => 'zinc',
+                                            }"
+                                            class="!text-xs"
+                                        >
+                                            {{ $role }}
+                                        </flux:badge>
+                                    @endforeach
+                                </div>
+                            @endif
                         </div>
 
                         {{-- Status & tombol konfirmasi --}}
@@ -198,20 +347,9 @@ new #[Title('Jadwal Saya')] #[Layout('layouts.auth')] class extends Component {
                             @if ($isMenunggu)
                                 <flux:button
                                     size="sm"
-                                    variant="primary"
-                                    wire:click="konfirmasiSiap({{ $tugas['id'] }}, '{{ $tugas['tipe'] }}')"
+                                    variant="danger"
+                                    wire:click="openModalBerhalangan({{ $tugas['id'] }}, '{{ $tugas['tipe'] }}')"
                                     wire:loading.attr="disabled"
-                                    wire:target="konfirmasiSiap({{ $tugas['id'] }}, '{{ $tugas['tipe'] }}')"
-                                    icon="check"
-                                >
-                                    Siap
-                                </flux:button>
-                                <flux:button
-                                    size="sm"
-                                    variant="ghost"
-                                    wire:click="konfirmasiBerhalangan({{ $tugas['id'] }}, '{{ $tugas['tipe'] }}')"
-                                    wire:loading.attr="disabled"
-                                    wire:target="konfirmasiBerhalangan({{ $tugas['id'] }}, '{{ $tugas['tipe'] }}')"
                                     icon="x-mark"
                                 >
                                     Berhalangan
@@ -226,3 +364,63 @@ new #[Title('Jadwal Saya')] #[Layout('layouts.auth')] class extends Component {
         @endif
     </div>
 </div>
+
+
+{{-- Modal: Alasan Berhalangan --}}
+<flux:modal wire:model="modalBerhalangan" class="max-w-md">
+    <form wire:submit="konfirmasiBerhalangan">
+        <div class="space-y-4">
+            <div class="flex items-start gap-3">
+                <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                    <flux:icon.exclamation-triangle class="w-5 h-5 text-red-600 dark:text-red-400" />
+                </div>
+                <div class="flex-1">
+                    <flux:heading size="lg">Konfirmasi Berhalangan</flux:heading>
+                    <flux:text class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+                        Mohon berikan alasan kenapa tidak bisa hadir. Alasan akan dicatat dalam sistem.
+                    </flux:text>
+                </div>
+            </div>
+
+            {{-- PHASE 3: Scope selection (jika ada related jadwal) --}}
+            @if ($relatedJadwalId)
+                @php
+                    $jadwalCurrent = \App\Models\JadwalBriefing::find($selectedJadwalId);
+                    $sesiCurrent = $jadwalCurrent ? ucfirst($jadwalCurrent->sesi) : 'Pagi/Sore';
+                @endphp
+                <flux:field>
+                    <flux:label>Berhalangan untuk</flux:label>
+                    <flux:radio.group wire:model.live="berhalanganScope">
+                        <flux:radio value="single" label="Hanya sesi ini ({{ $sesiCurrent }})" />
+                        <flux:radio value="both" label="Seharian (Pagi & Sore)" />
+                    </flux:radio.group>
+                    <flux:description class="flex items-start gap-1.5">
+                        <flux:icon.light-bulb class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <span>Pilih "Seharian" jika tidak bisa hadir sama sekali hari ini.</span>
+                    </flux:description>
+                </flux:field>
+            @endif
+
+            <flux:field>
+                <flux:label>Alasan Berhalangan</flux:label>
+                <flux:textarea
+                    wire:model="alasanBerhalangan"
+                    placeholder="Contoh: Sedang sakit, ada keperluan keluarga, dll..."
+                    rows="4"
+                    required
+                />
+                <flux:error name="alasanBerhalangan" />
+                <flux:description>Minimal 10 karakter, maksimal 500 karakter</flux:description>
+            </flux:field>
+
+            <div class="flex justify-end gap-2 pt-4 border-t border-zinc-200 dark:border-zinc-700">
+                <flux:button type="button" variant="ghost" wire:click="$set('modalBerhalangan', false)">
+                    Batal
+                </flux:button>
+                <flux:button type="submit" variant="danger" icon="check">
+                    Konfirmasi Berhalangan
+                </flux:button>
+            </div>
+        </div>
+    </form>
+</flux:modal>

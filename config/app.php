@@ -86,6 +86,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Asset Version
+    |--------------------------------------------------------------------------
+    |
+    | This value is used for cache busting assets like favicons. Increment
+    | this value when you update assets to force browsers to reload them.
+    |
+    */
+
+    'asset_version' => env('ASSET_VERSION', time()),
+
+    /*
+    |--------------------------------------------------------------------------
     | Encryption Key
     |--------------------------------------------------------------------------
     |

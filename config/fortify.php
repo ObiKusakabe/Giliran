@@ -162,7 +162,7 @@ return [
     */
 
     'features' => [
-        Features::registration(),
+        // Features::registration(), // DISABLED: Only admin can create accounts
         Features::resetPasswords(),
         Features::emailVerification(),
         Features::twoFactorAuthentication([

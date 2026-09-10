@@ -1,0 +1,29 @@
+chore: cleanup docs and fix briefing query bug
+
+## Changes
+
+### 1. Documentation
+- Update README.md: remove personil role (now only admin & tim)
+- Update portal URLs to reflect current structure
+- Remove outdated markdown docs (CHANGELOG, DEVELOPMENT_LOG, etc.)
+- Update .gitignore to exclude all root *.md except README and AGENTS
+- Add /docs/ folder to .gitignore
+
+### 2. Bug Fix - Jadwal Tim
+- Fix briefing query that skipped moderator/doa when no dedicated row exists
+- Use sampleRow as template for personil without database row
+- Resolves issue where briefing pagi/sore missing in jadwal tim
+- File: resources/views/pages/tim/⚡jadwal-tim.blade.php
+
+### 3. Infrastructure
+- Restore storage/framework/views/.gitignore to prevent compiled cache tracking
+- Clean up untracked compiled Blade views from git status
+
+## Testing
+- Manual test: verify briefing pagi & sore both appear in Jadwal Tim
+- No new automated tests added (bug fix only)
+
+## Migration Notes
+- No database migrations required
+- No breaking changes
+- Safe to deploy

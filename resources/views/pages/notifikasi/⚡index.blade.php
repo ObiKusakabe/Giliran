@@ -149,13 +149,13 @@ new #[Title('Notifikasi')] #[Layout('layouts.auth')] class extends Component {
                                 {{ $notif->pesan }}
                             </p>
                             <p class="text-xs text-zinc-400 mt-0.5">
-                                {{ $notif->terkirim_pada->diffForHumans() }}
+                                {{ $notif->terkirim_pada->translatedFormat('l, d F Y') }}
                             </p>
                         </div>
 
                         {{-- Dot belum dibaca --}}
                         @if (! $notif->dibaca)
-                            <span class="flex-shrink-0 mt-2 h-2 w-2 rounded-full bg-blue-500"></span>
+                            <span class="flex-shrink-0 mt-2 h-2 w-2 rounded-full bg-[#3B71CA]"></span>
                         @endif
                     </button>
                 @endforeach

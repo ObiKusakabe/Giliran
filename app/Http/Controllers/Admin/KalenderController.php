@@ -51,9 +51,19 @@ class KalenderController extends Controller
             [$jamMulai, $jamSelesai] = self::JAM_SHOLAT[$j->waktu_sholat] ?? ['12:00:00', '12:30:00'];
             $tanggal = $j->tanggal->toDateString();
 
+            // Format waktu sholat ke Bahasa Indonesia
+            $waktuSholatLabel = match ($j->waktu_sholat) {
+                'dhuhr' => 'Zuhur',
+                'asr' => 'Ashar',
+                'fajr' => 'Subuh',
+                'maghrib' => 'Maghrib',
+                'isha' => 'Isya',
+                default => strtoupper($j->waktu_sholat),
+            };
+
             $events->push([
                 'id' => 'adzan_'.$j->id,
-                'title' => ucfirst($j->jenis_tugas).' '.strtoupper($j->waktu_sholat)
+                'title' => ucfirst($j->jenis_tugas).' '.$waktuSholatLabel
                     .' - '.($j->personil?->nama ?? '?'),
                 'start' => $tanggal.'T'.$jamMulai,
                 'end' => $tanggal.'T'.$jamSelesai,
@@ -64,7 +74,7 @@ class KalenderController extends Controller
                     'jenis' => 'adzan',
                     'personil' => $j->personil?->nama,
                     'tim' => $j->personil?->tim?->nama_tim,
-                    'waktu_sholat' => $j->waktu_sholat,
+                    'waktu_sholat' => $waktuSholatLabel,
                     'jenis_tugas' => $j->jenis_tugas,
                     'status_konfirmasi' => $j->status_konfirmasi,
                     'jadwal_id' => $j->id,

@@ -5,10 +5,12 @@ use App\Models\Tim;
 use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
-new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
+new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Component {
 
     public ?int $editingId       = null;
     public int|string $tim_id    = '';
@@ -18,19 +20,32 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
     public string $status        = 'aktif';
     public ?int $hapusId         = null;
 
+    // Filter by tim dari URL query parameter - using #[Url] to sync with query string
+    #[Url(as: 'tim')]
+    public ?int $filterTimId = null;
+
     #[Computed]
     public function semuaPersonil(): array
     {
-        return Personil::with('tim')
-            ->orderBy('nama')
-            ->get()
+        $query = Personil::with('tim');
+
+        // Jika ada filter tim dari URL, prioritaskan tim tersebut di atas
+        if ($this->filterTimId) {
+            $query->orderByRaw('CASE WHEN tim_id = ? THEN 0 ELSE 1 END', [$this->filterTimId]);
+        }
+        
+        $query->orderBy('nama');
+
+        return $query->get()
             ->map(fn ($p) => [
                 'id'            => $p->id,
                 'nama'          => $p->nama,
                 'jenis_kelamin' => $p->jenis_kelamin ?? 'laki-laki',
+                'tim_id'        => $p->tim_id,
                 'tim'           => $p->tim?->nama_tim ?? '—',
                 'no_hp'         => $p->no_hp ?? '',
                 'status'        => $p->status,
+                'is_highlighted' => $this->filterTimId && $p->tim_id === $this->filterTimId,
             ])
             ->toArray();
     }
@@ -39,6 +54,18 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
     public function timOptions()
     {
         return Tim::orderBy('nama_tim')->get(['id', 'nama_tim']);
+    }
+
+    #[Computed]
+    public function filteredTim(): ?Tim
+    {
+        return $this->filterTimId ? Tim::find($this->filterTimId) : null;
+    }
+
+    public function clearFilter(): void
+    {
+        $this->filterTimId = null;
+        $this->redirect(route('admin.personil'), navigate: true);
     }
 
     #[Computed]
@@ -146,6 +173,17 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         $this->status    = 'aktif';
         $this->resetValidation();
     }
+
+    public function placeholder(): string
+    {
+        return <<<'HTML'
+        <div class="p-6 space-y-6">
+            <x-skeletons.page-header />
+            <x-skeletons.stat-cards />
+            <x-skeletons.table :columns="6" :rows="8" />
+        </div>
+        HTML;
+    }
 }; ?>
 
 <div
@@ -158,14 +196,24 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         sortDir: 'asc',
         page: 1,
         perPage: 20,
+        hasScrolledToHighlight: false,
 
         get filtered() {
             let data = [...this.rows];
             if (this.q) data = data.filter(r => r.nama.toLowerCase().includes(this.q.toLowerCase()) || r.tim.toLowerCase().includes(this.q.toLowerCase()));
             if (this.filterStatus) data = data.filter(r => r.status === this.filterStatus);
             if (this.filterGender) data = data.filter(r => r.jenis_kelamin === this.filterGender);
+            
+            // Sort logic
             data.sort((a, b) => {
-                let va = a[this.sortField] ?? ''; let vb = b[this.sortField] ?? '';
+                // Priority 1: If any row is highlighted, show highlighted first
+                if (a.is_highlighted !== b.is_highlighted) {
+                    return a.is_highlighted ? -1 : 1;
+                }
+                
+                // Priority 2: Then sort by user-selected field
+                let va = a[this.sortField] ?? ''; 
+                let vb = b[this.sortField] ?? '';
                 if (typeof va === 'string') va = va.toLowerCase();
                 if (typeof vb === 'string') vb = vb.toLowerCase();
                 if (va < vb) return this.sortDir === 'asc' ? -1 : 1;
@@ -173,6 +221,9 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
                 return 0;
             });
             return data;
+        },
+        get highlightedCount() {
+            return this.rows.filter(r => r.is_highlighted).length;
         },
         get totalPages() { return Math.max(1, Math.ceil(this.filtered.length / this.perPage)); },
         get displayed()  { const s=(this.page-1)*this.perPage; return this.filtered.slice(s,s+this.perPage); },
@@ -199,6 +250,37 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         <div>
             <flux:heading size="xl">Personil</flux:heading>
             <flux:text class="text-zinc-500">Kelola data personil peserta PKL/magang.</flux:text>
+            
+            {{-- Filter Badge - Show when filtering by tim --}}
+            @if ($filterTimId && $this->filteredTim)
+                <div 
+                    class="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 shadow-sm"
+                    x-data
+                    x-init="$nextTick(() => { 
+                        const firstHighlighted = document.querySelector('.highlight-row');
+                        if (firstHighlighted) {
+                            setTimeout(() => {
+                                const yOffset = -150; // Offset 150px dari top (agar tidak terlalu bawah)
+                                const y = firstHighlighted.getBoundingClientRect().top + window.pageYOffset + yOffset;
+                                window.scrollTo({ top: y, behavior: 'smooth' });
+                            }, 200);
+                        }
+                    })"
+                >
+                    <flux:icon icon="funnel" class="size-4 text-blue-600 dark:text-blue-400" />
+                    <span class="text-sm font-medium text-blue-700 dark:text-blue-300">
+                        <strong>{{ $this->filteredTim->nama_tim }}</strong>
+                        <span x-data x-text="`(${highlightedCount} personil)`" class="opacity-80"></span>
+                    </span>
+                    <button 
+                        @click="$wire.set('filterTimId', null); window.history.pushState({}, '', '/admin/personil');"
+                        class="ml-2 p-0.5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800 rounded transition-colors"
+                        title="Hapus filter & tampilkan semua"
+                    >
+                        <flux:icon icon="x-mark" class="size-4" />
+                    </button>
+                </div>
+            @endif
         </div>
         <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus" class="flex-shrink-0">Tambah Personil</flux:button>
     </div>
@@ -321,7 +403,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         </div>
     </div>
 
-    <flux:card class="p-0 overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
+    <flux:card class="p-0 overflow-visible table-sticky-card border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
         {{-- Card-list: mobile only (< sm) --}}
         <div class="sm:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
             <template x-if="displayed.length === 0">
@@ -354,7 +436,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         {{-- Tabel: sm dan lebih lebar --}}
         <div class="hidden sm:block px-5">
             <flux:table>
-                <flux:table.columns class="sticky top-0 z-10 bg-white/95 dark:bg-zinc-800/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-700">
+                <flux:table.columns class="bg-white dark:bg-zinc-900">
                     <flux:table.column @click="toggleSort('nama')" class="cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none">
                         <span class="inline-flex items-center gap-1">Nama
                             <svg x-show="sortField==='nama' && sortDir==='asc'" class="h-3.5 w-3.5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
@@ -436,7 +518,9 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
                         </flux:table.row>
                     </template>
                     <template x-for="p in displayed" :key="p.id">
-                        <flux:table.row>
+                        <flux:table.row 
+                            x-bind:class="p.is_highlighted ? 'highlight-row animate-highlight bg-blue-50 dark:bg-blue-950/30' : ''"
+                        >
                             <flux:table.cell class="font-medium text-zinc-900 dark:text-zinc-100" x-text="p.nama"></flux:table.cell>
                             <flux:table.cell class="text-zinc-500" x-text="p.tim"></flux:table.cell>
                             <flux:table.cell>
@@ -558,3 +642,21 @@ new #[Title('Personil')] #[Layout('layouts.admin')] class extends Component {
         </div>
     </flux:modal>
 </div>
+
+<style>
+@keyframes highlight {
+    0%, 100% { background-color: transparent; }
+    50% { background-color: rgb(239 246 255 / 0.8); }
+}
+
+@media (prefers-color-scheme: dark) {
+    @keyframes highlight {
+        0%, 100% { background-color: transparent; }
+        50% { background-color: rgb(23 37 84 / 0.3); }
+    }
+}
+
+.animate-highlight {
+    animation: highlight 2s ease-in-out 3;
+}
+</style>

@@ -14,6 +14,7 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
 
     public string $filterJenis = '';
     public string $filterTimId = '';
+    public string $searchTim = ''; // Search nama tim
     public string $viewMode    = 'kalender'; // 'kalender' | 'tabel'
 
     // Filter tabel: bulan/tahun
@@ -37,7 +38,14 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
     #[Computed]
     public function timList()
     {
-        return Tim::orderBy('nama_tim')->get(['id', 'nama_tim']);
+        $query = Tim::orderBy('nama_tim');
+
+        // Filter by search text
+        if ($this->searchTim) {
+            $query->where('nama_tim', 'like', '%' . $this->searchTim . '%');
+        }
+
+        return $query->get(['id', 'nama_tim']);
     }
 
     /**
@@ -256,6 +264,14 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
                     <flux:select.option :value="$tim->id">{{ $tim->nama_tim }}</flux:select.option>
                 @endforeach
             </flux:select>
+
+            {{-- Search nama tim --}}
+            <flux:input 
+                wire:model.live.debounce.300ms="searchTim" 
+                placeholder="Cari nama tim..."
+                icon="magnifying-glass"
+                class="w-64"
+            />
         </div>
     </div>
 
@@ -504,10 +520,10 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
                                 @endphp
                                 <tr class="{{ $isEven ? 'bg-zinc-800/40' : 'bg-zinc-900/60' }} hover:bg-zinc-800/70 transition-colors">
                                     <td class="border border-zinc-700 px-3 py-2 text-zinc-200">
-                                        {{ $carbon->translatedFormat('d F Y') }}
+                                        {{ $carbon->locale('id')->translatedFormat('d F Y') }}
                                     </td>
                                     <td class="border border-zinc-700 px-3 py-2 text-center font-bold text-zinc-100 uppercase">
-                                        {{ strtoupper(substr($carbon->translatedFormat('l'), 0, 4)) }}
+                                        {{ strtoupper(substr($carbon->locale('id')->translatedFormat('l'), 0, 4)) }}
                                     </td>
                                     <td class="border border-zinc-700 px-3 py-2 whitespace-pre-line text-zinc-300">{{ $fmtPersonil($dhuhrAdzan) }}</td>
                                     <td class="border border-zinc-700 px-3 py-2 whitespace-pre-line text-zinc-300">{{ $fmtPersonil($dhuhrKajian) }}</td>
@@ -546,7 +562,7 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
                                 <tr class="{{ $loop->even ? 'bg-zinc-800/40' : 'bg-zinc-900/60' }} hover:bg-zinc-800/70 transition-colors">
                                     <td class="border border-zinc-700 px-3 py-2 text-zinc-200">{{ $j->tanggal->format('d/m/Y') }}</td>
                                     <td class="border border-zinc-700 px-3 py-2 text-center font-bold text-zinc-100 uppercase">
-                                        {{ strtoupper(substr($j->tanggal->translatedFormat('l'), 0, 4)) }}
+                                        {{ strtoupper(substr($j->tanggal->locale('id')->translatedFormat('l'), 0, 4)) }}
                                     </td>
                                     <td class="border border-zinc-700 px-3 py-2 text-center text-zinc-300">{{ ucfirst($j->sesi) }}</td>
                                     <td class="border border-zinc-700 px-3 py-2 text-zinc-300">{{ $j->personil?->nama ?? 'â€”' }}</td>
@@ -564,55 +580,92 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
     @endif
 
     {{-- Modal detail event (kalender) --}}
-    <div
-        x-show="modalOpen"
-        x-transition
-        @keydown.escape.window="modalOpen = false"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-    >
-        <div
-            @click.outside="modalOpen = false"
-            class="bg-white dark:bg-zinc-800 rounded-xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4"
-        >
-            <div class="flex items-start justify-between">
-                <div>
-                    <h3 class="font-semibold text-zinc-900 dark:text-zinc-100" x-text="selectedEvent?.title"></h3>
-                    <p class="text-sm text-zinc-500 mt-0.5" x-text="selectedEvent?.tanggal"></p>
-                </div>
-                <button @click="modalOpen = false" class="text-zinc-400 hover:text-zinc-600 p-1">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
+    <template x-if="modalOpen">
+        <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
+             @keydown.escape.window="modalOpen = false">
+            {{-- Backdrop --}}
+            <div class="fixed inset-0 bg-black/50" 
+                 style="backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);"
+                 @click="modalOpen = false"
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition ease-in duration-150"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0">
             </div>
-            <dl class="text-sm flex flex-col gap-2">
-                <template x-if="selectedEvent?.jenis === 'adzan'">
-                    <div class="flex flex-col gap-1">
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Personil</dt><dd x-text="selectedEvent?.personil"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Tim</dt><dd x-text="selectedEvent?.tim"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Waktu</dt><dd x-text="selectedEvent?.waktu_sholat?.toUpperCase()"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Tugas</dt><dd x-text="selectedEvent?.jenis_tugas"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Status</dt><dd x-text="selectedEvent?.status_konfirmasi"></dd></div>
+
+            {{-- Modal Content --}}
+            <div class="relative bg-white dark:bg-zinc-900 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+                 @click.stop
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-150"
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95">
+                
+                <div class="p-6">
+                    <div class="flex items-start justify-between mb-4">
+                        <div>
+                            <h3 class="font-semibold text-zinc-900 dark:text-zinc-100" x-text="selectedEvent?.title"></h3>
+                            <p class="text-sm text-zinc-500 mt-0.5" x-text="selectedEvent?.tanggal"></p>
+                        </div>
+                        <button @click="modalOpen = false" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
                     </div>
-                </template>
-                <template x-if="selectedEvent?.jenis === 'briefing'">
-                    <div class="flex flex-col gap-1">
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Personil</dt><dd x-text="selectedEvent?.personil"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Tim</dt><dd x-text="selectedEvent?.tim"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Sesi</dt><dd x-text="selectedEvent?.sesi"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Status</dt><dd x-text="selectedEvent?.status_konfirmasi"></dd></div>
+
+                    <div class="space-y-3">
+                        <template x-if="selectedEvent?.jenis === 'adzan'">
+                            <div>
+                                <p class="text-xs text-zinc-500 font-medium mb-1">Waktu Sholat</p>
+                                <p class="text-sm" x-text="selectedEvent?.waktu_sholat?.toUpperCase() ?? '-'"></p>
+                            </div>
+                        </template>
+
+                        <template x-if="selectedEvent?.jenis === 'briefing'">
+                            <div>
+                                <p class="text-xs text-zinc-500 font-medium mb-1">Sesi</p>
+                                <p class="text-sm" x-text="selectedEvent?.sesi ?? '-'"></p>
+                            </div>
+                        </template>
+
+                        <template x-if="selectedEvent?.jenis === 'ruangan'">
+                            <div>
+                                <p class="text-xs text-zinc-500 font-medium mb-1">Ruangan</p>
+                                <p class="text-sm" x-text="selectedEvent?.ruangan ?? '-'"></p>
+                            </div>
+                        </template>
+
+                        <div x-show="selectedEvent?.personil">
+                            <p class="text-xs text-zinc-500 font-medium mb-1">Personil</p>
+                            <p class="text-sm" x-text="selectedEvent?.personil ?? '-'"></p>
+                        </div>
+                        
+                        <div x-show="selectedEvent?.tim">
+                            <p class="text-xs text-zinc-500 font-medium mb-1">Tim</p>
+                            <p class="text-sm" x-text="selectedEvent?.tim ?? '-'"></p>
+                        </div>
+                        
+                        <div x-show="selectedEvent?.status_konfirmasi">
+                            <p class="text-xs text-zinc-500 font-medium mb-1">Status</p>
+                            <p class="text-sm" x-text="selectedEvent?.status_konfirmasi ?? '-'"></p>
+                        </div>
                     </div>
-                </template>
-                <template x-if="selectedEvent?.jenis === 'ruangan'">
-                    <div class="flex flex-col gap-1">
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Tim</dt><dd x-text="selectedEvent?.tim"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Ruangan</dt><dd x-text="selectedEvent?.ruangan"></dd></div>
-                        <div class="flex gap-2"><dt class="text-zinc-400 w-24">Kapasitas</dt><dd x-text="selectedEvent?.kapasitas + ' orang'"></dd></div>
+
+                    <div class="mt-6 flex justify-end">
+                        <button @click="modalOpen = false" 
+                                class="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors">
+                            Tutup
+                        </button>
                     </div>
-                </template>
-            </dl>
+                </div>
+            </div>
         </div>
-    </div>
+    </template>
 </div>
 
 

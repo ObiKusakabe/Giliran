@@ -18,7 +18,7 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
 
     // Profile fields
     public string $name = '';
-    public string $email = '';
+    public ?string $email = '';
 
     // Password fields
     public string $current_password = '';
@@ -51,7 +51,7 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
     {
         // Profile
         $this->name = Auth::user()->name;
-        $this->email = Auth::user()->email;
+        $this->email = Auth::user()->email ?? '';
 
         // Two-Factor
         $this->canManageTwoFactor = \Laravel\Fortify\Features::canManageTwoFactorAuthentication();

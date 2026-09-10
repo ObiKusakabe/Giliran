@@ -42,6 +42,7 @@ class User extends Authenticatable implements PasskeyUser
         'email',
         'password',
         'role',
+        'ui_preference',
     ];
 
     protected $hidden = [
@@ -82,6 +83,12 @@ class User extends Authenticatable implements PasskeyUser
     public function notifikasi(): HasMany
     {
         return $this->hasMany(Notifikasi::class, 'user_id');
+    }
+
+    /** @return HasMany<NotulenBriefing, $this> */
+    public function notulenBriefing(): HasMany
+    {
+        return $this->hasMany(NotulenBriefing::class, 'user_id');
     }
 
     // ── Role helpers ──────────────────────────────────────────────

@@ -8,7 +8,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Ruangan Tim')] #[Layout('layouts.app.sidebar')] class extends Component {
+new #[Title('Ruangan Tim')] #[Layout('layouts.app')] class extends Component {
 
     #[Computed]
     public function timId(): ?int
@@ -89,14 +89,14 @@ new #[Title('Ruangan Tim')] #[Layout('layouts.app.sidebar')] class extends Compo
     <div>
         <flux:heading size="xl" class="font-bold tracking-tight text-zinc-900 dark:text-white">Ruangan Hari Ini</flux:heading>
         <flux:text class="text-zinc-500 dark:text-zinc-400 mt-0.5">
-            {{ now()->translatedFormat('l, d F Y') }} — Informasi alokasi workstation untuk {{ $this->namaTim }}.
+            {{ now()->locale('id')->translatedFormat('l, d F Y') }} — Informasi alokasi workstation untuk {{ $this->namaTim }}.
         </flux:text>
     </div>
 
     @if (! $this->timId)
         <flux:callout variant="warning" icon="exclamation-triangle">
             <flux:callout.heading>Akun belum terhubung ke tim</flux:callout.heading>
-            <flux:callout.text>Hubungi admin untuk menghubungkan akun kamu ke data tim.</flux:callout.text>
+            <flux:callout.text>Hubungi admin untuk menghubungkan akun ke data tim.</flux:callout.text>
         </flux:callout>
 
     @elseif (! $this->isWfoHariIni)
@@ -153,9 +153,9 @@ new #[Title('Ruangan Tim')] #[Layout('layouts.app.sidebar')] class extends Compo
     @if ($this->riwayatAlokasi->isNotEmpty())
         <div class="flex flex-col gap-3 pt-2">
             <flux:heading size="md" class="font-semibold">Riwayat Ruangan</flux:heading>
-            <flux:card class="p-0 overflow-hidden">
-                <table class="w-full text-sm">
-                    <thead class="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-700">
+            <flux:card class="p-0 overflow-visible table-sticky-card">
+                <table class="w-full text-sm table-sticky">
+                    <thead class="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-700 sticky top-[var(--navbar-height,56px)] z-15">
                         <tr>
                             <th class="px-4 py-2 text-left text-xs font-medium text-zinc-500">Tanggal</th>
                             <th class="px-4 py-2 text-left text-xs font-medium text-zinc-500">Ruangan</th>

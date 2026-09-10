@@ -75,7 +75,6 @@ Buka `http://localhost:8000`
 | Role | Email | Password |
 |------|-------|----------|
 | Admin | `admin@giliran.test` | `password` |
-| Personil | `personil@giliran.test` | `password` |
 | Tim | `tim@giliran.test` | `password` |
 
 ---
@@ -136,8 +135,9 @@ php artisan test --compact --filter=AutoSwapTest
 | Portal | URL | Role |
 |--------|-----|------|
 | Admin | `/admin/dashboard` | `admin` |
-| Personil | `/jadwal-saya` | `personil` |
-| Tim/Divisi | `/tim/ruangan` | `tim` |
+| Tim/Divisi | `/tim/beranda` | `tim` |
+
+**Catatan:** Role `personil` sudah dihapus. Setiap anggota tim login menggunakan akun tim mereka.
 
 ---
 

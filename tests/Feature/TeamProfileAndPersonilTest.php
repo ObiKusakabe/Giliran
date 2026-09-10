@@ -107,3 +107,20 @@ test('tim user can update their password', function () {
     $user->refresh();
     expect(Hash::check('PasswordBaru123!', $user->password))->toBeTrue();
 });
+
+test('tim user can access jadwal-tim page and component renders without error', function () {
+    $tim = Tim::create(['nama_tim' => 'Tim Jadwal Test', 'status' => 'active']);
+    $user = User::factory()->create([
+        'role' => 'tim',
+        'tim_id' => $tim->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('tim.jadwal'))
+        ->assertOk();
+
+    Livewire::actingAs($user)
+        ->test('pages::tim.jadwal-tim')
+        ->assertSee('Jadwal Tim')
+        ->assertSee('Tidak ada tugas mendatang');
+});

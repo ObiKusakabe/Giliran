@@ -6,8 +6,8 @@
 
 @php
 $connectorColor = match ($status) {
-    'complete' => 'bg-blue-600 dark:bg-blue-500',
-    'current'  => 'bg-blue-500/40 dark:bg-blue-500/30',
+    'complete' => 'bg-[#3B71CA] dark:bg-[#3B71CA]',
+    'current'  => 'bg-[#3B71CA]/40 dark:bg-[#3B71CA]/30',
     default    => 'bg-zinc-200 dark:bg-zinc-800',
 };
 

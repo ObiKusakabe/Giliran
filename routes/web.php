@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\ExportController;
 use App\Http\Controllers\Admin\KalenderController;
+use App\Http\Controllers\Api\DevModeController;
 use App\Http\Controllers\HomeController;
 use App\Http\Middleware\EnsureTeamOnboardingCompleted;
 use Illuminate\Support\Facades\Route;
@@ -26,6 +27,9 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::livewire('/alokasi-ruangan', 'pages::admin.alokasi-ruangan-grid')->name('alokasi-ruangan');
     Route::livewire('/generate-jadwal', 'pages::admin.generate-jadwal')->name('generate-jadwal');
 
+    // Notulen Briefing Management
+    Route::livewire('/notulen-briefing', 'pages::admin.notulen-briefing')->name('notulen-briefing');
+
     // Redirect kalender to dashboard (kalender now integrated in dashboard)
     Route::redirect('/kalender', '/admin/dashboard')->name('kalender');
     Route::get('/kalender/events', [KalenderController::class, 'events'])->name('kalender.events');
@@ -37,9 +41,18 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 // ── Tim portal — jadwal seluruh tim + alokasi ruangan (role tim, 1 akun per instansi) ──
 Route::middleware(['auth', 'role:tim', EnsureTeamOnboardingCompleted::class])->name('tim.')->group(function () {
     Route::livewire('/tim/onboarding', 'pages::tim.onboarding')->name('onboarding');
+    Route::livewire('/tim/beranda', 'pages::tim.beranda')->name('beranda');
     Route::livewire('/jadwal-tim', 'pages::tim.jadwal-tim')->name('jadwal');
     Route::livewire('/tim/ruangan', 'pages::tim.ruangan')->name('ruangan');
     Route::livewire('/tim/profil', 'pages::tim.profil')->name('profil');
+    Route::livewire('/tim/akun', 'pages::tim.akun')->name('akun');
+    Route::livewire('/tim/tambah-email', 'tim.tambah-email')->name('tambah-email');
+
+    // Notulen Briefing routes
+    Route::middleware('web')->prefix('notulen')->name('notulen.')->group(function () {
+        Route::livewire('/create', 'tim.notulen.create')->name('create');
+        Route::livewire('/history', 'tim.notulen.history')->name('history');
+    });
 });
 
 // ── Redirect lama /jadwal-saya → /jadwal-tim (backward compat) ────────────────
@@ -48,6 +61,13 @@ Route::middleware('auth')->get('/jadwal-saya', fn () => redirect()->route('tim.j
 // ── Notifikasi (semua role yang login) ────────────────────────────────────────
 Route::middleware('auth')->name('notifikasi.')->group(function () {
     Route::livewire('/notifikasi', 'pages::notifikasi.index')->name('index');
+});
+
+// ── Dev Mode API (admin & tim role) ──────────────────────────────────────────
+Route::middleware('auth')->prefix('api/dev-mode')->group(function () {
+    Route::post('/set-time', [DevModeController::class, 'setTime']);
+    Route::post('/reset-time', [DevModeController::class, 'resetTime']);
+    Route::get('/get-time', [DevModeController::class, 'getTime']);
 });
 
 require __DIR__.'/settings.php';
