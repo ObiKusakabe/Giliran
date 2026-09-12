@@ -152,17 +152,11 @@ new #[Title('Notulen Briefing')] #[Layout('layouts.admin')] class extends Compon
             />
 
             {{-- Filter Sesi --}}
-            <x-searchable-select
-                wire:model.live="filterSesi"
-                name="filterSesi"
-                placeholder="Semua Sesi"
-                :options="[
-                    ['value' => '', 'label' => 'Semua Sesi'],
-                    ['value' => 'pagi', 'label' => 'Pagi'],
-                    ['value' => 'sore', 'label' => 'Sore'],
-                ]"
-                :modelValue="$filterSesi"
-            />
+            <flux:select wire:model.live="filterSesi">
+                <flux:option value="">Semua Sesi</flux:option>
+                <flux:option value="pagi">Pagi</flux:option>
+                <flux:option value="sore">Sore</flux:option>
+            </flux:select>
 
             {{-- Filter Tim --}}
             <x-searchable-select
