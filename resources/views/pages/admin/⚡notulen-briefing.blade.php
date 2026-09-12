@@ -153,9 +153,9 @@ new #[Title('Notulen Briefing')] #[Layout('layouts.admin')] class extends Compon
 
             {{-- Filter Sesi --}}
             <flux:select wire:model.live="filterSesi">
-                <flux:option value="">Semua Sesi</flux:option>
-                <flux:option value="pagi">Pagi</flux:option>
-                <flux:option value="sore">Sore</flux:option>
+                <flux:select.option value="">Semua Sesi</flux:select.option>
+                <flux:select.option value="pagi">Pagi</flux:select.option>
+                <flux:select.option value="sore">Sore</flux:select.option>
             </flux:select>
 
             {{-- Filter Tim --}}
