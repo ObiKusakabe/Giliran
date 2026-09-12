@@ -258,7 +258,7 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
             @endif
 
             {{-- Filter tim --}}
-            <x-searchable-select
+            <x-simple-select
                 wire:model.live="filterTimId"
                 name="filterTimId"
                 placeholder="Semua Tim"
