@@ -466,13 +466,15 @@ new #[Title('')] #[Layout('layouts.admin')] #[Lazy] class extends Component {
                     </flux:select>
                 @endif
 
-                {{-- Filter tim (both views) --}}
-                <flux:select wire:model.live="filterTimId" class="w-48">
-                    <flux:select.option value="">Semua Tim</flux:select.option>
-                    @foreach ($this->timList as $tim)
-                        <flux:select.option :value="$tim->id">{{ $tim->nama_tim }}</flux:select.option>
-                    @endforeach
-                </flux:select>
+                {{-- Filter tim --}}
+                <x-searchable-select
+                    wire:model.live="filterTimId"
+                    name="filterTimId"
+                    placeholder="Semua Tim"
+                    :options="$this->timList->map(fn($t) => ['value' => (string)$t->id, 'label' => $t->nama_tim])->prepend(['value' => '', 'label' => 'Semua Tim'])->toArray()"
+                    :modelValue="$filterTimId"
+                    class="w-48"
+                />
             </div>
         </div>
 
