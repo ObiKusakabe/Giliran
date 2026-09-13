@@ -53,13 +53,6 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
         return PeriodeWfo::where('status', 'nonaktif')->count();
     }
 
-    public function bukaTambah(): void
-    {
-        $this->resetForm();
-        $this->editId = null;
-        $this->modal('form-periode')->show();
-    }
-
     public function bukaEdit(int $id): void
     {
         $this->resetValidation();
@@ -144,7 +137,9 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
             <flux:heading size="xl">Periode WFO</flux:heading>
             <flux:text class="text-zinc-500">Kelola periode rotasi WFO - 1 periode aktif menjadi acuan penjadwalan.</flux:text>
         </div>
-        <flux:button variant="primary" wire:click="bukaTambah" icon="plus">Buat Periode Baru</flux:button>
+        <flux:modal.trigger name="form-periode">
+            <flux:button variant="primary" icon="plus">Buat Periode Baru</flux:button>
+        </flux:modal.trigger>
     </div>
 
     {{-- Quick Info Cards with Watermark Icons --}}
@@ -276,7 +271,8 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
         </div>
     </flux:card>
 
-    <flux:modal name="form-periode" class="max-w-md">
+    <flux:modal name="form-periode" class="max-w-md" 
+        x-on:close="$wire.editId = null; $wire.tanggal_mulai = ''; $wire.tanggal_selesai = ''; $wire.keterangan = '';">
         <div class="flex flex-col gap-5 p-1">
             <div>
                 <flux:heading size="lg">{{ $editId ? 'Edit Periode WFO' : 'Buat Periode WFO Baru' }}</flux:heading>

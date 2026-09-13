@@ -53,12 +53,6 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
         return (int) Ruangan::where('status', 'tersedia')->sum('kapasitas');
     }
 
-    public function bukaFormTambah(): void
-    {
-        $this->resetForm();
-        $this->modal('form-ruangan')->show();
-    }
-
     public function bukaFormEdit(int $id): void
     {
         $ruangan            = Ruangan::findOrFail($id);
@@ -175,7 +169,9 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
             <flux:heading size="xl">Ruangan</flux:heading>
             <flux:text class="text-zinc-500">Kelola data ruangan meeting dan kelas.</flux:text>
         </div>
-        <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus" class="flex-shrink-0">Tambah Ruangan</flux:button>
+        <flux:modal.trigger name="form-ruangan">
+            <flux:button variant="primary" icon="plus" class="flex-shrink-0">Tambah Ruangan</flux:button>
+        </flux:modal.trigger>
     </div>
 
     {{-- Quick Info Cards with Watermark Icons --}}
@@ -367,34 +363,35 @@ new #[Title('Ruangan')] #[Layout('layouts.admin')] class extends Component {
         </div>
     </flux:card>
 
-    <flux:modal name="form-ruangan" class="max-w-md">
+    <flux:modal name="form-ruangan" class="max-w-md" 
+        x-on:close="$wire.editingId = null; $wire.nama_ruangan = ''; $wire.kapasitas = ''; $wire.status = 'tersedia';">
         <div class="flex flex-col gap-5 p-1">
             <flux:heading size="lg">{{ $editingId ? 'Edit Ruangan' : 'Tambah Ruangan' }}</flux:heading>
             <form wire:submit="simpan" class="flex flex-col gap-4">
-                <flux:input wire:model.blur="nama_ruangan" label="Nama Ruangan" placeholder="cth. Ruang Meeting A" required />
-                <flux:input wire:model.blur="kapasitas" label="Kapasitas (orang)" type="number" min="1" placeholder="cth. 10" required />
+                <flux:input wire:model="nama_ruangan" label="Nama Ruangan" placeholder="cth. Ruang Meeting A" required />
+                <flux:input wire:model="kapasitas" label="Kapasitas (orang)" type="number" min="1" placeholder="cth. 10" required />
                 {{-- Status — styled dropdown --}}
                 <div>
-                    <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Status <span class="text-red-500">*</span></label>
-                    <div x-data="{ open: false, opts: [{value:'tersedia',label:'Tersedia'},{value:'tidak_tersedia',label:'Tidak Tersedia'}] }"
-                         @click.outside="open = false" class="relative">
+                    <label class="text-sm font-medium text-zinc-950 dark:text-white">Status <span class="text-red-500">*</span></label>
+                    <div class="relative mt-1.5" x-data="{ open: false }" @click.outside="open = false">
                         <button type="button" @click="open = !open"
-                            :class="open ? 'ring-2 ring-brand border-brand' : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-500'"
-                            class="w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-left transition-colors focus:outline-none"
-                        >
-                            <span class="text-zinc-900 dark:text-zinc-100">{{ $status === 'tersedia' ? 'Tersedia' : 'Tidak Tersedia' }}</span>
-                            <svg class="h-4 w-4 text-zinc-400 flex-shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            :class="open ? 'ring-2 ring-brand border-brand' : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400'"
+                            class="w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-left transition-colors">
+                            <span :class="$wire.status ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-400'" 
+                                x-text="$wire.status === 'tersedia' ? 'Tersedia' : ($wire.status === 'tidak_tersedia' ? 'Tidak Tersedia' : 'Pilih status')"></span>
+                            <svg class="h-4 w-4 text-zinc-400 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                            </svg>
                         </button>
-                        <div x-show="open" x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-75" x-transition:leave-end="opacity-0"
-                             class="absolute z-50 mt-1 w-full rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-lg py-1">
-                            <template x-for="opt in opts" :key="opt.value">
-                                <button type="button"
-                                    @click="$wire.set('status', opt.value); open = false"
-                                    :class="opt.value === '{{ $status }}' ? 'bg-brand/10 text-brand font-medium' : 'text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700'"
-                                    class="w-full text-left px-3 py-2 text-sm flex items-center justify-between"
-                                >
+                        <div x-show="open" x-transition class="absolute z-50 mt-1 w-full rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-lg py-1">
+                            <template x-for="opt in [{value:'tersedia',label:'Tersedia'},{value:'tidak_tersedia',label:'Tidak Tersedia'}]" :key="opt.value">
+                                <button type="button" @click="$wire.status = opt.value; open = false"
+                                    :class="$wire.status === opt.value ? 'bg-brand/10 text-brand font-medium' : 'text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700'"
+                                    class="w-full text-left px-3 py-2 text-sm flex items-center justify-between">
                                     <span x-text="opt.label"></span>
-                                    <svg x-show="opt.value === '{{ $status }}'" class="h-4 w-4 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                    <svg x-show="$wire.status === opt.value" class="h-4 w-4 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                                    </svg>
                                 </button>
                             </template>
                         </div>

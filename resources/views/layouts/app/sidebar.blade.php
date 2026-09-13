@@ -75,28 +75,82 @@
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
 
-                    <flux:sidebar.item icon="users" :href="route('admin.tim')" :current="request()->routeIs('admin.tim')" wire:navigate.hover>
-                        {{ __('Tim') }}
-                    </flux:sidebar.item>
-                    <flux:sidebar.item icon="user" :href="route('admin.personil')" :current="request()->routeIs('admin.personil')" wire:navigate.hover>
-                        {{ __('Personil') }}
-                    </flux:sidebar.item>
-                    <flux:sidebar.item icon="home-modern" :href="route('admin.ruangan')" :current="request()->routeIs('admin.ruangan')" wire:navigate.hover>
-                        {{ __('Ruangan') }}
-                    </flux:sidebar.item>
+                    {{-- Separator (only visible when collapsed) --}}
+                    <div x-show="sidebarCollapsed" x-cloak class="my-2">
+                        <flux:separator variant="subtle" />
+                    </div>
 
-                    <flux:sidebar.item icon="calendar-days" :href="route('admin.periode-wfo')" :current="request()->routeIs('admin.periode-wfo')" wire:navigate.hover>
-                        {{ __('Periode WFO') }}
-                    </flux:sidebar.item>
-                    <flux:sidebar.item icon="calendar-days" :href="route('admin.jadwal-wfo')" :current="request()->routeIs('admin.jadwal-wfo')" wire:navigate.hover>
-                        {{ __('Jadwal WFO') }}
-                    </flux:sidebar.item>
-                    <flux:sidebar.item icon="building-office-2" :href="route('admin.alokasi-ruangan')" :current="request()->routeIs('admin.alokasi-ruangan')" wire:navigate.hover>
-                        {{ __('Alokasi Ruangan') }}
-                    </flux:sidebar.item>
-                    <flux:sidebar.item icon="sparkles" :href="route('admin.generate-jadwal')" :current="request()->routeIs('admin.generate-jadwal')" wire:navigate.hover>
-                        {{ __('Generate Jadwal') }}
-                    </flux:sidebar.item>
+                    {{-- Master Data - Grouped when expanded --}}
+                    <div x-show="!sidebarCollapsed">
+                        <flux:sidebar.group expandable heading="Master Data" class="grid">
+                            <flux:sidebar.item icon="users" :href="route('admin.tim')" :current="request()->routeIs('admin.tim')" wire:navigate.hover>
+                                {{ __('Tim') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="user" :href="route('admin.personil')" :current="request()->routeIs('admin.personil')" wire:navigate.hover>
+                                {{ __('Personil') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="home-modern" :href="route('admin.ruangan')" :current="request()->routeIs('admin.ruangan')" wire:navigate.hover>
+                                {{ __('Ruangan') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="calendar-days" :href="route('admin.periode-wfo')" :current="request()->routeIs('admin.periode-wfo')" wire:navigate.hover>
+                                {{ __('Periode WFO') }}
+                            </flux:sidebar.item>
+                        </flux:sidebar.group>
+                    </div>
+
+                    {{-- Master Data - Flat items when collapsed --}}
+                    <div x-show="sidebarCollapsed" x-cloak>
+                        <flux:sidebar.item icon="users" :href="route('admin.tim')" :current="request()->routeIs('admin.tim')" wire:navigate.hover>
+                            {{ __('Tim') }}
+                        </flux:sidebar.item>
+                        <flux:sidebar.item icon="user" :href="route('admin.personil')" :current="request()->routeIs('admin.personil')" wire:navigate.hover>
+                            {{ __('Personil') }}
+                        </flux:sidebar.item>
+                        <flux:sidebar.item icon="home-modern" :href="route('admin.ruangan')" :current="request()->routeIs('admin.ruangan')" wire:navigate.hover>
+                            {{ __('Ruangan') }}
+                        </flux:sidebar.item>
+                        <flux:sidebar.item icon="calendar-days" :href="route('admin.periode-wfo')" :current="request()->routeIs('admin.periode-wfo')" wire:navigate.hover>
+                            {{ __('Periode WFO') }}
+                        </flux:sidebar.item>
+                    </div>
+
+                    {{-- Separator (only visible when collapsed) --}}
+                    <div x-show="sidebarCollapsed" x-cloak class="my-2">
+                        <flux:separator variant="subtle" />
+                    </div>
+
+                    {{-- Penjadwalan - Grouped when expanded --}}
+                    <div x-show="!sidebarCollapsed">
+                        <flux:sidebar.group expandable heading="Penjadwalan" class="grid">
+                            <flux:sidebar.item icon="calendar-days" :href="route('admin.jadwal-wfo')" :current="request()->routeIs('admin.jadwal-wfo')" wire:navigate.hover>
+                                {{ __('Jadwal WFO') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="building-office-2" :href="route('admin.alokasi-ruangan')" :current="request()->routeIs('admin.alokasi-ruangan')" wire:navigate.hover>
+                                {{ __('Alokasi Ruangan') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="sparkles" :href="route('admin.generate-jadwal')" :current="request()->routeIs('admin.generate-jadwal')" wire:navigate.hover>
+                                {{ __('Generate Jadwal') }}
+                            </flux:sidebar.item>
+                        </flux:sidebar.group>
+                    </div>
+
+                    {{-- Penjadwalan - Flat items when collapsed --}}
+                    <div x-show="sidebarCollapsed" x-cloak>
+                        <flux:sidebar.item icon="calendar-days" :href="route('admin.jadwal-wfo')" :current="request()->routeIs('admin.jadwal-wfo')" wire:navigate.hover>
+                            {{ __('Jadwal WFO') }}
+                        </flux:sidebar.item>
+                        <flux:sidebar.item icon="building-office-2" :href="route('admin.alokasi-ruangan')" :current="request()->routeIs('admin.alokasi-ruangan')" wire:navigate.hover>
+                            {{ __('Alokasi Ruangan') }}
+                        </flux:sidebar.item>
+                        <flux:sidebar.item icon="sparkles" :href="route('admin.generate-jadwal')" :current="request()->routeIs('admin.generate-jadwal')" wire:navigate.hover>
+                            {{ __('Generate Jadwal') }}
+                        </flux:sidebar.item>
+                    </div>
+
+                    {{-- Separator (only visible when collapsed) --}}
+                    <div x-show="sidebarCollapsed" x-cloak class="my-2">
+                        <flux:separator variant="subtle" />
+                    </div>
 
                     @php
                         $unviewedCount = \App\Models\NotulenBriefing::unviewed()->count();

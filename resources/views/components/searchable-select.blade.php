@@ -56,7 +56,7 @@
         </label>
     @endif
 
-    {{-- Hidden input � Livewire reads this via wire:model --}}
+    {{-- Hidden input — Livewire reads this via wire:model --}}
     <input
         type="hidden"
         name="{{ $name }}"

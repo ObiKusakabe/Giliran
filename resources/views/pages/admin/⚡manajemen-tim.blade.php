@@ -146,12 +146,6 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
         return User::where('role', 'tim')->whereNull('tim_id')->count();
     }
 
-    public function bukaFormTambah(): void
-    {
-        $this->resetForm();
-        $this->modal('form-tim')->show();
-    }
-
     public function bukaModalGenerateAkunBaru(): void
     {
         $this->jumlahGenerate = 1;
@@ -408,9 +402,11 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
             <flux:button variant="subtle" @click="$wire.bukaModalGenerateAkunBaru()" icon="sparkles">
                 Generate Akun Baru
             </flux:button>
-            <flux:button variant="primary" wire:click="bukaFormTambah" icon="plus" class="flex-shrink-0">
-                Tambah Tim
-            </flux:button>
+            <flux:modal.trigger name="form-tim">
+                <flux:button variant="primary" icon="plus" class="flex-shrink-0">
+                    Tambah Tim
+                </flux:button>
+            </flux:modal.trigger>
         </div>
     </div>
 
@@ -769,11 +765,12 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
     </flux:card>
 
     {{-- Modal Form Tim --}}
-    <flux:modal name="form-tim" class="max-w-md">
+    <flux:modal name="form-tim" class="max-w-md" 
+        x-on:close="$wire.editingId = null; $wire.nama_tim = ''; $wire.keterangan = ''; $wire.status = 'active';">
         <div class="flex flex-col gap-5 p-1">
             <flux:heading size="lg">{{ $editingId ? 'Edit Tim' : 'Tambah Tim' }}</flux:heading>
             <form wire:submit="simpan" class="flex flex-col gap-4">
-                <flux:input wire:model.live="nama_tim" label="Nama Tim" placeholder="cth. Tim Politeknik Negeri Jakarta" required />
+                <flux:input wire:model="nama_tim" label="Nama Tim" placeholder="cth. Tim Politeknik Negeri Jakarta" required />
                 <flux:textarea wire:model="keterangan" label="Keterangan" placeholder="Keterangan opsional…" rows="3" />
                 <div class="flex justify-end gap-2 pt-2">
                     <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>

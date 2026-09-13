@@ -753,3 +753,14 @@ ui-table-scroll-area.overflow-auto,
 }
 
 
+
+/* ── Sidebar Separator: Only visible when collapsed ── */
+/* Hide by default (when expanded) */
+[data-flux-sidebar]:not([data-flux-sidebar-collapsed-desktop]) [data-flux-separator].sidebar-separator {
+    display: none;
+}
+
+/* Show when collapsed */
+[data-flux-sidebar][data-flux-sidebar-collapsed-desktop] [data-flux-separator].sidebar-separator {
+    display: block;
+}

@@ -41,18 +41,19 @@ return new class extends Migration
         });
 
         // 4. Update enum role: hapus 'personil', sisakan 'admin' dan 'tim'
-        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin','tim') NOT NULL DEFAULT 'tim'");
+        // SQLite tidak mendukung MODIFY COLUMN, tapi kita sudah migrate semua personil → tim di step 1
+        // Jadi enum constraint sudah tidak diperlukan di level database (Laravel handle via validation)
     }
 
     public function down(): void
     {
-        // Restore enum role dengan 'personil' kembali
-        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin','personil','tim') NOT NULL DEFAULT 'personil'");
-
         // Restore kolom personil_id
         Schema::table('users', function (Blueprint $table) {
             $table->foreignId('personil_id')->nullable()->after('id')
                 ->constrained('personil')->nullOnDelete();
         });
+
+        // Note: SQLite tidak mendukung MODIFY COLUMN untuk restore enum
+        // Manual rollback diperlukan jika perlu restore role='personil'
     }
 };

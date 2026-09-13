@@ -42,7 +42,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
                 'nama'          => $p->nama,
                 'jenis_kelamin' => $p->jenis_kelamin ?? 'laki-laki',
                 'tim_id'        => $p->tim_id,
-                'tim'           => $p->tim?->nama_tim ?? '�',
+                'tim'           => $p->tim?->nama_tim ?? '-',
                 'no_hp'         => $p->no_hp ?? '',
                 'status'        => $p->status,
                 'is_highlighted' => $this->filterTimId && $p->tim_id === $this->filterTimId,
@@ -90,12 +90,6 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
     public function totalTim(): int
     {
         return Tim::count();
-    }
-
-    public function bukaFormTambah(): void
-    {
-        $this->resetForm();
-        $this->modal('form-personil')->show();
     }
 
     public function bukaFormEdit(int $id): void
@@ -337,7 +331,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
             <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
-            <input x-model="q" type="text" placeholder="Cari nama, tim, atau no HP�"
+            <input x-model="q" type="text" placeholder="Cari nama, tim, atau no HP..."
                 class="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-brand dark:text-zinc-100" />
             <button x-show="q" @click="q = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -527,10 +521,16 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
                             <flux:table.cell class="text-zinc-500" x-text="p.tim"></flux:table.cell>
                             <flux:table.cell>
                                 <span x-show="p.jenis_kelamin === 'laki-laki'" class="inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 px-2 py-0.5 rounded-md">
-                                    <span>?</span> Laki-laki
+                                    <svg class="h-3.5 w-3.5" viewBox="-5 -5 45 115" fill="currentColor">
+                                        <path d="M30.39,35.84v66.43a4.87,4.87,0,0,1-4.85,4.86h0a4.88,4.88,0,0,1-4.86-4.86V63.21H18.77v39.06a4.87,4.87,0,0,1-4.85,4.86h0a4.88,4.88,0,0,1-4.86-4.86V35.84H7.37V60.25a3.7,3.7,0,0,1-3.69,3.68h0A3.7,3.7,0,0,1,0,60.25V34c0-4.27,1.44-7.27,4.05-9.24,4.5-3.39,26.72-3.39,31.22,0,2.62,2,4.07,5,4.06,9.24V60.25a3.7,3.7,0,0,1-3.68,3.68h0A3.7,3.7,0,0,1,32,60.25V35.84Z M19.66,5.56a8.78,8.78,0,1,1-8.78,8.78,8.78,8.78,0,0,1,8.78-8.78Z"/>
+                                    </svg>
+                                    Laki-laki
                                 </span>
                                 <span x-show="p.jenis_kelamin === 'perempuan'" class="inline-flex items-center gap-1 text-xs font-medium text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950/40 border border-pink-200 dark:border-pink-800/50 px-2 py-0.5 rounded-md">
-                                    <span>?</span> Perempuan
+                                    <svg class="h-3.5 w-3.5" viewBox="66 -6 60 116" fill="currentColor">
+                                        <path d="M115,33c.06.15.11.3.16.46l7.59,27a3.77,3.77,0,1,1-7.27,2L108,35.81l-.11,0H106.3v1.69l10,39.74h-10v25a4.87,4.87,0,0,1-4.85,4.86h0a4.88,4.88,0,0,1-4.85-4.86v-25H94.68v25a4.88,4.88,0,0,1-4.86,4.86h0A4.87,4.87,0,0,1,85,102.27v-25H74.38L85,36.48v-.64h-1.7l-.14,0L75.64,62.46a3.77,3.77,0,1,1-7.27-2L75.8,34l-.08,0c1.14-4.25,2.09-7.27,4.71-9.24,4.5-3.39,26.24-3.39,30.75,0C113.6,26.56,114,29,115,33Z M95.57,2.78a8.78,8.78,0,1,1-8.78,8.78,8.78,8.78,0,0,1,8.78-8.78Z"/>
+                                    </svg>
+                                    Perempuan
                                 </span>
                             </flux:table.cell>
                             <flux:table.cell align="center">
@@ -538,7 +538,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
                                       class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
                                       x-text="p.status==='aktif' ? 'Aktif' : 'Nonaktif'"></span>
                             </flux:table.cell>
-                            <flux:table.cell class="text-zinc-500" x-text="p.no_hp || '�'"></flux:table.cell>
+                            <flux:table.cell class="text-zinc-500" x-text="p.no_hp || '-'"></flux:table.cell>
                             <flux:table.cell align="end">
                                 <flux:dropdown>
                                     <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
@@ -558,7 +558,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
         <div class="px-4 py-3 border-t border-zinc-100 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3">
             <span class="text-xs text-zinc-400" x-text="
                 filtered.length === 0 ? 'Tidak ada hasil' :
-                'Menampilkan ' + ((page-1)*perPage+1) + '�' + Math.min(page*perPage, filtered.length) + ' dari ' + filtered.length + ' personil'
+                'Menampilkan ' + ((page-1)*perPage+1) + '–' + Math.min(page*perPage, filtered.length) + ' dari ' + filtered.length + ' personil'
             "></span>
             <div x-show="totalPages > 1" class="flex items-center gap-1">
                 <button @click="prevPage()" :disabled="page===1" class="h-7 w-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
@@ -574,8 +574,9 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
         </div>
     </flux:card>
 
-    <flux:modal name="form-personil" class="max-w-md">
-        <div class="flex flex-col gap-5 p-1">
+    <flux:modal name="form-personil" class="max-w-md" 
+        x-on:close="$wire.editingId = null; $wire.tim_id = ''; $wire.nama = ''; $wire.jenis_kelamin = 'laki-laki'; $wire.no_hp = ''; $wire.status = 'aktif';">
+        <div class="flex flex-col gap-6 p-1">
             <flux:heading size="lg">{{ $editingId ? 'Edit Personil' : 'Tambah Personil' }}</flux:heading>
             <form wire:submit="simpan" class="flex flex-col gap-4">
                 <x-searchable-select
@@ -645,7 +646,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
                     <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
                     <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="simpan">
                         <span wire:loading.remove wire:target="simpan">Simpan</span>
-                        <span wire:loading wire:target="simpan">Menyimpan�</span>
+                        <span wire:loading wire:target="simpan">Menyimpan...</span>
                     </flux:button>
                 </div>
             </form>
