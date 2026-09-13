@@ -31,6 +31,14 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Copy environment file
+        run: cp .env.example .env
+
+      - name: Set SQLite database for testing
+        run: |
+          echo "DB_CONNECTION=sqlite" >> .env
+          echo "DB_DATABASE=:memory:" >> .env
+
       - name: Setup Application
         run: composer setup
 
