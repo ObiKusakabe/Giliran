@@ -387,7 +387,7 @@
         {{-- DreamsPOS-style Footer --}}
         <flux:footer class="{{ !auth()->user()?->hasRole('admin') ? 'mb-16 lg:mb-0' : '' }} border-t border-zinc-200/60 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 !py-3.5 !px-6 text-xs text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div class="flex items-center gap-1.5">
-                <span>2026 © <strong class="font-semibold text-zinc-700 dark:text-zinc-300">Giliran</strong> — PT Inovindo Digital Media. All Rights Reserved</span>
+                <span>2026 © <strong class="font-semibold text-zinc-700 dark:text-zinc-300">Giliran</strong>, PT Inovindo Digital Media. All Rights Reserved</span>
             </div>
             <div class="flex items-center gap-1">
                 <span>Designed & Developed by</span>

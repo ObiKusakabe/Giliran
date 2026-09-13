@@ -1,7 +1,7 @@
-@props([
-    'name',
+﻿@props([
+    'name' => '',
     'label'       => null,
-    'placeholder' => 'Pilih…',
+    'placeholder' => 'Pilih...',
     'options'     => [],   // array [['value' => ..., 'label' => ...]]
     'modelValue'  => '',   // nilai awal (dari wire:model / PHP)
     'required'    => false,
@@ -33,10 +33,7 @@
             this.open = false;
             this.q = '';
             
-            // Direct Livewire update if wire:model is present
-            if ('{{ $wireModelName }}' && typeof $wire !== 'undefined') {
-                $wire.set('{{ $wireModelName }}', option.value);
-            }
+
 
             // Trigger native change event
             this.$nextTick(() => {
@@ -59,7 +56,7 @@
         </label>
     @endif
 
-    {{-- Hidden input — Livewire reads this via wire:model --}}
+    {{-- Hidden input � Livewire reads this via wire:model --}}
     <input
         type="hidden"
         name="{{ $name }}"
@@ -98,7 +95,7 @@
             <input
                 x-model="q"
                 type="text"
-                placeholder="Cari…"
+                placeholder="Cari..."
                 @click.stop
                 class="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 px-3 py-1.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-brand"
             />
