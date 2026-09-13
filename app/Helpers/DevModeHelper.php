@@ -3,6 +3,7 @@
 namespace App\Helpers;
 
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Session;
 
 /**
@@ -58,24 +59,24 @@ class DevModeHelper
 
     /**
      * Get human-readable time difference from now (dev mode aware)
-     * 
+     *
      * Usage: DevModeHelper::diffForHumans($tanggal)
-     * 
-     * @param Carbon $date The date to compare
-     * @param bool $showSekarang If true, returns "sekarang" when within a time window
+     *
+     * @param  Carbon  $date  The date to compare
+     * @param  bool  $showSekarang  If true, returns "sekarang" when within a time window
      * @return string Human-readable difference (e.g., "2 jam yang lalu", "dalam 1 hari", "sekarang")
      */
     public static function diffForHumans(Carbon $date, bool $showSekarang = false): string
     {
         $now = self::now();
-        
+
         // If showSekarang is enabled, check if we're within the same minute
         if ($showSekarang && abs($now->diffInMinutes($date, false)) <= 10) {
             return 'sekarang';
         }
-        
+
         return $date->diffForHumans($now, [
-            'syntax' => \Carbon\CarbonInterface::DIFF_RELATIVE_TO_NOW
+            'syntax' => CarbonInterface::DIFF_RELATIVE_TO_NOW,
         ]);
     }
 }

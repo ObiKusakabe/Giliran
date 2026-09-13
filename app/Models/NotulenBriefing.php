@@ -91,8 +91,8 @@ class NotulenBriefing extends Model
     public function jadwalBriefing()
     {
         $creatorTim = $this->timYangTerlibat()->wherePivot('is_creator', true)->first();
-        
-        if (!$creatorTim) {
+
+        if (! $creatorTim) {
             return null;
         }
 
@@ -111,6 +111,7 @@ class NotulenBriefing extends Model
     public function getPenulisNamaAttribute(): ?string
     {
         $jadwal = $this->jadwalBriefing();
+
         return $jadwal?->personil?->nama ?? null;
     }
 
@@ -255,7 +256,7 @@ class NotulenBriefing extends Model
      */
     public function markAsViewedByAdmin(): void
     {
-        if (!$this->viewed_by_admin) {
+        if (! $this->viewed_by_admin) {
             $this->update([
                 'viewed_by_admin' => true,
                 'admin_viewed_at' => now(),

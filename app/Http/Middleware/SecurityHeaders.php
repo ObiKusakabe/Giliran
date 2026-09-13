@@ -35,14 +35,14 @@ class SecurityHeaders
         $styleSrc = "'self' 'unsafe-inline'";
         $connectSrc = "'self'";
         $fontSrc = "'self' data:";
-        
+
         if (app()->environment('local')) {
             $scriptSrc .= ' http://localhost:5173';
             $styleSrc .= ' http://localhost:5173';
             $connectSrc .= ' http://localhost:5173 ws://localhost:5173';
             $fontSrc .= ' http://localhost:5173';
         }
-        
+
         $response->headers->set('Content-Security-Policy',
             "default-src 'self'; ".
             "script-src {$scriptSrc}; ".
