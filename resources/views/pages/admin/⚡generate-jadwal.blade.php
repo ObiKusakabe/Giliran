@@ -171,13 +171,22 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
             Flux::toast(variant: 'warning', text: 'Tidak ada hari kerja dalam rentang periode tersebut.');
             return;
         }
+        
+        // 🆕 For Alokasi Ruangan: Generate full week (Senin-Sabtu) bukan hanya workdays
+        // Ambil minggu pertama dari tanggalList
+        $firstDate = $tanggalList[0] ?? $mulai;
+        $startOfWeek = $firstDate->copy()->startOfWeek(Carbon::MONDAY);
+        $tanggalListFullWeek = [];
+        for ($i = 0; $i < 6; $i++) {
+            $tanggalListFullWeek[] = $startOfWeek->copy()->addDays($i);
+        }
 
         // Generate preview based on selected mode
         if ($this->selectedMode === 'periode_baru') {
             // Mode Periode Baru: Generate ALL
             $this->previewAdzan    = $scheduler->generateAdzanKajian($tanggalList, $periode->id);
             $this->previewBriefing = $scheduler->generateBriefing($tanggalList, $periode->id);
-            $this->previewRuangan  = $scheduler->generateAlokasiRuangan($tanggalList, $periode->id);
+            $this->previewRuangan  = $scheduler->generateAlokasiRuangan($tanggalListFullWeek, $periode->id); // Use full week
         } else {
             // Mode Custom: Only generate selected schedules
             $this->previewAdzan = [];
@@ -198,7 +207,7 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
             
             // Generate Ruangan
             if (in_array('ruangan', $this->selectedJadwal)) {
-                $this->previewRuangan = $scheduler->generateAlokasiRuangan($tanggalList, $periode->id);
+                $this->previewRuangan = $scheduler->generateAlokasiRuangan($tanggalListFullWeek, $periode->id); // Use full week
             }
         }
 
@@ -656,7 +665,19 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                         @php
                             // Group by ruangan_id, then by tanggal
                             $groupedByRuangan = collect($previewRuangan)->groupBy('ruangan_id');
-                            $allDates = collect($previewRuangan)->pluck('tanggal')->unique()->sort()->values();
+                            
+                            // Generate full week range (Senin-Sabtu) dari tanggal pertama yang ada di data
+                            $firstDate = collect($previewRuangan)->pluck('tanggal')->sort()->first();
+                            $startOfWeek = \Carbon\Carbon::parse($firstDate)->startOfWeek(\Carbon\Carbon::MONDAY);
+                            
+                            // Generate 6 hari (Senin-Sabtu)
+                            $allDates = collect();
+                            for ($i = 0; $i < 6; $i++) {
+                                $allDates->push($startOfWeek->copy()->addDays($i)->toDateString());
+                            }
+                            
+                            // Helper untuk nama hari Indonesia
+                            $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'];
                         @endphp
 
                         <div class="overflow-x-auto border border-zinc-200 dark:border-zinc-700 rounded-lg">
@@ -671,8 +692,8 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                                 <thead>
                                     <tr class="bg-zinc-100 dark:bg-zinc-900 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
                                         {{-- Kolom Ruangan --}}
-                                        <th class="p-3.5 ps-5 border-b border-r border-zinc-200 dark:border-zinc-800 sticky left-0 z-10 bg-zinc-100 dark:bg-zinc-900">
-                                            <div class="flex items-center gap-2 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">
+                                        <th class="p-3.5 ps-5 border-b border-r border-zinc-200 dark:border-zinc-800 select-none sticky left-0 z-50 bg-zinc-100 dark:bg-zinc-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                                            <div class="flex items-center gap-2 font-semibold text-xs uppercase tracking-wider text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                                                 <flux:icon icon="building-office-2" class="size-4 text-zinc-400 shrink-0" />
                                                 <span>Ruangan</span>
                                             </div>
@@ -681,10 +702,12 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                                         @foreach ($allDates as $date)
                                             @php
                                                 $carbonDate = \Carbon\Carbon::parse($date);
-                                                $dayName = $carbonDate->translatedFormat('D');
-                                                $dateLabel = $carbonDate->format('d/m');
+                                                $dayOfWeek = $carbonDate->dayOfWeekIso - 1; // 0 = Senin, 5 = Sabtu
+                                                $dayName = ucfirst($namaHariIndo[$dayOfWeek] ?? $carbonDate->translatedFormat('D'));
+                                                $dateLabel = $carbonDate->translatedFormat('d M');
+                                                $isToday = $carbonDate->isToday();
                                             @endphp
-                                            <th class="p-3.5 text-center border-b border-r border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900">
+                                            <th class="p-3.5 text-center border-b border-r border-zinc-200 dark:border-zinc-800 select-none relative z-40 bg-zinc-100 dark:bg-zinc-900 {{ $isToday ? '!bg-blue-50/90 dark:!bg-blue-950/50 text-blue-600 dark:text-blue-400' : '' }}">
                                                 <div class="font-bold text-sm">{{ $dayName }}</div>
                                                 <div class="text-[11px] font-normal opacity-80 mt-0.5">{{ $dateLabel }}</div>
                                             </th>
@@ -701,12 +724,12 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                                         @endphp
                                         <tr class="hover:bg-zinc-50/40 dark:hover:bg-zinc-900/20 transition-colors">
                                             {{-- Ruangan Info Cell (Sticky Left) --}}
-                                            <td class="p-4 ps-5 sticky left-0 z-10 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-800">
+                                            <td class="p-4 ps-5 sticky left-0 z-10 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
                                                 <div class="font-semibold text-sm text-zinc-900 dark:text-zinc-100 leading-snug break-words">
                                                     {{ $ruangan->nama_ruangan ?? '—' }}
                                                 </div>
                                                 <div class="flex items-center gap-1.5 mt-2">
-                                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-700/60 text-zinc-600 dark:text-zinc-300 text-xs font-medium border border-zinc-200/80 dark:border-zinc-700/80 whitespace-nowrap">
+                                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-700/60 text-zinc-600 dark:text-zinc-300 text-xs font-medium border border-zinc-200/80 dark:border-zinc-700/80 whitespace-nowrap shadow-2xs">
                                                         <flux:icon icon="users" class="size-3.5 text-zinc-400 shrink-0" />
                                                         <span>{{ $ruangan->kapasitas ?? 0 }} orang</span>
                                                     </span>
@@ -715,7 +738,11 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
 
                                             {{-- Daily Cells --}}
                                             @foreach ($allDates as $date)
-                                                <td class="p-2 border-b border-r border-zinc-200 dark:border-zinc-800 align-top">
+                                                @php
+                                                    $carbonDate = \Carbon\Carbon::parse($date);
+                                                    $isToday = $carbonDate->isToday();
+                                                @endphp
+                                                <td class="p-2 border-b border-r border-zinc-200 dark:border-zinc-800 align-top transition-colors {{ $isToday ? 'bg-[#3B71CA]/5 dark:bg-[#3B71CA]/5' : '' }}">
                                                     @if ($alokasiByDate->has($date))
                                                         @php
                                                             $row = $alokasiByDate[$date];
@@ -725,20 +752,23 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                                                             $utilization = $kapasitas > 0 ? round(($expected / $kapasitas) * 100) : 0;
                                                             $isOverCapacity = $expected > $kapasitas;
                                                             
-                                                            // Tim color (7 colors rotation)
+                                                            // Tim color - SAMA dengan alokasi-ruangan page
                                                             $colors = [
-                                                                'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800/60 text-blue-700 dark:text-blue-300',
-                                                                'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300',
-                                                                'bg-purple-50 dark:bg-purple-950/50 border-purple-200 dark:border-purple-800/60 text-purple-700 dark:text-purple-300',
-                                                                'bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800/60 text-amber-700 dark:text-amber-300',
-                                                                'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300',
-                                                                'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-200 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300',
-                                                                'bg-teal-50 dark:bg-teal-950/50 border-teal-200 dark:border-teal-800/60 text-teal-700 dark:text-teal-300',
+                                                                'bg-[#3B71CA] dark:bg-[#3B71CA] text-white border-[#2d5db3] dark:border-[#2d5db3]',
+                                                                'bg-red-500 dark:bg-red-600 text-white border-red-600 dark:border-red-700',
+                                                                'bg-green-500 dark:bg-green-600 text-white border-green-600 dark:border-green-700',
+                                                                'bg-amber-400 dark:bg-amber-500 text-zinc-900 dark:text-zinc-900 border-amber-500 dark:border-amber-600',
+                                                                'bg-purple-500 dark:bg-purple-600 text-white border-purple-600 dark:border-purple-700',
+                                                                'bg-stone-600 dark:bg-stone-700 text-white border-stone-700 dark:border-stone-800',
+                                                                'bg-pink-500 dark:bg-pink-600 text-white border-pink-600 dark:border-pink-700',
+                                                                'bg-slate-700 dark:bg-slate-800 text-white border-slate-800 dark:border-slate-900',
+                                                                'bg-orange-500 dark:bg-orange-600 text-white border-orange-600 dark:border-orange-700',
+                                                                'bg-emerald-500 dark:bg-emerald-600 text-white border-emerald-600 dark:border-emerald-700',
                                                             ];
                                                             $colorClass = $colors[($row['tim_id'] - 1) % count($colors)];
                                                         @endphp
                                                         
-                                                        <div class="p-2.5 rounded-xl border shadow-xs {{ $colorClass }}">
+                                                        <div class="p-2.5 rounded-xl border shadow-xs hover:shadow-md transition-all {{ $colorClass }}">
                                                             <div class="min-w-0">
                                                                 <div class="font-semibold text-xs truncate leading-tight">{{ $tim?->nama_tim ?? '—' }}</div>
                                                                 
@@ -748,7 +778,7 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                                                                     <span>{{ $expected }}/{{ $kapasitas }} orang</span>
                                                                     <span class="opacity-60">•</span>
                                                                     <span 
-                                                                        class="px-1.5 py-0.5 rounded font-semibold {{ $isOverCapacity ? 'bg-red-500/90 text-white' : 'bg-white/90 dark:bg-zinc-900/90' }}"
+                                                                        class="px-1.5 py-0.5 rounded font-semibold {{ $isOverCapacity ? 'bg-red-500/90 text-white' : 'bg-white/90 dark:bg-zinc-900/90 text-zinc-900 dark:text-white' }}"
                                                                     >
                                                                         {{ $utilization }}%
                                                                     </span>
