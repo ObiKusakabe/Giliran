@@ -878,18 +878,18 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                         { label: 'Generate Alokasi Ruangan...', duration: 800 },
                     @endif
                     { label: 'Menyiapkan preview...', duration: 600 }
-                ]
-            }"
-            x-init="
-                let totalSteps = steps.length;
-                let interval = setInterval(() => {
-                    if (currentStep < totalSteps) {
-                        currentStep++;
-                    } else {
-                        clearInterval(interval);
+                ],
+                progressNextStep() {
+                    if (this.currentStep < this.steps.length) {
+                        const currentDuration = this.steps[this.currentStep]?.duration || 500;
+                        setTimeout(() => {
+                            this.currentStep++;
+                            this.progressNextStep();
+                        }, currentDuration);
                     }
-                }, steps[currentStep]?.duration || 500);
-            "
+                }
+            }"
+            x-init="progressNextStep()"
         >
             <svg class="animate-spin h-12 w-12 text-blue-600 dark:text-blue-400 mb-4" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
