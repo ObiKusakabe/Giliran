@@ -759,14 +759,6 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                         </div>
                     @endif
                 </div>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    @endif
-                </div>
             </div>
 
             {{-- Tombol aksi --}}
