@@ -858,7 +858,39 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
         </div>
 
         {{-- Content: Processing Steps (during loading) --}}
-        <div wire:loading wire:target="processGenerate,preview" class="flex flex-col items-center justify-center py-16 px-6">
+        <div 
+            wire:loading 
+            wire:target="processGenerate,preview" 
+            class="flex flex-col items-center justify-center py-16 px-6"
+            x-data="{ 
+                currentStep: 0,
+                steps: [
+                    @if ($this->selectedMode === 'periode_baru' || in_array('adzan', $this->selectedJadwal) || in_array('kajian', $this->selectedJadwal))
+                        { label: 'Generate Adzan & Kajian...', duration: 800 },
+                    @endif
+                    @if ($this->selectedMode === 'periode_baru' || in_array('briefing_notulen', $this->selectedJadwal) || in_array('briefing_moderator', $this->selectedJadwal) || in_array('briefing_doa', $this->selectedJadwal))
+                        { label: 'Generate Briefing...', duration: 600 },
+                        { label: 'Tentukan Notulen...', duration: 400, isSubStep: true },
+                        { label: 'Tentukan Moderator...', duration: 400, isSubStep: true },
+                        { label: 'Tentukan Doa...', duration: 400, isSubStep: true },
+                    @endif
+                    @if ($this->selectedMode === 'periode_baru' || in_array('ruangan', $this->selectedJadwal))
+                        { label: 'Generate Alokasi Ruangan...', duration: 800 },
+                    @endif
+                    { label: 'Menyiapkan preview...', duration: 600 }
+                ]
+            }"
+            x-init="
+                let totalSteps = steps.length;
+                let interval = setInterval(() => {
+                    if (currentStep < totalSteps) {
+                        currentStep++;
+                    } else {
+                        clearInterval(interval);
+                    }
+                }, steps[currentStep]?.duration || 500);
+            "
+        >
             <svg class="animate-spin h-12 w-12 text-blue-600 dark:text-blue-400 mb-4" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -868,45 +900,41 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                 Mohon tunggu, sistem sedang membuat jadwal dengan algoritma LRA.
             </flux:text>
             
-            {{-- Processing Steps --}}
+            {{-- Processing Steps with Alpine.js progress tracking --}}
             <div class="space-y-3 w-full max-w-sm">
-                @if ($this->selectedMode === 'periode_baru' || in_array('adzan', $this->selectedJadwal) || in_array('kajian', $this->selectedJadwal))
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
-                        <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></div>
-                        <span>Generate Adzan & Kajian...</span>
+                <template x-for="(step, index) in steps" :key="index">
+                    <div 
+                        class="flex items-center gap-3 text-sm"
+                        :class="step.isSubStep ? 'pl-5' : ''"
+                        x-show="index <= currentStep"
+                        x-transition:enter="transition ease-out duration-300"
+                        x-transition:enter-start="opacity-0 transform translate-y-2"
+                        x-transition:enter-end="opacity-100 transform translate-y-0"
+                    >
+                        {{-- Icon: Checklist if done, dot if current --}}
+                        <template x-if="index < currentStep">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" 
+                                :class="step.isSubStep ? 'w-3.5 h-3.5 text-green-600 dark:text-green-400' : 'w-4 h-4 text-green-600 dark:text-green-400'">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" />
+                            </svg>
+                        </template>
+                        <template x-if="index === currentStep">
+                            <div 
+                                :class="step.isSubStep 
+                                    ? 'w-2 h-2 rounded-full bg-purple-500 animate-pulse' 
+                                    : 'w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse'"
+                            ></div>
+                        </template>
+                        
+                        <span 
+                            :class="index < currentStep 
+                                ? 'text-zinc-500 dark:text-zinc-400' 
+                                : 'text-zinc-700 dark:text-zinc-300'"
+                            x-text="step.label"
+                            :style="step.isSubStep ? 'font-size: 0.75rem' : ''"
+                        ></span>
                     </div>
-                @endif
-                
-                @if ($this->selectedMode === 'periode_baru' || in_array('briefing_notulen', $this->selectedJadwal) || in_array('briefing_moderator', $this->selectedJadwal) || in_array('briefing_doa', $this->selectedJadwal))
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
-                        <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse" style="animation-delay: 0.2s"></div>
-                        <span>Generate Briefing...</span>
-                    </div>
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 pl-5">
-                        <div class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" style="animation-delay: 0.3s"></div>
-                        <span class="text-xs">Tentukan Notulen...</span>
-                    </div>
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 pl-5">
-                        <div class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" style="animation-delay: 0.4s"></div>
-                        <span class="text-xs">Tentukan Moderator...</span>
-                    </div>
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 pl-5">
-                        <div class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" style="animation-delay: 0.5s"></div>
-                        <span class="text-xs">Tentukan Doa...</span>
-                    </div>
-                @endif
-                
-                @if ($this->selectedMode === 'periode_baru' || in_array('ruangan', $this->selectedJadwal))
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
-                        <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse" style="animation-delay: 0.6s"></div>
-                        <span>Generate Alokasi Ruangan...</span>
-                    </div>
-                @endif
-                
-                <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
-                    <div class="w-2 h-2 rounded-full bg-green-600 animate-pulse" style="animation-delay: 0.8s"></div>
-                    <span>Menyiapkan preview...</span>
-                </div>
+                </template>
             </div>
         </div>
     </flux:modal>
