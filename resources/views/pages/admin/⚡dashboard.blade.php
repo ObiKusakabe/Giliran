@@ -239,17 +239,6 @@ new #[Title('')] #[Layout('layouts.admin')] #[Lazy] class extends Component {
         return $adzan->merge($briefing)->sortBy('tanggal')->take(10)->values();
     }
 
-    public function generateJadwal(): void
-    {
-        if (! $this->periodeAktif) {
-            $this->dispatch('notify', type: 'error', message: 'Tidak ada periode WFO aktif.');
-            return;
-        }
-
-        // Redirect to generate page with periode context
-        $this->redirect(route('admin.generate-jadwal'));
-    }
-
     public function exportPDF(): void
     {
         if (! $this->periodeAktif) {
@@ -295,11 +284,9 @@ new #[Title('')] #[Layout('layouts.admin')] #[Lazy] class extends Component {
                     <span>{{ $this->periodeAktif->tanggal_mulai->format('d/m/Y') }} – {{ $this->periodeAktif->tanggal_selesai->format('d/m/Y') }}</span>
                 </div>
             @endif
-            <flux:modal.trigger name="modal-generate-jadwal">
-                <flux:button variant="primary" icon="sparkles">
-                    Generate Jadwal
-                </flux:button>
-            </flux:modal.trigger>
+            <flux:button variant="primary" icon="sparkles" :href="route('admin.generate-jadwal')" wire:navigate>
+                Generate Jadwal
+            </flux:button>
             <flux:button variant="filled" icon="arrow-down-tray" wire:click="exportPDF">
                 Export PDF
             </flux:button>
@@ -1163,41 +1150,5 @@ new #[Title('')] #[Layout('layouts.admin')] #[Lazy] class extends Component {
 
     {{-- Modal handled by calendar-widget component --}}
 
-    {{-- Modal: Generate Jadwal Confirmation --}}
-    <flux:modal name="modal-generate-jadwal" class="max-w-md">
-        <div class="flex flex-col gap-4">
-            <flux:heading size="lg">Generate Jadwal</flux:heading>
-            
-            @if ($this->periodeAktif)
-                <div class="flex flex-col gap-2 text-sm">
-                    <flux:text>Akan membuat jadwal untuk periode aktif:</flux:text>
-                    <div class="bg-zinc-50 dark:bg-zinc-800 rounded-lg p-3 space-y-1">
-                        <div class="flex justify-between">
-                            <span class="text-zinc-500">Periode:</span>
-                            <span class="font-medium">{{ $this->periodeAktif->nama_periode }}</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-zinc-500">Tanggal:</span>
-                            <span class="font-medium">
-                                {{ $this->periodeAktif->tanggal_mulai->translatedFormat('d M') }} – 
-                                {{ $this->periodeAktif->tanggal_selesai->translatedFormat('d M Y') }}
-                            </span>
-                        </div>
-                    </div>
-                    <flux:text class="text-xs text-zinc-500">
-                        Sistem akan generate jadwal Adzan, Briefing, dan Alokasi Ruangan untuk semua hari kerja (Senin–Sabtu).
-                    </flux:text>
-                </div>
-            @endif
-
-            <div class="flex justify-end gap-2 pt-2">
-                <flux:modal.close>
-                    <flux:button variant="ghost">Batal</flux:button>
-                </flux:modal.close>
-                <flux:button variant="primary" wire:click="generateJadwal">
-                    Lanjut Generate
-                </flux:button>
-            </div>
-        </div>
     </flux:modal>
 </div>
