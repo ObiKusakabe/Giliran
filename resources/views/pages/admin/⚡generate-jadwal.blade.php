@@ -723,6 +723,8 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
 
     {{-- Modal: Mode Selection --}}
     <flux:modal wire:model="modalModeSelection" class="max-w-2xl max-h-[90vh] flex flex-col">
+        {{-- Hide modal content during processing --}}
+        <div wire:loading.remove wire:target="processGenerate,preview">
         {{-- Sticky Header --}}
         <div class="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 px-6 py-4">
             <flux:heading size="lg">Pilih Mode Generate Jadwal</flux:heading>
@@ -853,13 +855,15 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                 Generate Jadwal
             </flux:button>
         </div>
+        </div>
     </flux:modal>
 
     {{-- Modal: Processing with Steps (triggered by wire:loading) --}}
     <div 
         wire:loading.delay 
         wire:target="processGenerate,preview"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 dark:bg-black/70"
+        style="z-index: 100 !important;"
     >
         <div class="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl max-w-md w-full mx-4">
             <div class="flex flex-col items-center justify-center py-12 px-6">
