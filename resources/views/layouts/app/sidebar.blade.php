@@ -7,47 +7,79 @@
     <body 
         class="min-h-screen bg-white dark:bg-zinc-800"
         x-data="{
-            sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true',
+            sidebarCollapsed: false,
+            observer: null,
+            
             init() {
-                // Apply initial state immediately (before Flux loads)
-                this.applySidebarState();
+                // SINGLE SOURCE OF TRUTH: Always read from DOM attribute, not localStorage
+                // This prevents race conditions during wire:navigate transitions
+                this.syncStateFromDOM();
                 
-                // Listen to Flux sidebar toggle events
-                this.$watch('sidebarCollapsed', value => {
-                    localStorage.setItem('sidebarCollapsed', value);
-                    this.applySidebarState();
-                });
+                // Setup MutationObserver to watch DOM attribute changes in REAL-TIME
+                // No setTimeout delays — instant sync when Flux changes the attribute
+                const sidebar = document.querySelector('[data-flux-sidebar]');
+                if (sidebar) {
+                    this.observer = new MutationObserver(() => {
+                        this.syncStateFromDOM();
+                    });
+                    
+                    // Watch for attribute changes on sidebar element
+                    this.observer.observe(sidebar, {
+                        attributes: true,
+                        attributeFilter: ['data-flux-sidebar-collapsed-desktop']
+                    });
+                }
                 
-                // Intercept Flux sidebar collapse toggle
-                document.addEventListener('click', (e) => {
-                    const collapseBtn = e.target.closest('[data-flux-sidebar-collapse]');
-                    if (collapseBtn) {
-                        // Wait for Flux to apply its state, then sync
-                        setTimeout(() => {
-                            const sidebar = document.querySelector('[data-flux-sidebar]');
-                            if (sidebar) {
-                                const isCollapsed = sidebar.hasAttribute('data-flux-sidebar-collapsed-desktop');
-                                this.sidebarCollapsed = isCollapsed;
-                            }
-                        }, 50);
-                    }
-                });
-                
-                // On page load/navigate, reapply state
+                // On Livewire navigation (SPA page change), ALWAYS re-read from DOM
+                // Do NOT trust localStorage during SPA navigation
                 document.addEventListener('livewire:navigated', () => {
-                    this.applySidebarState();
+                    this.syncStateFromDOM();
                 });
+                
+                // Persist user preference to localStorage for cross-session (page reload)
+                // But this is NOT the source of truth during runtime — DOM is
+                this.$watch('sidebarCollapsed', (value) => {
+                    localStorage.setItem('sidebarCollapsed', value);
+                });
+                
+                // On first page load (NOT wire:navigate), apply localStorage preference to DOM
+                // This restores user's last preference from previous session
+                const storedPreference = localStorage.getItem('sidebarCollapsed') === 'true';
+                if (storedPreference !== this.sidebarCollapsed) {
+                    this.applyPreferenceToDom(storedPreference);
+                }
             },
-            applySidebarState() {
+            
+            // Read DOM attribute as single source of truth (eliminates race condition)
+            syncStateFromDOM() {
+                const sidebar = document.querySelector('[data-flux-sidebar]');
+                if (sidebar) {
+                    const isDomCollapsed = sidebar.hasAttribute('data-flux-sidebar-collapsed-desktop');
+                    // Only update if different to avoid infinite loops
+                    if (this.sidebarCollapsed !== isDomCollapsed) {
+                        this.sidebarCollapsed = isDomCollapsed;
+                    }
+                }
+            },
+            
+            // Apply Alpine state to DOM (used only on initial page load to restore preference)
+            applyPreferenceToDom(collapsed) {
                 const sidebar = document.querySelector('[data-flux-sidebar]');
                 if (!sidebar) return;
                 
-                if (this.sidebarCollapsed) {
-                    // Collapse sidebar
+                if (collapsed) {
                     sidebar.setAttribute('data-flux-sidebar-collapsed-desktop', '');
                 } else {
-                    // Expand sidebar
                     sidebar.removeAttribute('data-flux-sidebar-collapsed-desktop');
+                }
+                // Sync Alpine state immediately after DOM change
+                this.sidebarCollapsed = collapsed;
+            },
+            
+            destroy() {
+                // Cleanup observer when component destroyed
+                if (this.observer) {
+                    this.observer.disconnect();
                 }
             }
         }"
