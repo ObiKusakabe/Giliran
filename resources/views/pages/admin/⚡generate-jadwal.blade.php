@@ -337,7 +337,7 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
 }; ?>
 
 <div
-    x-data="{ tab: $wire.entangle('tab'), briefingExpanded: '' }"
+    x-data="{ tab: $wire.entangle('tab'), briefingExpanded: '', ruanganExpanded: '' }"
     class="flex flex-col gap-6"
 >
     {{-- Header --}}
@@ -653,46 +653,112 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                     @if (empty($previewRuangan))
                         <p class="text-sm text-zinc-400">Tidak ada alokasi ruangan untuk rentang ini.</p>
                     @else
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-xs">
-                                <thead class="bg-zinc-50 dark:bg-zinc-800">
-                                    <tr>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Tanggal</th>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Tim</th>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Ruangan</th>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Kapasitas</th>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Personil</th>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Utilitas</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                    @foreach ($previewRuangan as $row)
-                                        @php
-                                            $tim     = \App\Models\Tim::find($row['tim_id']);
-                                            $ruangan = \App\Models\Ruangan::find($row['ruangan_id']);
-                                            $kapasitas = $row['kapasitas'] ?? $ruangan?->kapasitas ?? 0;
-                                            $expected = $row['expected_attendance'] ?? 0;
-                                            $utilization = $kapasitas > 0 ? round(($expected / $kapasitas) * 100, 1) : 0;
-                                            $isOverCapacity = $expected > $kapasitas;
-                                        @endphp
-                                        <tr class="{{ $isOverCapacity ? 'bg-red-50 dark:bg-red-950/20' : '' }}">
-                                            <td class="px-3 py-1.5">{{ \Carbon\Carbon::parse($row['tanggal'])->translatedFormat('d M Y') }}</td>
-                                            <td class="px-3 py-1.5">{{ $tim?->nama_tim ?? '—' }}</td>
-                                            <td class="px-3 py-1.5">{{ $ruangan?->nama_ruangan ?? '—' }}</td>
-                                            <td class="px-3 py-1.5 text-zinc-600 dark:text-zinc-400">{{ $kapasitas }}</td>
-                                            <td class="px-3 py-1.5 {{ $isOverCapacity ? 'font-semibold text-red-600 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-400' }}">
-                                                {{ $expected }}
-                                            </td>
-                                            <td class="px-3 py-1.5">
-                                                @if ($isOverCapacity)
-                                                    <flux:badge color="red" size="sm">{{ $utilization }}% ⚠️</flux:badge>
-                                                @elseif ($utilization >= 50 && $utilization <= 100)
-                                                    <flux:badge color="green" size="sm">{{ $utilization }}%</flux:badge>
-                                                @elseif ($utilization > 0)
-                                                    <flux:badge color="zinc" size="sm">{{ $utilization }}%</flux:badge>
-                                                @else
-                                                    <span class="text-zinc-400">—</span>
-                                                @endif
+                        @php
+                            // Group by tanggal
+                            $groupedRuangan = collect($previewRuangan)->groupBy('tanggal')->sortKeys();
+                        @endphp
+
+                        <div class="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
+                            @foreach ($groupedRuangan as $tanggal => $alokasis)
+                                @php
+                                    $tanggalKey = $tanggal;
+                                    $carbonDate = \Carbon\Carbon::parse($tanggal);
+                                    $dayName = $carbonDate->translatedFormat('l');
+                                    $dateFormat = $carbonDate->translatedFormat('d M Y');
+                                @endphp
+
+                                {{-- Accordion Header --}}
+                                <div class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0">
+                                    <button
+                                        type="button"
+                                        @click="ruanganExpanded = ruanganExpanded === '{{ $tanggalKey }}' ? '' : '{{ $tanggalKey }}'"
+                                        class="w-full p-4 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                                    >
+                                        <div class="flex items-center gap-3">
+                                            <svg 
+                                                class="w-4 h-4 text-zinc-400 transition-transform"
+                                                :class="ruanganExpanded === '{{ $tanggalKey }}' ? 'rotate-90' : ''"
+                                                fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                                            >
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                                            </svg>
+                                            <div class="text-left">
+                                                <div class="text-sm font-medium text-zinc-900 dark:text-zinc-100">{{ $dayName }}</div>
+                                                <div class="text-xs text-zinc-500">{{ $dateFormat }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="text-xs text-zinc-500">
+                                            {{ $alokasis->count() }} Alokasi
+                                        </div>
+                                    </button>
+
+                                    {{-- Accordion Content --}}
+                                    <div 
+                                        x-show="ruanganExpanded === '{{ $tanggalKey }}'"
+                                        x-transition:enter="transition ease-out duration-150"
+                                        x-transition:enter-start="opacity-0 -translate-y-1"
+                                        x-transition:enter-end="opacity-100 translate-y-0"
+                                        x-cloak
+                                    >
+                                        <div class="p-4 space-y-3 bg-zinc-50/30 dark:bg-zinc-800/30">
+                                            @foreach ($alokasis as $row)
+                                                @php
+                                                    $tim     = \App\Models\Tim::find($row['tim_id']);
+                                                    $ruangan = \App\Models\Ruangan::find($row['ruangan_id']);
+                                                    $kapasitas = $row['kapasitas'] ?? $ruangan?->kapasitas ?? 0;
+                                                    $expected = $row['expected_attendance'] ?? 0;
+                                                    $utilization = $kapasitas > 0 ? round(($expected / $kapasitas) * 100) : 0;
+                                                    $isOverCapacity = $expected > $kapasitas;
+                                                    
+                                                    // Get tim color (simplified, using modulo for color rotation)
+                                                    $colors = [
+                                                        'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800/60 text-blue-700 dark:text-blue-300',
+                                                        'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300',
+                                                        'bg-purple-50 dark:bg-purple-950/50 border-purple-200 dark:border-purple-800/60 text-purple-700 dark:text-purple-300',
+                                                        'bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800/60 text-amber-700 dark:text-amber-300',
+                                                        'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300',
+                                                        'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-200 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300',
+                                                        'bg-teal-50 dark:bg-teal-950/50 border-teal-200 dark:border-teal-800/60 text-teal-700 dark:text-teal-300',
+                                                    ];
+                                                    $colorClass = $colors[($row['tim_id'] - 1) % count($colors)];
+                                                @endphp
+                                                
+                                                <div class="p-3 rounded-lg border shadow-xs {{ $colorClass }}">
+                                                    <div class="flex items-start justify-between gap-3">
+                                                        <div class="min-w-0 flex-1">
+                                                            <div class="font-semibold text-sm truncate">{{ $tim?->nama_tim ?? '—' }}</div>
+                                                            <div class="flex items-center gap-1.5 mt-1 text-xs">
+                                                                <flux:icon icon="building-office-2" class="size-3.5 opacity-70" />
+                                                                <span>{{ $ruangan?->nama_ruangan ?? '—' }}</span>
+                                                            </div>
+                                                            <div class="flex items-center gap-2 mt-2 text-xs font-medium">
+                                                                <span class="inline-flex items-center gap-1">
+                                                                    <span class="inline-block size-1.5 rounded-full bg-current"></span>
+                                                                    <span>{{ $expected }}/{{ $kapasitas }} orang</span>
+                                                                </span>
+                                                                <span class="opacity-40">•</span>
+                                                                <span 
+                                                                    class="px-1.5 py-0.5 rounded font-semibold {{ $isOverCapacity ? 'bg-red-500/90 text-white' : 'bg-white/90 dark:bg-zinc-900/90' }}"
+                                                                >
+                                                                    {{ $utilization }}%
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        @if ($isOverCapacity)
+                                                            <div class="shrink-0">
+                                                                <flux:badge color="red" size="xs" icon="exclamation-triangle">Over</flux:badge>
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
                                             </td>
                                         </tr>
                                     @endforeach
