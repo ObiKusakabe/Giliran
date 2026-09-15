@@ -204,10 +204,10 @@
                         {{ __('Ruangan Hari Ini') }}
                     </flux:sidebar.item>
                     <flux:sidebar.item icon="clipboard-document-list" :href="route('tim.notulen.history')" :current="request()->routeIs('tim.notulen.*')" wire:navigate.hover>
-                        {{ __('Notulen Briefing') }}
+                        Notulen Briefing
                     </flux:sidebar.item>
                     <flux:sidebar.item icon="user-group" :href="route('tim.profil')" :current="request()->routeIs('tim.profil') || request()->routeIs('tim.akun')" wire:navigate.hover>
-                        {{ __('Profil & Anggota') }}
+                        Profil Tim
                     </flux:sidebar.item>
                 @endif
             </flux:sidebar.nav>
