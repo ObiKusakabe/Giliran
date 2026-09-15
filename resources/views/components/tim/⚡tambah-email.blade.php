@@ -18,7 +18,8 @@ new #[Title('Tambah Email')] #[Layout('layouts.tim')] class extends Component {
     {
         // Redirect if user already has email
         if (Auth::user()->email) {
-            redirect()->route('tim.dashboard');
+            $this->redirect(route('tim.beranda'), navigate: true);
+            return;
         }
 
         // Check if there's an active OTP
@@ -100,7 +101,7 @@ new #[Title('Tambah Email')] #[Layout('layouts.tim')] class extends Component {
             );
 
             // Redirect to dashboard
-            return redirect()->route('tim.dashboard');
+            $this->redirect(route('tim.beranda'), navigate: true);
         } else {
             Flux::toast(
                 variant: 'danger',
@@ -135,7 +136,7 @@ new #[Title('Tambah Email')] #[Layout('layouts.tim')] class extends Component {
 
     public function batal(): void
     {
-        return redirect()->route('tim.dashboard');
+        $this->redirect(route('tim.beranda'), navigate: true);
     }
 }; ?>
 
