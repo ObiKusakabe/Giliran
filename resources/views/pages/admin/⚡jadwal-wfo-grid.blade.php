@@ -1185,10 +1185,14 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                 <flux:button
                     variant="primary"
                     wire:click="confirmGenerate"
-                    icon="sparkles"
                     class="min-w-[180px]"
                 >
-                    <span wire:loading.remove wire:target="confirmGenerate,generateJadwalWfo">Generate Sekarang</span>
+                    <span wire:loading.remove wire:target="confirmGenerate,generateJadwalWfo" class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4">
+                            <path d="M8.5 2.687c.654-.689 1.782-.886 3.112-.752 1.234.124 2.503.523 3.388.893v9.923c-.918-.35-2.107-.692-3.287-.81-1.094-.111-2.278-.039-3.213.492V2.687ZM8 14.5V4.75c0-.452.293-.826.707-.952C9.583 3.484 10.686 3.5 12 3.5c1.234 0 2.415.247 3.5.594V14.5a.5.5 0 0 1-.276.447l-.895.447c-1.59.795-3.592.866-5.212-.434A2 2 0 0 0 8 14.5ZM7.293 3.798c.414.126.707.5.707.952V14.5a2 2 0 0 1-1.117.46c-1.62 1.3-3.622 1.229-5.212.434l-.895-.447A.5.5 0 0 1 .5 14.5V4.094C1.585 3.747 2.766 3.5 4 3.5c1.314 0 2.417.016 3.293.298ZM4 4.5c-1.22 0-2.34.197-3.5.552v9.63c1.402.603 3.248.686 4.713-.233V4.5Z"/>
+                        </svg>
+                        Generate Sekarang
+                    </span>
                     <span wire:loading wire:target="confirmGenerate,generateJadwalWfo" class="flex items-center gap-2">
                         <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

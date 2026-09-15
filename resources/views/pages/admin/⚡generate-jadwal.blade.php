@@ -37,7 +37,6 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
 
     /** Modal untuk mode selection */
     public bool $modalModeSelection = false;
-    public bool $modalProcessing = false; // Processing modal with steps
     public string $selectedMode = 'periode_baru'; // periode_baru | custom
     public array $selectedJadwal = []; // For custom mode: ['adzan', 'kajian', 'briefing_notulen', 'briefing_moderator', 'briefing_doa', 'ruangan']
 
@@ -129,15 +128,11 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
             }
         }
 
-        // Close mode selection modal & open processing modal
+        // Close mode selection modal
         $this->modalModeSelection = false;
-        $this->modalProcessing = true;
         
-        // Start preview generation
+        // Start preview generation (will show processing UI via wire:loading)
         $this->preview();
-        
-        // Close processing modal after done
-        $this->modalProcessing = false;
     }
 
     public function preview(): void
@@ -860,58 +855,64 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
         </div>
     </flux:modal>
 
-    {{-- Modal: Processing with Steps --}}
-    <flux:modal wire:model="modalProcessing" class="max-w-md" variant="flyout" :dismissible="false">
-        <div class="flex flex-col items-center justify-center py-12 px-6">
-            <svg class="animate-spin h-12 w-12 text-blue-600 dark:text-blue-400 mb-4" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <flux:heading size="lg" class="mb-2">Sedang Generate...</flux:heading>
-            <flux:text class="text-sm text-zinc-600 dark:text-zinc-400 text-center">
-                Mohon tunggu, sistem sedang membuat jadwal dengan algoritma LRA.
-            </flux:text>
-            
-            {{-- Processing Steps --}}
-            <div class="mt-8 space-y-3 w-full max-w-sm">
-                @if ($this->selectedMode === 'periode_baru' || in_array('adzan', $this->selectedJadwal) || in_array('kajian', $this->selectedJadwal))
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
-                        <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></div>
-                        <span>Generate Adzan & Kajian...</span>
-                    </div>
-                @endif
+    {{-- Modal: Processing with Steps (triggered by wire:loading) --}}
+    <div 
+        wire:loading.delay 
+        wire:target="processGenerate,preview"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
+    >
+        <div class="bg-white dark:bg-zinc-900 rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div class="flex flex-col items-center justify-center py-12 px-6">
+                <svg class="animate-spin h-12 w-12 text-blue-600 dark:text-blue-400 mb-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <flux:heading size="lg" class="mb-2">Sedang Generate...</flux:heading>
+                <flux:text class="text-sm text-zinc-600 dark:text-zinc-400 text-center">
+                    Mohon tunggu, sistem sedang membuat jadwal dengan algoritma LRA.
+                </flux:text>
                 
-                @if ($this->selectedMode === 'periode_baru' || in_array('briefing_notulen', $this->selectedJadwal) || in_array('briefing_moderator', $this->selectedJadwal) || in_array('briefing_doa', $this->selectedJadwal))
+                {{-- Processing Steps --}}
+                <div class="mt-8 space-y-3 w-full max-w-sm">
+                    @if ($this->selectedMode === 'periode_baru' || in_array('adzan', $this->selectedJadwal) || in_array('kajian', $this->selectedJadwal))
+                        <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+                            <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></div>
+                            <span>Generate Adzan & Kajian...</span>
+                        </div>
+                    @endif
+                    
+                    @if ($this->selectedMode === 'periode_baru' || in_array('briefing_notulen', $this->selectedJadwal) || in_array('briefing_moderator', $this->selectedJadwal) || in_array('briefing_doa', $this->selectedJadwal))
+                        <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+                            <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse" style="animation-delay: 0.2s"></div>
+                            <span>Generate Briefing...</span>
+                        </div>
+                        <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 pl-5">
+                            <div class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" style="animation-delay: 0.3s"></div>
+                            <span class="text-xs">Tentukan Notulen...</span>
+                        </div>
+                        <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 pl-5">
+                            <div class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" style="animation-delay: 0.4s"></div>
+                            <span class="text-xs">Tentukan Moderator...</span>
+                        </div>
+                        <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 pl-5">
+                            <div class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" style="animation-delay: 0.5s"></div>
+                            <span class="text-xs">Tentukan Doa...</span>
+                        </div>
+                    @endif
+                    
+                    @if ($this->selectedMode === 'periode_baru' || in_array('ruangan', $this->selectedJadwal))
+                        <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
+                            <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse" style="animation-delay: 0.6s"></div>
+                            <span>Generate Alokasi Ruangan...</span>
+                        </div>
+                    @endif
+                    
                     <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
-                        <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse" style="animation-delay: 0.2s"></div>
-                        <span>Generate Briefing...</span>
+                        <div class="w-2 h-2 rounded-full bg-green-600 animate-pulse" style="animation-delay: 0.8s"></div>
+                        <span>Menyiapkan preview...</span>
                     </div>
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 pl-5">
-                        <div class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" style="animation-delay: 0.3s"></div>
-                        <span class="text-xs">Tentukan Notulen...</span>
-                    </div>
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 pl-5">
-                        <div class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" style="animation-delay: 0.4s"></div>
-                        <span class="text-xs">Tentukan Moderator...</span>
-                    </div>
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 pl-5">
-                        <div class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" style="animation-delay: 0.5s"></div>
-                        <span class="text-xs">Tentukan Doa...</span>
-                    </div>
-                @endif
-                
-                @if ($this->selectedMode === 'periode_baru' || in_array('ruangan', $this->selectedJadwal))
-                    <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
-                        <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse" style="animation-delay: 0.6s"></div>
-                        <span>Generate Alokasi Ruangan...</span>
-                    </div>
-                @endif
-                
-                <div class="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
-                    <div class="w-2 h-2 rounded-full bg-green-600 animate-pulse" style="animation-delay: 0.8s"></div>
-                    <span>Menyiapkan preview...</span>
                 </div>
             </div>
         </div>
-    </flux:modal>
+    </div>
 </div>
