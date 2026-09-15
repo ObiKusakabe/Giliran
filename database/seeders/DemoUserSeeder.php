@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Tim;
 use App\Models\User;
+use App\Services\TimAccountGenerator;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -11,6 +12,8 @@ class DemoUserSeeder extends Seeder
 {
     public function run(): void
     {
+        $generator = new TimAccountGenerator();
+
         // Admin
         User::updateOrCreate(
             ['username' => 'admin'],
@@ -25,55 +28,27 @@ class DemoUserSeeder extends Seeder
             ]
         );
 
-        // Akun untuk tim SMK Yapiim Indramayu
-        $tim1 = Tim::where('nama_tim', 'SMK Yapiim Indramayu')->first();
-        if ($tim1) {
-            User::updateOrCreate(
-                ['username' => 'tim_yapiim'],
-                [
-                    'name' => 'SMK Yapiim Indramayu',
-                    'username' => 'tim_yapiim',
-                    'email' => null,
-                    'password' => Hash::make('inovindojaya'),
-                    'role' => 'tim',
-                    'tim_id' => $tim1->id,
-                    'email_verified_at' => null,
-                ]
-            );
-        }
+        // Hapus akun demo lama dengan username format lama
+        User::whereIn('username', ['tim_yapiim', 'tim_smkn2sukabumi', 'tim_telkom'])->delete();
 
-        // Akun untuk SMKN 2 Kota Sukabumi
-        $tim2 = Tim::where('nama_tim', 'SMKN 2 Kota Sukabumi')->first();
-        if ($tim2) {
-            User::updateOrCreate(
-                ['username' => 'tim_smkn2sukabumi'],
-                [
-                    'name' => 'SMKN 2 Kota Sukabumi',
-                    'username' => 'tim_smkn2sukabumi',
-                    'email' => null,
-                    'password' => Hash::make('inovindojaya'),
-                    'role' => 'tim',
-                    'tim_id' => $tim2->id,
-                    'email_verified_at' => null,
-                ]
-            );
-        }
+        // Generate akun untuk tim yang sudah ada menggunakan format YYYY_MM_XXX
+        $demoTimNames = [
+            'SMK Yapiim Indramayu',
+            'SMKN 2 Kota Sukabumi',
+            'Univ Telkom Purwakerto',
+        ];
 
-        // Akun untuk Univ Telkom Purwakerto
-        $tim3 = Tim::where('nama_tim', 'Univ Telkom Purwakerto')->first();
-        if ($tim3) {
-            User::updateOrCreate(
-                ['username' => 'tim_telkom'],
-                [
-                    'name' => 'Univ Telkom Purwakerto',
-                    'username' => 'tim_telkom',
-                    'email' => null,
-                    'password' => Hash::make('inovindojaya'),
-                    'role' => 'tim',
-                    'tim_id' => $tim3->id,
-                    'email_verified_at' => null,
-                ]
-            );
+        foreach ($demoTimNames as $timName) {
+            $tim = Tim::where('nama_tim', $timName)->first();
+            if ($tim) {
+                // Cek apakah tim sudah punya akun
+                $existingUser = User::where('tim_id', $tim->id)->where('role', 'tim')->first();
+
+                if (! $existingUser) {
+                    // Generate akun baru dengan format YYYY_MM_XXX
+                    $generator->createAccount($tim);
+                }
+            }
         }
     }
 }
