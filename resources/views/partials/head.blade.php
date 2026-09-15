@@ -211,6 +211,46 @@
         backdrop-filter: blur(4px) !important;
         -webkit-backdrop-filter: blur(4px) !important;
     }
+
+    /* ========== CUSTOM: Override Flux sidebar.group collapsed behavior ========== */
+    /* Force group items to show even when sidebar is collapsed */
+    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.25rem !important;
+    }
+
+    /* Hide group heading when collapsed */
+    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override > button[data-flux-sidebar-group-button] {
+        display: none !important;
+    }
+
+    /* Show all group items when collapsed - force display */
+    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override [data-flux-sidebar-item] {
+        display: flex !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto !important;
+    }
+
+    /* Add separator-like gap between groups when collapsed */
+    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+        padding-top: 0.5rem !important;
+        border-top: 1px solid rgb(228 228 231) !important; /* zinc-200 */
+    }
+
+    .dark [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override {
+        border-top-color: rgb(63 63 70) !important; /* zinc-700 */
+    }
+
+    /* First group no top border/spacing */
+    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override:first-of-type {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+        border-top: none !important;
+    }
 </style>
 
 {{-- Script Inovindo: Force Light Mode Always --}}
