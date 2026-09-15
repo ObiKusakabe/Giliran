@@ -211,59 +211,6 @@
         backdrop-filter: blur(4px) !important;
         -webkit-backdrop-filter: blur(4px) !important;
     }
-
-    /* ========== CUSTOM: Override Flux sidebar.group collapsed behavior ========== */
-    /* Hide ALL buttons inside group when sidebar collapsed (including heading toggle) */
-    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override > button,
-    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override button[role="button"]:not([data-flux-sidebar-item]) {
-        display: none !important;
-        height: 0 !important;
-        width: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-        visibility: hidden !important;
-        position: absolute !important;
-        overflow: hidden !important;
-    }
-
-    /* Force group container to show items even when collapsed */
-    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 0.25rem !important;
-    }
-
-    /* Show all group ITEMS (links/buttons with data-flux-sidebar-item) when collapsed */
-    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override [data-flux-sidebar-item],
-    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override a[data-flux-sidebar-item],
-    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override button[data-flux-sidebar-item] {
-        display: flex !important;
-        opacity: 1 !important;
-        visibility: visible !important;
-        pointer-events: auto !important;
-        position: relative !important;
-    }
-
-    /* Add separator-like gap between groups when collapsed */
-    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override {
-        margin-top: 0.5rem !important;
-        margin-bottom: 0.5rem !important;
-        padding-top: 0.5rem !important;
-        border-top: 1px solid rgb(228 228 231) !important; /* zinc-200 */
-    }
-
-    .dark [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override {
-        border-top-color: rgb(63 63 70) !important; /* zinc-700 */
-    }
-
-    /* First group no top border/spacing */
-    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override:first-of-type {
-        margin-top: 0 !important;
-        padding-top: 0 !important;
-        border-top: none !important;
-    }
 </style>
 
 {{-- Script Inovindo: Force Light Mode Always --}}

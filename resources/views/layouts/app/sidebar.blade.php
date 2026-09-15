@@ -75,8 +75,8 @@
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
 
-                    {{-- Master Data Group - Override Flux collapse behavior --}}
-                    <flux:sidebar.group expandable heading="Master Data" class="grid sidebar-group-override">
+                    {{-- Master Data Group --}}
+                    <flux:sidebar.group expandable heading="Master Data" class="grid">
                         <flux:sidebar.item icon="users" :href="route('admin.tim')" :current="request()->routeIs('admin.tim')" wire:navigate.hover>
                             {{ __('Tim') }}
                         </flux:sidebar.item>
@@ -91,8 +91,8 @@
                         </flux:sidebar.item>
                     </flux:sidebar.group>
 
-                    {{-- Penjadwalan Group - Override Flux collapse behavior --}}
-                    <flux:sidebar.group expandable heading="Penjadwalan" class="grid sidebar-group-override">
+                    {{-- Penjadwalan Group --}}
+                    <flux:sidebar.group expandable heading="Penjadwalan" class="grid">
                         <flux:sidebar.item icon="calendar-days" :href="route('admin.jadwal-wfo')" :current="request()->routeIs('admin.jadwal-wfo')" wire:navigate.hover>
                             {{ __('Jadwal WFO') }}
                         </flux:sidebar.item>
