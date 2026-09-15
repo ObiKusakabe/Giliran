@@ -37,6 +37,7 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
 
     /** Modal untuk mode selection */
     public bool $modalModeSelection = false;
+    public bool $modalConfirmGenerate = false; // Confirmation modal before mode selection
     public string $selectedMode = 'periode_baru'; // periode_baru | custom
     public array $selectedJadwal = []; // For custom mode: ['adzan', 'kajian', 'briefing_notulen', 'briefing_moderator', 'briefing_doa', 'ruangan']
 
@@ -105,6 +106,13 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
             return;
         }
 
+        // Show confirmation modal first
+        $this->modalConfirmGenerate = true;
+    }
+
+    public function confirmAndProceed(): void
+    {
+        $this->modalConfirmGenerate = false;
         $this->modalModeSelection = true;
     }
 
@@ -849,6 +857,56 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
             <flux:button variant="primary" wire:click="processGenerate" :disabled="$selectedMode === 'custom' && empty($selectedJadwal)">
                 Generate Jadwal
             </flux:button>
+        </div>
+    </flux:modal>
+
+    {{-- Modal: Confirmation Before Generate --}}
+    <flux:modal wire:model="modalConfirmGenerate" class="max-w-md">
+        <div class="flex flex-col gap-4">
+            <div class="flex items-start gap-3">
+                <div class="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                    <flux:icon icon="exclamation-triangle" class="size-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div class="flex-1">
+                    <flux:heading size="lg" class="mb-2">Konfirmasi Generate Jadwal</flux:heading>
+                    <flux:text class="text-sm text-zinc-600 dark:text-zinc-400">
+                        Anda akan men-generate jadwal untuk periode aktif. Proses ini akan:
+                    </flux:text>
+                </div>
+            </div>
+
+            <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                <ul class="text-sm text-amber-800 dark:text-amber-200 space-y-1.5 list-disc list-inside">
+                    <li><strong>Menghapus</strong> jadwal lama pada rentang tanggal yang dipilih</li>
+                    <li><strong>Membuat</strong> jadwal baru berdasarkan data WFO yang ada</li>
+                    <li>Proses ini <strong>tidak bisa di-undo</strong></li>
+                </ul>
+            </div>
+
+            @if ($this->periodeAktif)
+                <div class="bg-zinc-50 dark:bg-zinc-800 rounded-lg p-3 space-y-1 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-zinc-500">Periode:</span>
+                        <span class="font-medium text-zinc-900 dark:text-zinc-100">{{ $this->periodeAktif->nama_periode }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-zinc-500">Rentang:</span>
+                        <span class="font-medium text-zinc-900 dark:text-zinc-100">
+                            {{ $this->periodeAktif->tanggal_mulai->format('d/m/Y') }} – 
+                            {{ $this->periodeAktif->tanggal_selesai->format('d/m/Y') }}
+                        </span>
+                    </div>
+                </div>
+            @endif
+
+            <div class="flex justify-end gap-2 pt-2">
+                <flux:button variant="ghost" @click="$wire.set('modalConfirmGenerate', false)">
+                    Batal
+                </flux:button>
+                <flux:button variant="primary" wire:click="confirmAndProceed">
+                    Lanjut Pilih Mode
+                </flux:button>
+            </div>
         </div>
     </flux:modal>
 </div>
