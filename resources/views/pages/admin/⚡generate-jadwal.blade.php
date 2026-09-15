@@ -842,7 +842,7 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
         </div>
 
         {{-- Sticky Footer Actions --}}
-        <div class="sticky bottom-0 z-10 flex items-center justify-between pt-4 border-t border-zinc-200 dark:border-zinc-700 px-6 pb-6 -mx-6 -mb-6 bg-white dark:bg-zinc-900">
+        <div class="sticky bottom-0 z-10 flex items-center justify-between gap-3 pt-4 border-t border-zinc-200 dark:border-zinc-700 px-6 pb-6 bg-white dark:bg-zinc-900 rounded-b-xl">
             <flux:button variant="ghost" @click="$wire.set('modalModeSelection', false)">
                 Batal
             </flux:button>
