@@ -329,14 +329,28 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
         // Generate untuk setiap hari
         foreach (self::HARI as $hari) {
             // Sort tim berdasarkan frekuensi (ascending) dengan shuffle untuk randomness saat tie
-            $timIds = collect($timFrequency)
-                ->shuffle() // Randomize first untuk handle tie-breaking
-                ->sortBy(fn ($freq, $timId) => $freq) // LRA: yang paling jarang allocated duluan
-                ->keys()
-                ->toArray();
+            // Step 1: Collect dengan preserving keys (tim_id => frequency)
+            $collection = collect($timFrequency);
             
-            // Ambil tim sesuai timPerHari (yang paling jarang allocated)
-            $timHariIni = array_slice($timIds, 0, $timPerHari);
+            // Step 2: Sort by frequency (ascending) - LRA: yang paling jarang allocated duluan
+            // sortBy() preserves keys, jadi keys masih tim IDs
+            $sorted = $collection->sortBy(function ($freq, $timId) {
+                return $freq;
+            });
+            
+            // Step 3: Get tim IDs (keys) dalam urutan yang sudah di-sort
+            $allTimIds = $sorted->keys()->all();
+            
+            // Step 4: Shuffle untuk tie-breaking
+            shuffle($allTimIds);
+            
+            // Step 5: Sort lagi berdasarkan frequency (stable sort for tie-breaking)
+            usort($allTimIds, function ($a, $b) use ($timFrequency) {
+                return $timFrequency[$a] <=> $timFrequency[$b];
+            });
+            
+            // Step 6: Ambil tim sesuai timPerHari (yang paling jarang allocated)
+            $timHariIni = array_slice($allTimIds, 0, $timPerHari);
 
             foreach ($timHariIni as $timId) {
                 $row = JadwalWfo::create([
