@@ -213,24 +213,37 @@
     }
 
     /* ========== CUSTOM: Override Flux sidebar.group collapsed behavior ========== */
-    /* Force group items to show even when sidebar is collapsed */
+    /* Hide ALL buttons inside group when sidebar collapsed (including heading toggle) */
+    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override > button,
+    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override button[role="button"]:not([data-flux-sidebar-item]) {
+        display: none !important;
+        height: 0 !important;
+        width: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+        position: absolute !important;
+        overflow: hidden !important;
+    }
+
+    /* Force group container to show items even when collapsed */
     [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override {
         display: flex !important;
         flex-direction: column !important;
         gap: 0.25rem !important;
     }
 
-    /* Hide group heading when collapsed */
-    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override > button[data-flux-sidebar-group-button] {
-        display: none !important;
-    }
-
-    /* Show all group items when collapsed - force display */
-    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override [data-flux-sidebar-item] {
+    /* Show all group ITEMS (links/buttons with data-flux-sidebar-item) when collapsed */
+    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override [data-flux-sidebar-item],
+    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override a[data-flux-sidebar-item],
+    [data-flux-sidebar][data-flux-sidebar-collapsed-desktop] .sidebar-group-override button[data-flux-sidebar-item] {
         display: flex !important;
         opacity: 1 !important;
         visibility: visible !important;
         pointer-events: auto !important;
+        position: relative !important;
     }
 
     /* Add separator-like gap between groups when collapsed */
