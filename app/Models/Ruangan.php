@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property string $nama_ruangan
+ * @property string|null $lokasi_gedung
  * @property int $kapasitas
  * @property string $status -- tersedia|tidak_tersedia
  * @property Carbon|null $created_at
@@ -24,6 +25,7 @@ class Ruangan extends Model
 
     protected $fillable = [
         'nama_ruangan',
+        'lokasi_gedung',
         'kapasitas',
         'status',
     ];
