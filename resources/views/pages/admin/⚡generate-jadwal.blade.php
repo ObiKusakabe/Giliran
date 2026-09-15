@@ -337,7 +337,7 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
 }; ?>
 
 <div
-    x-data="{ tab: $wire.entangle('tab') }"
+    x-data="{ tab: $wire.entangle('tab'), briefingExpanded: '' }"
     class="flex flex-col gap-6"
 >
     {{-- Header --}}
@@ -541,51 +541,108 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                     @if (empty($previewBriefing))
                         <p class="text-sm text-zinc-400">Tidak ada data briefing untuk rentang ini.</p>
                     @else
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-xs">
-                                <thead class="bg-zinc-50 dark:bg-zinc-800">
-                                    <tr>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Tanggal</th>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Sesi</th>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Tim</th>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Perwakilan</th>
-                                        <th class="px-3 py-2 text-left font-medium text-zinc-500">Peran</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                    @foreach ($previewBriefing as $row)
-                                        @php
-                                            $personil  = \App\Models\Personil::find($row['personil_id']);
-                                            $tim       = \App\Models\Tim::find($row['tim_id']);
-                                            $isNotulen = $row['is_notulen'] ?? false;
-                                            $isMod     = ! empty($row['moderator_id']) && $row['moderator_id'] === $row['personil_id'];
-                                            $isDoa     = ! empty($row['doa_id']) && $row['doa_id'] === $row['personil_id'];
-                                        @endphp
-                                        <tr>
-                                            <td class="px-3 py-1.5">{{ \Carbon\Carbon::parse($row['tanggal'])->translatedFormat('d M Y') }}</td>
-                                            <td class="px-3 py-1.5 capitalize">{{ $row['sesi'] }}</td>
-                                            <td class="px-3 py-1.5">{{ $tim?->nama_tim ?? '—' }}</td>
-                                            <td class="px-3 py-1.5">{{ $personil?->nama ?? '—' }}</td>
-                                            <td class="px-3 py-1.5">
-                                                <div class="inline-flex items-center gap-1 flex-wrap">
-                                                    @if ($isNotulen)
-                                                        <flux:badge color="amber" size="sm" icon="pencil">Notulen</flux:badge>
-                                                    @endif
-                                                    @if ($isMod)
-                                                        <flux:badge color="indigo" size="sm" icon="user">Moderator</flux:badge>
-                                                    @endif
-                                                    @if ($isDoa)
-                                                        <flux:badge color="emerald" size="sm" icon="sparkles">Doa</flux:badge>
-                                                    @endif
-                                                    @if (! $isNotulen && ! $isMod && ! $isDoa)
-                                                        <span class="text-zinc-400 text-xs">—</span>
-                                                    @endif
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                        @php
+                            // Group by tanggal
+                            $groupedBriefing = collect($previewBriefing)->groupBy('tanggal')->sortKeys();
+                        @endphp
+
+                        <div class="border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
+                            @foreach ($groupedBriefing as $tanggal => $jadwals)
+                                @php
+                                    $tanggalKey = $tanggal;
+                                    $carbonDate = \Carbon\Carbon::parse($tanggal);
+                                    $dayName = $carbonDate->translatedFormat('l');
+                                    $dateFormat = $carbonDate->translatedFormat('d M Y');
+                                @endphp
+
+                                {{-- Accordion Header --}}
+                                <div class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0">
+                                    <button
+                                        type="button"
+                                        @click="briefingExpanded = briefingExpanded === '{{ $tanggalKey }}' ? '' : '{{ $tanggalKey }}'"
+                                        class="w-full p-4 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                                    >
+                                        <div class="flex items-center gap-3">
+                                            <svg 
+                                                class="w-4 h-4 text-zinc-400 transition-transform"
+                                                :class="briefingExpanded === '{{ $tanggalKey }}' ? 'rotate-90' : ''"
+                                                fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                                            >
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                                            </svg>
+                                            <div class="text-left">
+                                                <div class="text-sm font-medium text-zinc-900 dark:text-zinc-100">{{ $dayName }}</div>
+                                                <div class="text-xs text-zinc-500">{{ $dateFormat }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="text-xs text-zinc-500">
+                                            {{ $jadwals->count() }} Sesi
+                                        </div>
+                                    </button>
+
+                                    {{-- Accordion Content --}}
+                                    <div 
+                                        x-show="briefingExpanded === '{{ $tanggalKey }}'"
+                                        x-transition:enter="transition ease-out duration-150"
+                                        x-transition:enter-start="opacity-0 -translate-y-1"
+                                        x-transition:enter-end="opacity-100 translate-y-0"
+                                        x-cloak
+                                    >
+                                        <div class="overflow-x-auto">
+                                            <table class="w-full text-xs text-left border-collapse">
+                                                <thead>
+                                                    <tr class="bg-zinc-50/80 dark:bg-zinc-800/80 border-b border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 font-semibold uppercase tracking-wider text-[10px]">
+                                                        <th class="py-2.5 px-4">Nama Personil</th>
+                                                        <th class="py-2.5 px-4">Tim</th>
+                                                        <th class="py-2.5 px-4 w-28 text-center">Waktu</th>
+                                                        <th class="py-2.5 px-4 w-32 text-center">Peran</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-zinc-100 dark:divide-zinc-700/60">
+                                                    @foreach ($jadwals as $row)
+                                                        @php
+                                                            $personil  = \App\Models\Personil::find($row['personil_id']);
+                                                            $tim       = \App\Models\Tim::find($row['tim_id']);
+                                                            $isNotulen = $row['is_notulen'] ?? false;
+                                                            $isMod     = ! empty($row['moderator_id']) && $row['moderator_id'] === $row['personil_id'];
+                                                            $isDoa     = ! empty($row['doa_id']) && $row['doa_id'] === $row['personil_id'];
+                                                        @endphp
+                                                        <tr class="hover:bg-zinc-50/70 dark:hover:bg-zinc-750/50 transition-colors">
+                                                            <td class="py-2.5 px-4 font-medium text-zinc-900 dark:text-zinc-100">
+                                                                {{ $personil?->nama ?? '—' }}
+                                                            </td>
+                                                            <td class="py-2.5 px-4 text-zinc-600 dark:text-zinc-300">
+                                                                {{ $tim?->nama_tim ?? '—' }}
+                                                            </td>
+                                                            <td class="py-2.5 px-4 text-center">
+                                                                <flux:badge size="xs" color="{{ $row['sesi'] === 'pagi' ? 'amber' : 'indigo' }}" class="w-16 justify-center">
+                                                                    {{ ucfirst($row['sesi']) }}
+                                                                </flux:badge>
+                                                            </td>
+                                                            <td class="py-2.5 px-4 text-center">
+                                                                <div class="inline-flex items-center justify-center gap-1 flex-wrap">
+                                                                    @if ($isNotulen)
+                                                                        <flux:badge color="amber" size="xs" icon="pencil">Notulen</flux:badge>
+                                                                    @endif
+                                                                    @if ($isMod)
+                                                                        <flux:badge color="indigo" size="xs" icon="user">Moderator</flux:badge>
+                                                                    @endif
+                                                                    @if ($isDoa)
+                                                                        <flux:badge color="emerald" size="xs" icon="sparkles">Doa</flux:badge>
+                                                                    @endif
+                                                                    @if (! $isNotulen && ! $isMod && ! $isDoa)
+                                                                        <span class="text-zinc-400">—</span>
+                                                                    @endif
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
                         </div>
                     @endif
                 </div>
