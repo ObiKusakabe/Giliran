@@ -282,8 +282,10 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
 
     public function confirmGenerate(): void
     {
-        $this->modalConfirmGenerate = false;
+        // Don't close modal yet - let processing animation show inside modal
         $this->generateJadwalWfo();
+        
+        // Modal will close automatically after toast success (via wire:loading or manual close after success)
     }
 
     public function generateJadwalWfo(): void
@@ -367,6 +369,9 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
         }
 
         $this->refreshGrid();
+
+        // Close modal after successful generation
+        $this->modalConfirmGenerate = false;
 
         Flux::toast(
             variant: 'success',
@@ -1129,7 +1134,40 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
 
     {{-- Modal: Confirmation Before Generate --}}
     <flux:modal wire:model="modalConfirmGenerate" class="max-w-md">
-        <div class="flex flex-col gap-4">
+        {{-- Loading State: Show processing animation --}}
+        <div wire:loading wire:target="confirmGenerate,generateJadwalWfo" class="flex flex-col items-center justify-center py-12 px-6">
+            <svg class="animate-spin h-12 w-12 text-blue-600 dark:text-blue-400 mb-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <flux:heading size="lg" class="mb-2">Sedang Generate...</flux:heading>
+            <flux:text class="text-sm text-zinc-600 dark:text-zinc-400 text-center">
+                Mohon tunggu, sistem sedang membuat jadwal WFO dengan algoritma LRA.
+            </flux:text>
+            
+            {{-- Processing Steps --}}
+            <div class="mt-6 space-y-2 w-full max-w-sm">
+                <div class="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
+                    <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></div>
+                    <span>Menghapus jadwal lama...</span>
+                </div>
+                <div class="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
+                    <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse" style="animation-delay: 0.2s"></div>
+                    <span>Mengambil data tim aktif...</span>
+                </div>
+                <div class="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
+                    <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse" style="animation-delay: 0.4s"></div>
+                    <span>Menghitung alokasi LRA...</span>
+                </div>
+                <div class="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
+                    <div class="w-2 h-2 rounded-full bg-blue-600 animate-pulse" style="animation-delay: 0.6s"></div>
+                    <span>Menyimpan ke database...</span>
+                </div>
+            </div>
+        </div>
+
+        {{-- Idle State: Show confirmation form --}}
+        <div wire:loading.remove wire:target="confirmGenerate,generateJadwalWfo" class="flex flex-col gap-4">
             <div class="flex items-start gap-3">
                 <div class="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
                     <flux:icon icon="exclamation-triangle" class="size-5 text-amber-600 dark:text-amber-400" />
@@ -1177,20 +1215,16 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                 >
                     Batal
                 </flux:button>
-                <x-processing-button
+                <flux:button
                     variant="primary"
                     wire:click="confirmGenerate"
-                    wireTarget="generateJadwalWfo"
                     icon="sparkles"
-                    idle-text="Generate Sekarang"
-                    :steps="[
-                        ['label' => 'Menghapus jadwal lama...', 'duration' => 500],
-                        ['label' => 'Mengambil data tim aktif...', 'duration' => 600],
-                        ['label' => 'Menghitung alokasi LRA...', 'duration' => 1200],
-                        ['label' => 'Menyimpan ke database...', 'duration' => 99999],
-                    ]"
-                    min-width="180px"
-                />
+                    wire:loading.attr="disabled"
+                    wire:target="confirmGenerate,generateJadwalWfo"
+                    class="min-w-[180px]"
+                >
+                    Generate Sekarang
+                </flux:button>
             </div>
         </div>
     </flux:modal>
