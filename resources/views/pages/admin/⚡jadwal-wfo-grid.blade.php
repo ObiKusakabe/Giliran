@@ -13,6 +13,7 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
 
     public ?int $periodeId = null;
     public array $gridRowsCache = [];
+    public bool $modalConfirmGenerate = false; // Confirmation modal before generate
 
     public const HARI = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
 
@@ -269,6 +270,22 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
     /**
      * Generate jadwal WFO otomatis - 6 tim per hari menggunakan algoritma LRA (Least Recently Allocated)
      */
+    public function openGenerateModal(): void
+    {
+        if (! $this->periodeId) {
+            Flux::toast(variant: 'danger', text: 'Pilih periode terlebih dahulu.');
+            return;
+        }
+
+        $this->modalConfirmGenerate = true;
+    }
+
+    public function confirmGenerate(): void
+    {
+        $this->modalConfirmGenerate = false;
+        $this->generateJadwalWfo();
+    }
+
     public function generateJadwalWfo(): void
     {
         if (! $this->periodeId) {
@@ -311,8 +328,12 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
 
         // Generate untuk setiap hari
         foreach (self::HARI as $hari) {
-            // Sort tim berdasarkan frekuensi (ascending) - yang paling jarang allocated duluan
-            $timIds = collect($timFrequency)->sortBy(fn ($freq, $timId) => $freq)->keys()->toArray();
+            // Sort tim berdasarkan frekuensi (ascending) dengan shuffle untuk randomness saat tie
+            $timIds = collect($timFrequency)
+                ->shuffle() // Randomize first untuk handle tie-breaking
+                ->sortBy(fn ($freq, $timId) => $freq) // LRA: yang paling jarang allocated duluan
+                ->keys()
+                ->toArray();
             
             // Ambil tim sesuai timPerHari (yang paling jarang allocated)
             $timHariIni = array_slice($timIds, 0, $timPerHari);
@@ -838,16 +859,11 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
             @if ($this->periodeId)
                 <x-processing-button
                     variant="primary"
-                    wire:click="generateJadwalWfo"
-                    wireTarget="generateJadwalWfo"
+                    wire:click="openGenerateModal"
+                    wireTarget="openGenerateModal"
                     icon="sparkles"
                     idle-text="Generate Jadwal"
-                    :steps="[
-                        ['label' => 'Menghapus jadwal lama...', 'duration' => 500],
-                        ['label' => 'Mengambil data tim aktif...', 'duration' => 600],
-                        ['label' => 'Menghitung alokasi LRA...', 'duration' => 1200],
-                        ['label' => 'Menyimpan ke database...', 'duration' => 99999],
-                    ]"
+                    :steps="[]"
                     min-width="180px"
                 />
             @endif
@@ -1090,4 +1106,66 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
         :style="getBoxStyle()"
         class="border-2 border-[#3B71CA] bg-[#3B71CA]/10 rounded"
     ></div>
+
+    {{-- Modal: Confirmation Before Generate --}}
+    <flux:modal wire:model="modalConfirmGenerate" class="max-w-md">
+        <div class="flex flex-col gap-4">
+            <div class="flex items-start gap-3">
+                <div class="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                    <flux:icon icon="exclamation-triangle" class="size-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div class="flex-1">
+                    <flux:heading size="lg" class="mb-2">Konfirmasi Generate Jadwal WFO</flux:heading>
+                    <flux:text class="text-sm text-zinc-600 dark:text-zinc-400">
+                        Anda akan men-generate jadwal WFO untuk periode terpilih. Proses ini akan:
+                    </flux:text>
+                </div>
+            </div>
+
+            <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                <ul class="text-sm text-amber-800 dark:text-amber-200 space-y-1.5 list-disc list-inside">
+                    <li><strong>Menghapus</strong> semua jadwal WFO lama di periode ini</li>
+                    <li><strong>Membuat</strong> jadwal baru dengan algoritma LRA (Fair)</li>
+                    <li>Mengalokasikan <strong>6 tim per hari</strong> secara merata</li>
+                    <li>Proses ini <strong>tidak bisa di-undo</strong></li>
+                </ul>
+            </div>
+
+            @if ($this->periodeDipilih)
+                <div class="bg-zinc-50 dark:bg-zinc-800 rounded-lg p-3 space-y-1 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-zinc-500">Periode:</span>
+                        <span class="font-medium text-zinc-900 dark:text-zinc-100">{{ $this->periodeDipilih->keterangan ?? 'Periode ini' }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-zinc-500">Rentang:</span>
+                        <span class="font-medium text-zinc-900 dark:text-zinc-100">
+                            {{ $this->periodeDipilih->tanggal_mulai->format('d/m/Y') }} – 
+                            {{ $this->periodeDipilih->tanggal_selesai->format('d/m/Y') }}
+                        </span>
+                    </div>
+                </div>
+            @endif
+
+            <div class="flex justify-end gap-2 pt-2">
+                <flux:button variant="ghost" @click="$wire.set('modalConfirmGenerate', false)">
+                    Batal
+                </flux:button>
+                <x-processing-button
+                    variant="primary"
+                    wire:click="confirmGenerate"
+                    wireTarget="generateJadwalWfo"
+                    icon="sparkles"
+                    idle-text="Generate Sekarang"
+                    :steps="[
+                        ['label' => 'Menghapus jadwal lama...', 'duration' => 500],
+                        ['label' => 'Mengambil data tim aktif...', 'duration' => 600],
+                        ['label' => 'Menghitung alokasi LRA...', 'duration' => 1200],
+                        ['label' => 'Menyimpan ke database...', 'duration' => 99999],
+                    ]"
+                    min-width="180px"
+                />
+            </div>
+        </div>
+    </flux:modal>
 </div>
