@@ -120,13 +120,13 @@
                             <flux:sidebar.item icon="home-modern" :href="route('admin.ruangan')" :current="request()->routeIs('admin.ruangan')" wire:navigate.hover>
                                 {{ __('Ruangan') }}
                             </flux:sidebar.item>
-                            <flux:sidebar.item icon="calendar-days" :href="route('admin.periode-wfo')" :current="request()->routeIs('admin.periode-wfo')" wire:navigate.hover>
-                                {{ __('Periode WFO') }}
-                            </flux:sidebar.item>
                         </flux:sidebar.group>
 
                         {{-- Penjadwalan Group --}}
                         <flux:sidebar.group expandable heading="Penjadwalan" class="grid">
+                            <flux:sidebar.item icon="calendar-days" :href="route('admin.periode-wfo')" :current="request()->routeIs('admin.periode-wfo')" wire:navigate.hover>
+                                {{ __('Periode WFO') }}
+                            </flux:sidebar.item>
                             <flux:sidebar.item icon="calendar-days" :href="route('admin.jadwal-wfo')" :current="request()->routeIs('admin.jadwal-wfo')" wire:navigate.hover>
                                 {{ __('Jadwal WFO') }}
                             </flux:sidebar.item>
@@ -153,13 +153,13 @@
                         <flux:sidebar.item icon="home-modern" :href="route('admin.ruangan')" :current="request()->routeIs('admin.ruangan')" wire:navigate.hover>
                             {{ __('Ruangan') }}
                         </flux:sidebar.item>
-                        <flux:sidebar.item icon="calendar-days" :href="route('admin.periode-wfo')" :current="request()->routeIs('admin.periode-wfo')" wire:navigate.hover>
-                            {{ __('Periode WFO') }}
-                        </flux:sidebar.item>
 
                         <flux:separator variant="subtle" class="my-2" />
 
                         {{-- Penjadwalan Items (Flattened) --}}
+                        <flux:sidebar.item icon="calendar-days" :href="route('admin.periode-wfo')" :current="request()->routeIs('admin.periode-wfo')" wire:navigate.hover>
+                            {{ __('Periode WFO') }}
+                        </flux:sidebar.item>
                         <flux:sidebar.item icon="calendar-days" :href="route('admin.jadwal-wfo')" :current="request()->routeIs('admin.jadwal-wfo')" wire:navigate.hover>
                             {{ __('Jadwal WFO') }}
                         </flux:sidebar.item>
