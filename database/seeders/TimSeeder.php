@@ -3,7 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\Tim;
+use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class TimSeeder extends Seeder
 {
@@ -24,8 +26,35 @@ class TimSeeder extends Seeder
             ['nama_tim' => 'Politeknik Negri Padang', 'keterangan' => 'Peserta PKL Politeknik Negeri Padang', 'status' => 'active'],
         ];
 
-        foreach ($tims as $tim) {
-            Tim::updateOrCreate(['nama_tim' => $tim['nama_tim']], $tim);
+        // Counter untuk generate username berdasarkan bulan
+        $currentYear = now()->year;
+        $currentMonth = now()->format('m');
+
+        // Get existing usernames untuk bulan ini untuk increment counter
+        $existingCount = User::where('username', 'like', "{$currentYear}_{$currentMonth}_%")->count();
+        $counter = $existingCount + 1;
+
+        foreach ($tims as $timData) {
+            $tim = Tim::updateOrCreate(['nama_tim' => $timData['nama_tim']], $timData);
+
+            // Auto-generate user account jika tim belum punya user
+            if (! $tim->user) {
+                $username = sprintf('%s_%s_%03d', $currentYear, $currentMonth, $counter);
+
+                $user = User::create([
+                    'username' => $username,
+                    'name' => $timData['nama_tim'],
+                    'password' => Hash::make('inovindojaya'), // Default password
+                    'role' => 'tim',
+                    'tim_id' => $tim->id,
+                ]);
+
+                $this->command->info("✅ Created user account: {$username} for tim: {$timData['nama_tim']}");
+
+                $counter++;
+            } else {
+                $this->command->info("⏭️  Tim {$timData['nama_tim']} already has user: {$tim->user->username}");
+            }
         }
     }
 }

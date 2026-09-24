@@ -62,13 +62,19 @@ class NotulenReminderPopup extends Component
             return;
         }
 
-        // Cek apakah sudah pernah isi notulensi untuk sesi ini
-        $sudahIsi = NotulenBriefing::where('tim_id', $timId)
-            ->where('tanggal', $today)
+        // Cek apakah sudah ada notulensi untuk sesi ini (dari tim manapun)
+        $existingNotulen = NotulenBriefing::where('tanggal', $today)
             ->where('sesi', $sesi)
-            ->exists();
+            ->first();
 
-        if ($sudahIsi) {
+        if ($existingNotulen) {
+            // Jika sudah diisi oleh tim sendiri, tidak perlu reminder
+            if ($existingNotulen->tim_id === $timId) {
+                return;
+            }
+
+            // Jika sudah diisi oleh tim lain, tidak perlu reminder juga
+            // (hanya 1 notulen per sesi, first come first serve)
             return;
         }
 

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use App\Concerns\PasswordValidationRules;
 use Flux\Flux;
@@ -214,7 +214,19 @@ new #[Title('Pengaturan Keamanan')] #[Layout('layouts.admin', ['breadcrumbs' => 
             <flux:subheading>Pastikan akun kamu menggunakan password yang panjang dan acak untuk keamanan</flux:subheading>
         </div>
 
-        <form method="POST" wire:submit="updatePassword" class="space-y-6">
+        <form method="POST" wire:submit="updatePassword" class="space-y-6"
+            @submit.capture="if (isMismatch) { $event.preventDefault(); $event.stopImmediatePropagation(); }"
+            @keydown.enter="if (isMismatch) { $event.preventDefault(); }"
+            x-data="{
+                pw: '',
+                pwConfirm: '',
+                get isMatch() {
+                    return this.pw.length > 0 && this.pwConfirm.length > 0 && this.pw === this.pwConfirm;
+                },
+                get isMismatch() {
+                    return this.pw.length > 0 && this.pwConfirm.length > 0 && this.pw !== this.pwConfirm;
+                }
+            }">
             <flux:input
                 wire:model="current_password"
                 :label="'Password Saat Ini'"
@@ -225,25 +237,51 @@ new #[Title('Pengaturan Keamanan')] #[Layout('layouts.admin', ['breadcrumbs' => 
             />
             <flux:input
                 wire:model="password"
+                x-model="pw"
                 :label="'Password Baru'"
                 type="password"
                 required
                 autocomplete="new-password"
-                passwordrules="{{ \Illuminate\Validation\Rules\Password::defaults()->toPasswordRulesString() }}"
+                placeholder="Minimal 8 karakter"
                 viewable
             />
-            <flux:input
-                wire:model="password_confirmation"
-                :label="'Konfirmasi Password'"
-                type="password"
-                required
-                autocomplete="new-password"
-                passwordrules="{{ \Illuminate\Validation\Rules\Password::defaults()->toPasswordRulesString() }}"
-                viewable
-            />
+            <div>
+                <flux:input
+                    wire:model="password_confirmation"
+                    x-model="pwConfirm"
+                    :label="'Konfirmasi Password'"
+                    type="password"
+                    required
+                    autocomplete="new-password"
+                    placeholder="Ulangi password baru"
+                    viewable
+                />
+
+                {{-- Client-side Password Match Feedback --}}
+                <div x-show="isMatch" x-cloak class="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 font-medium mt-1.5">
+                    <svg class="size-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    <span>Password cocok</span>
+                </div>
+                <div x-show="isMismatch" x-cloak class="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-medium mt-1.5">
+                    <svg class="size-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                    <span>Konfirmasi password belum sama</span>
+                </div>
+            </div>
 
             <div class="flex items-center gap-4">
-                <flux:button variant="primary" type="submit" data-test="update-password-button">
+                <flux:button
+                    variant="primary"
+                    type="submit"
+                    class="no-disabled-spinner"
+                    data-no-disabled-spinner
+                    data-test="update-password-button"
+                    x-bind:disabled="isMismatch"
+                    x-bind:class="isMismatch ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''"
+                >
                     Simpan
                 </flux:button>
             </div>

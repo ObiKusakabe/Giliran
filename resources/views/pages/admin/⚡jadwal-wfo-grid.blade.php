@@ -915,10 +915,26 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
         @endif
 
         {{-- Grid 6 kolom --}}
+        @php
+            $hariMap = [
+                1 => 'senin',
+                2 => 'selasa',
+                3 => 'rabu',
+                4 => 'kamis',
+                5 => 'jumat',
+                6 => 'sabtu',
+            ];
+            $hariIni = $hariMap[now()->dayOfWeek] ?? null;
+        @endphp
         <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
             @foreach (['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'] as $hari)
+                @php
+                    $isToday = ($hari === $hariIni);
+                    $count = $this->timCountPerHari[$hari] ?? 0;
+                    $isFull = $count >= 7;
+                @endphp
                 <flux:card
-                    class="flex flex-col gap-3 p-3 min-h-[140px] transition-colors select-none"
+                    class="flex flex-col gap-3 p-3 min-h-[140px] transition-all select-none {{ $isToday ? '!bg-blue-50/70 dark:!bg-blue-950/40 border-2 !border-blue-400 dark:!border-blue-600 shadow-sm ring-1 ring-blue-500/20' : '' }}"
                     x-bind:class="overHari === '{{ $hari }}' && dragging && dragging.hariAsal !== '{{ $hari }}' ? 'ring-2 ring-brand ring-offset-1 ring-offset-zinc-900 bg-brand/5' : ''"
                     data-touch-hari="{{ $hari }}"
                     @dragover.prevent="overHari = '{{ $hari }}'"
@@ -927,15 +943,14 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                 >
                     {{-- Header hari --}}
                     <div class="flex items-center justify-between pointer-events-none">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-xs font-bold uppercase tracking-wide {{ $isToday ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-500 dark:text-zinc-400' }}">
                                 {{ ucfirst($hari) }}
                             </span>
-                            @php
-                                $count = $this->timCountPerHari[$hari] ?? 0;
-                                $isFull = $count >= 7;
-                            @endphp
-                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md {{ $isFull ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300' }}">
+                            @if ($isToday)
+                                <flux:badge color="blue" size="xs">Hari Ini</flux:badge>
+                            @endif
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md {{ $isFull ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : ($isToday ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300' : 'bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300') }}">
                                 {{ $count }}/7
                             </span>
                         </div>
@@ -1003,7 +1018,7 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                         <button
                             @click="open = !open"
                             {{ $isFull ? 'disabled' : '' }}
-                            class="flex items-center gap-1 w-full justify-center rounded-md border border-dashed px-2 py-1.5 text-xs transition-colors focus:outline-none {{ $isFull ? 'border-zinc-200 dark:border-zinc-700 text-zinc-300 dark:text-zinc-600 cursor-not-allowed' : 'border-zinc-300 dark:border-zinc-600 text-zinc-400 hover:border-[#3B71CA] hover:text-[#3B71CA] focus:ring-2 focus:ring-[#3B71CA]' }}"
+                            class="flex items-center gap-1 w-full justify-center rounded-md border border-dashed px-2 py-1.5 text-xs transition-colors focus:outline-none {{ $isFull ? 'border-zinc-200 dark:border-zinc-700 text-zinc-300 dark:text-zinc-600 cursor-not-allowed' : ($isToday ? 'border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 bg-white/50 dark:bg-zinc-900/50 hover:border-[#3B71CA] hover:bg-blue-50/80 dark:hover:bg-blue-950/40 focus:ring-2 focus:ring-[#3B71CA]' : 'border-zinc-300 dark:border-zinc-600 text-zinc-400 hover:border-[#3B71CA] hover:text-[#3B71CA] focus:ring-2 focus:ring-[#3B71CA]') }}"
                             {{ $isFull ? 'title="Maksimal 7 tim per hari sudah tercapai"' : '' }}
                         >
                             @if ($isFull)

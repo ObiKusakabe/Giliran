@@ -3,12 +3,18 @@
 use App\Http\Controllers\Admin\ExportController;
 use App\Http\Controllers\Admin\KalenderController;
 use App\Http\Controllers\Api\DevModeController;
+use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\HomeController;
 use App\Http\Middleware\EnsureTeamOnboardingCompleted;
 use Illuminate\Support\Facades\Route;
 
 // ── Halaman publik ────────────────────────────────────────────────────────────
 Route::view('/welcome', 'welcome')->name('home');
+
+// Override Fortify forgot-password POST to support email OR username
+Route::post('/forgot-password', [ForgotPasswordController::class, 'store'])
+    ->middleware(['guest'])
+    ->name('password.email');
 
 // ── Redirect root ke dashboard sesuai role ────────────────────────────────────
 Route::middleware('auth')->get('/', HomeController::class)->name('home.redirect');
@@ -64,11 +70,10 @@ Route::middleware('auth')->name('notifikasi.')->group(function () {
 });
 
 // ── Dev Mode API (admin & tim role) ──────────────────────────────────────────
-// COMMENTED OUT - Not for production/mentor review
-// Route::middleware('auth')->prefix('api/dev-mode')->group(function () {
-//     Route::post('/set-time', [DevModeController::class, 'setTime']);
-//     Route::post('/reset-time', [DevModeController::class, 'resetTime']);
-//     Route::get('/get-time', [DevModeController::class, 'getTime']);
-// });
+Route::middleware('auth')->prefix('api/dev-mode')->group(function () {
+    Route::post('/set-time', [DevModeController::class, 'setTime']);
+    Route::post('/reset-time', [DevModeController::class, 'resetTime']);
+    Route::get('/get-time', [DevModeController::class, 'getTime']);
+});
 
 require __DIR__.'/settings.php';

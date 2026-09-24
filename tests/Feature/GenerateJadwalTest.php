@@ -157,5 +157,5 @@ test('halaman admin generate-jadwal dapat diakses dan dirender dengan 200 OK', f
         ->get(route('admin.generate-jadwal'))
         ->assertOk()
         ->assertSee('Generate Jadwal')
-        ->assertSee('Generate & Preview');
+        ->assertSee('Pilih Mode Generate');
 });

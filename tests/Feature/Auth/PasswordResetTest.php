@@ -63,3 +63,28 @@ test('password can be reset with valid token', function () {
         return true;
     });
 });
+
+test('reset password link can be requested using username', function () {
+    Notification::fake();
+
+    $user = User::factory()->create([
+        'username' => 'tim_test_001',
+        'email' => 'tim@example.com',
+    ]);
+
+    $response = $this->post(route('password.email'), ['email' => 'tim_test_001']);
+
+    $response->assertSessionHas('status');
+    Notification::assertSentTo($user, ResetPassword::class);
+});
+
+test('reset password displays clear error if account has no email', function () {
+    $user = User::factory()->create([
+        'username' => 'tim_no_email_002',
+        'email' => null,
+    ]);
+
+    $response = $this->post(route('password.email'), ['email' => 'tim_no_email_002']);
+
+    $response->assertSessionHasErrors('email');
+});

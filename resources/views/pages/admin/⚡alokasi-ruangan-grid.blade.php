@@ -26,11 +26,14 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
 
     public function mount(): void
     {
-        // Default: Senin minggu ini
-        $this->tanggalMulaiMinggu = Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString();
-
         $aktif = PeriodeWfo::where('status', 'aktif')->first();
         $this->periodeId = $aktif?->id;
+
+        if ($aktif && $aktif->tanggal_mulai) {
+            $this->tanggalMulaiMinggu = Carbon::parse($aktif->tanggal_mulai)->startOfWeek(Carbon::MONDAY)->toDateString();
+        } else {
+            $this->tanggalMulaiMinggu = Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString();
+        }
         
         // Cleanup orphaned allocations (tim yang sudah dihapus)
         $this->cleanupOrphanedAllocations();
@@ -108,6 +111,12 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
     public function periodeAktif(): ?PeriodeWfo
     {
         return $this->periodeId ? PeriodeWfo::find($this->periodeId) : PeriodeWfo::where('status', 'aktif')->first();
+    }
+
+    #[Computed]
+    public function daftarPeriode()
+    {
+        return PeriodeWfo::orderByDesc('tanggal_mulai')->get();
     }
 
     #[Computed]
@@ -237,11 +246,11 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             ->where('id', '!=', $alokasiId)
             ->first();
 
+        $oldRuanganId = $alokasi->ruangan_id;
+        $oldTanggal = $alokasi->tanggal->toDateString();
+
         if ($bentrok) {
             // Swap ruangan jika target sudah terisi
-            $oldRuanganId = $alokasi->ruangan_id;
-            $oldTanggal = $alokasi->tanggal->toDateString();
-
             $bentrok->update([
                 'ruangan_id' => $oldRuanganId,
                 'tanggal' => $oldTanggal,
@@ -253,10 +262,36 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             'tanggal' => $targetTanggal,
         ]);
 
+        // Jika ada periode aktif, sinkronkan ke seluruh minggu dalam periode untuk hari yang sama
+        if ($this->periodeAktif && $this->periodeAktif->tanggal_mulai && $this->periodeAktif->tanggal_selesai) {
+            $dayOfWeek = Carbon::parse($targetTanggal)->dayOfWeekIso;
+            $cur = Carbon::parse($this->periodeAktif->tanggal_mulai);
+            $end = Carbon::parse($this->periodeAktif->tanggal_selesai);
+            $allDates = [];
+            while ($cur->lte($end)) {
+                if ($cur->dayOfWeekIso === $dayOfWeek) {
+                    $allDates[] = $cur->toDateString();
+                }
+                $cur->addDay();
+            }
+
+            if (! empty($allDates)) {
+                if ($bentrok) {
+                    AlokasiRuangan::where('tim_id', $bentrok->tim_id)
+                        ->whereIn('tanggal', $allDates)
+                        ->update(['ruangan_id' => $oldRuanganId]);
+                }
+
+                AlokasiRuangan::where('tim_id', $alokasi->tim_id)
+                    ->whereIn('tanggal', $allDates)
+                    ->update(['ruangan_id' => $targetRuanganId]);
+            }
+        }
+
         $ruangan = Ruangan::find($targetRuanganId);
         Flux::toast(
             variant: 'success',
-            text: "Tim {$alokasi->tim?->nama_tim} berhasil dialokasikan ke {$ruangan?->nama_ruangan} ({$targetTanggal})."
+            text: "Tim {$alokasi->tim?->nama_tim} berhasil dialokasikan ke {$ruangan?->nama_ruangan} (berlaku sepanjang periode)."
         );
 
         $this->refreshAlokasiCache();
@@ -345,19 +380,17 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             return;
         }
 
-        $start = Carbon::parse($this->tanggalMulaiMinggu);
-        $tanggalList = [];
-        for ($i = 0; $i < 6; $i++) {
-            $tanggalList[] = $start->copy()->addDays($i);
-        }
+        $scheduler = app(LraScheduler::class);
+        $mulai = $this->periodeAktif->tanggal_mulai ? Carbon::parse($this->periodeAktif->tanggal_mulai) : Carbon::parse($this->tanggalMulaiMinggu);
+        $selesai = $this->periodeAktif->tanggal_selesai ? Carbon::parse($this->periodeAktif->tanggal_selesai) : $mulai->copy()->addDays(27);
+        $tanggalList = $scheduler->expandTanggal($mulai, $selesai);
 
-        // Hapus alokasi lama untuk rentang minggu ini
+        // Hapus alokasi lama untuk seluruh periode ini
         AlokasiRuangan::whereBetween('tanggal', [
-            $tanggalList[0]->toDateString(),
-            $tanggalList[5]->toDateString(),
+            $mulai->toDateString(),
+            $selesai->toDateString(),
         ])->delete();
 
-        $scheduler = app(LraScheduler::class);
         $hasil = $scheduler->generateAlokasiRuangan($tanggalList, $this->periodeAktif->id);
 
         if (empty($hasil)) {
@@ -370,13 +403,14 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             'tim_id' => $r['tim_id'],
             'ruangan_id' => $r['ruangan_id'],
             'tanggal' => $r['tanggal'],
+            'expected_attendance' => $r['expected_attendance'] ?? null,
             'created_at' => now(),
             'updated_at' => now(),
         ], $hasil));
 
         Flux::toast(
             variant: 'success',
-            text: 'Berhasil generate ' . count($hasil) . ' alokasi (Fair/LRA): Distribusi merata antar ruangan.',
+            text: 'Berhasil generate alokasi ruangan (Fair/LRA) 1 minggu dan diulang ke seluruh periode.',
             heading: 'Generate Fair/LRA Selesai'
         );
 
@@ -400,22 +434,15 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         }
 
         $start = Carbon::parse($this->tanggalMulaiMinggu);
-        $tanggalList = [];
+        $week1Tanggal = [];
         for ($i = 0; $i < 6; $i++) {
-            $tanggalList[] = $start->copy()->addDays($i);
+            $week1Tanggal[] = $start->copy()->addDays($i);
         }
 
-        // Hapus alokasi lama
-        AlokasiRuangan::whereBetween('tanggal', [
-            $tanggalList[0]->toDateString(),
-            $tanggalList[5]->toDateString(),
-        ])->delete();
-
-        // Get semua tim WFO untuk minggu ini
         $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
         $timWfoPerHari = [];
         
-        foreach ($tanggalList as $idx => $tgl) {
+        foreach ($week1Tanggal as $idx => $tgl) {
             $hari = $namaHariIndo[$idx];
             $tims = JadwalWfo::with('tim.personil')
                 ->where('periode_wfo_id', $this->periodeAktif->id)
@@ -424,41 +451,32 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 ->get()
                 ->pluck('tim')
                 ->filter()
-                ->sortByDesc(fn($t) => $t->personil->count()); // Sort descending by team size
+                ->sortByDesc(fn($t) => $t->personil->count());
             
-            $timWfoPerHari[$tgl->toDateString()] = $tims;
+            $timWfoPerHari[$hari] = $tims;
         }
 
-        // Get available rooms sorted by capacity (ascending)
         $ruanganList = Ruangan::where('status', 'tersedia')
             ->orderBy('kapasitas', 'asc')
             ->get();
 
         if ($ruanganList->isEmpty()) {
             Flux::toast(variant: 'danger', text: 'Tidak ada ruangan tersedia.');
+            $this->isGenerating = false;
             return;
         }
 
-        $hasil = [];
-
-        // Best Fit Algorithm: For each team, find room with minimum waste
-        foreach ($timWfoPerHari as $tanggal => $tims) {
+        $dayPatternMap = [];
+        foreach ($timWfoPerHari as $hari => $tims) {
+            $allocatedRuangan = [];
             foreach ($tims as $tim) {
                 $teamSize = $tim->personil->count();
-                
-                // Find room with minimum waste (closest fit)
                 $bestRoom = null;
                 $minWaste = PHP_INT_MAX;
                 
                 foreach ($ruanganList as $ruangan) {
-                    // Check if room is already allocated on this date
-                    $sudahDialokasi = collect($hasil)->first(fn($h) => 
-                        $h['ruangan_id'] == $ruangan->id && $h['tanggal'] == $tanggal
-                    );
+                    if (in_array($ruangan->id, $allocatedRuangan)) continue;
                     
-                    if ($sudahDialokasi) continue;
-                    
-                    // Calculate waste (unutilized capacity)
                     if ($ruangan->kapasitas >= $teamSize) {
                         $waste = $ruangan->kapasitas - $teamSize;
                         if ($waste < $minWaste) {
@@ -468,33 +486,60 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                     }
                 }
                 
-                // If found a suitable room, allocate
                 if ($bestRoom) {
-                    $hasil[] = [
+                    $dayPatternMap[$hari][] = [
                         'tim_id' => $tim->id,
                         'ruangan_id' => $bestRoom->id,
-                        'tanggal' => $tanggal,
+                        'expected_attendance' => $teamSize,
                     ];
+                    $allocatedRuangan[] = $bestRoom->id;
                 }
             }
         }
 
-        if (empty($hasil)) {
+        if (empty($dayPatternMap)) {
             Flux::toast(variant: 'warning', text: 'Tidak dapat mengalokasikan tim. Kapasitas ruangan tidak mencukupi.');
+            $this->isGenerating = false;
             return;
+        }
+
+        $scheduler = app(LraScheduler::class);
+        $mulai = $this->periodeAktif->tanggal_mulai ? Carbon::parse($this->periodeAktif->tanggal_mulai) : Carbon::parse($this->tanggalMulaiMinggu);
+        $selesai = $this->periodeAktif->tanggal_selesai ? Carbon::parse($this->periodeAktif->tanggal_selesai) : $mulai->copy()->addDays(27);
+        $tanggalList = $scheduler->expandTanggal($mulai, $selesai);
+
+        AlokasiRuangan::whereBetween('tanggal', [
+            $mulai->toDateString(),
+            $selesai->toDateString(),
+        ])->delete();
+
+        $hasil = [];
+        foreach ($tanggalList as $tanggal) {
+            $namaHari = $scheduler->namaHariIndonesia($tanggal);
+            if (! isset($dayPatternMap[$namaHari])) continue;
+
+            foreach ($dayPatternMap[$namaHari] as $item) {
+                $hasil[] = [
+                    'tim_id' => $item['tim_id'],
+                    'ruangan_id' => $item['ruangan_id'],
+                    'tanggal' => $tanggal->toDateString(),
+                    'expected_attendance' => $item['expected_attendance'],
+                ];
+            }
         }
 
         AlokasiRuangan::insert(array_map(fn ($r) => [
             'tim_id' => $r['tim_id'],
             'ruangan_id' => $r['ruangan_id'],
             'tanggal' => $r['tanggal'],
+            'expected_attendance' => $r['expected_attendance'] ?? null,
             'created_at' => now(),
             'updated_at' => now(),
         ], $hasil));
 
         Flux::toast(
             variant: 'success',
-            text: 'Berhasil generate ' . count($hasil) . ' alokasi (Best Fit): Maksimalkan utilisasi kapasitas ruangan.',
+            text: 'Berhasil generate alokasi ruangan Best Fit 1 minggu dan diulang ke seluruh periode.',
             heading: 'Generate Best Fit Selesai'
         );
 
@@ -945,11 +990,11 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
             <flux:heading size="xl" class="font-bold tracking-tight text-zinc-900 dark:text-white">
-                Alokasi Ruangan Mingguan
+                Alokasi Ruangan Periode
             </flux:heading>
             <flux:text class="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                <strong>Click+Drag area kosong</strong> untuk multi-select, <strong>Shift+Click</strong> card, atau <strong>Ctrl+A</strong> select semua. 
-                Drag card untuk pindah ruangan/tanggal, drop ke
+                Pola alokasi ruangan 1 minggu berulang otomatis sepanjang periode. 
+                Drag card untuk swap ruangan, drop ke
                 <svg class="inline h-3.5 w-3.5 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                 </svg>
@@ -959,56 +1004,63 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
 
         {{-- Week Navigator & Auto-Generate Button --}}
         <div class="flex items-center gap-2 flex-wrap">
-            <div class="inline-flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-1 shadow-xs">
-                <button
-                    wire:click="prevWeek"
-                    @click="resetScroll()"
-                    type="button"
-                    wire:loading.attr="disabled"
-                    wire:target="prevWeek,nextWeek"
-                    class="p-1.5 rounded-md text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-wait"
-                    title="Minggu Sebelumnya"
-                >
-                    <span wire:loading.remove wire:target="prevWeek,nextWeek">
-                        <flux:icon icon="chevron-left" class="size-4" />
-                    </span>
-                    <span wire:loading wire:target="prevWeek,nextWeek">
-                        <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                        </svg>
-                    </span>
-                </button>
-                <button
-                    wire:click="todayWeek"
-                    @click="resetScroll()"
-                    type="button"
-                    wire:loading.attr="disabled"
-                    wire:target="prevWeek,nextWeek"
-                    class="px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-wait"
-                >
-                    Minggu Ini
-                </button>
-                <button
-                    wire:click="nextWeek"
-                    @click="resetScroll()"
-                    type="button"
-                    wire:loading.attr="disabled"
-                    wire:target="prevWeek,nextWeek"
-                    class="p-1.5 rounded-md text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-wait"
-                    title="Minggu Berikutnya"
-                >
-                    <span wire:loading.remove wire:target="prevWeek,nextWeek">
-                        <flux:icon icon="chevron-right" class="size-4" />
-                    </span>
-                    <span wire:loading wire:target="prevWeek,nextWeek">
-                        <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                        </svg>
-                    </span>
-                </button>
-            </div>
+            @if ($this->periodeAktif && $this->periodeAktif->tanggal_mulai && $this->periodeAktif->tanggal_selesai)
+                <div class="inline-flex items-center gap-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/80 dark:bg-blue-950/40 px-3 py-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 shadow-2xs">
+                    <flux:icon icon="calendar-days" class="size-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span>Periode: {{ Carbon::parse($this->periodeAktif->tanggal_mulai)->translatedFormat('d M Y') }} – {{ Carbon::parse($this->periodeAktif->tanggal_selesai)->translatedFormat('d M Y') }}</span>
+                </div>
+            @else
+                <div class="inline-flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-1 shadow-xs">
+                    <button
+                        wire:click="prevWeek"
+                        @click="resetScroll()"
+                        type="button"
+                        wire:loading.attr="disabled"
+                        wire:target="prevWeek,nextWeek"
+                        class="p-1.5 rounded-md text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        title="Minggu Sebelumnya"
+                    >
+                        <span wire:loading.remove wire:target="prevWeek,nextWeek">
+                            <flux:icon icon="chevron-left" class="size-4" />
+                        </span>
+                        <span wire:loading wire:target="prevWeek,nextWeek">
+                            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                        </span>
+                    </button>
+                    <button
+                        wire:click="todayWeek"
+                        @click="resetScroll()"
+                        type="button"
+                        wire:loading.attr="disabled"
+                        wire:target="prevWeek,nextWeek"
+                        class="px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-wait"
+                    >
+                        Minggu Ini
+                    </button>
+                    <button
+                        wire:click="nextWeek"
+                        @click="resetScroll()"
+                        type="button"
+                        wire:loading.attr="disabled"
+                        wire:target="prevWeek,nextWeek"
+                        class="p-1.5 rounded-md text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        title="Minggu Berikutnya"
+                    >
+                        <span wire:loading.remove wire:target="prevWeek,nextWeek">
+                            <flux:icon icon="chevron-right" class="size-4" />
+                        </span>
+                        <span wire:loading wire:target="prevWeek,nextWeek">
+                            <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                            </svg>
+                        </span>
+                    </button>
+                </div>
+            @endif
 
             {{-- Dual Generate Buttons --}}
             <div class="flex items-center gap-2" x-data="{ showStrategyInfo: false }">
@@ -1031,6 +1083,12 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 >
                     <span class="hidden sm:inline">Generate</span> Fair/LRA
                 </flux:button>
+
+                <flux:modal.trigger name="modal-export-ruangan-pdf">
+                    <flux:button variant="filled" icon="arrow-down-tray">
+                        Export PDF
+                    </flux:button>
+                </flux:modal.trigger>
                 
                 {{-- Strategy Info Tooltip --}}
                 <div 
@@ -1070,24 +1128,18 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
     <flux:card class="p-0 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
         <div 
             class="px-5 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all duration-300"
-            x-data="{ justChanged: false }"
-            x-init="
-                $watch('$wire.tanggalMulaiMinggu', () => {
-                    justChanged = true;
-                    setTimeout(() => justChanged = false, 800);
-                })
-            "
-            :class="justChanged ? 'bg-blue-100/50 dark:bg-blue-900/20' : ''"
         >
             <div class="flex items-center gap-2">
                 <span class="size-2.5 rounded-full bg-[#3B71CA] animate-pulse"></span>
                 <span class="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                    <span wire:loading.remove wire:target="prevWeek,nextWeek">
+                    @if ($this->periodeAktif && $this->periodeAktif->tanggal_mulai && $this->periodeAktif->tanggal_selesai)
+                        Rentang Periode: {{ Carbon::parse($this->periodeAktif->tanggal_mulai)->translatedFormat('d F Y') }} – {{ Carbon::parse($this->periodeAktif->tanggal_selesai)->translatedFormat('d F Y') }}
+                        <span class="ml-2 px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[11px] font-medium border border-blue-200 dark:border-blue-800/50">
+                            1 Minggu Diulang
+                        </span>
+                    @else
                         Rentang: {{ Carbon::parse($tanggalMulaiMinggu)->translatedFormat('d F Y') }} – {{ Carbon::parse($tanggalMulaiMinggu)->addDays(5)->translatedFormat('d F Y') }}
-                    </span>
-                    <span wire:loading wire:target="prevWeek,nextWeek" class="flex items-center gap-2">
-                        Memuat rentang minggu...
-                    </span>
+                    @endif
                 </span>
             </div>
             <div class="flex items-center gap-3 text-xs text-zinc-500">
@@ -1147,7 +1199,9 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                         @foreach ($this->daftarHariMingguIni as $h)
                             <th class="p-3.5 text-center border-b border-r border-zinc-200 dark:border-zinc-800 select-none relative z-40 bg-zinc-100 dark:bg-zinc-900 {{ $h['is_today'] ? '!bg-blue-50/90 dark:!bg-blue-950/50 text-blue-600 dark:text-blue-400' : '' }}">
                                 <div class="font-bold text-sm">{{ $h['nama'] }}</div>
-                                <div class="text-[11px] font-normal opacity-80 mt-0.5">{{ $h['label_tanggal'] }}</div>
+                                <div class="text-[11px] font-normal opacity-75 mt-0.5">
+                                    {{ $this->periodeAktif ? 'Setiap ' . $h['nama'] : $h['label_tanggal'] }}
+                                </div>
                             </th>
                         @endforeach
                     </tr>
@@ -1481,7 +1535,200 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             </div>
         </div>
     </flux:modal>
+
+    {{-- Modal Export PDF Alokasi Ruangan --}}
+    <flux:modal name="modal-export-ruangan-pdf" class="max-w-lg">
+        <form method="POST" action="{{ route('admin.export.pdf') }}" target="_blank" class="space-y-6">
+            @csrf
+            <input type="hidden" name="from_modal" value="1">
+            <div>
+                <flux:heading size="lg">Export Alokasi Ruangan ke PDF</flux:heading>
+                <flux:text class="text-zinc-500 text-sm mt-1">
+                    Download dokumen PDF alokasi ruangan mingguan dan komponen jadwal lainnya.
+                </flux:text>
+            </div>
+
+            {{-- Pemilihan Periode WFO / Rentang Tanggal --}}
+            <div x-data="{ mode: 'periode' }" class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <flux:label class="font-medium text-sm">Rentang Jadwal</flux:label>
+                    <div class="flex items-center gap-2">
+                        <button 
+                            type="button" 
+                            @click="mode = (mode === 'periode' ? 'minggu' : 'periode')" 
+                            class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                            <span x-text="mode === 'periode' ? 'Hanya Minggu Ini' : 'Pilih Periode Lengkap'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div x-show="mode === 'periode'" x-data="{
+                    open: false,
+                    selectedId: '{{ $this->periodeAktif?->id ?? ($this->daftarPeriode->first()?->id ?? '') }}',
+                    selectedLabel: '{{ $this->periodeAktif ? ($this->periodeAktif->nama . ' (' . $this->periodeAktif->tanggal_mulai?->format('d M Y') . ' - ' . $this->periodeAktif->tanggal_selesai?->format('d M Y') . ')' . ($this->periodeAktif->status === 'aktif' ? ' • [Aktif]' : '')) : ($this->daftarPeriode->first() ? ($this->daftarPeriode->first()->nama . ' (' . $this->daftarPeriode->first()->tanggal_mulai?->format('d M Y') . ' - ' . $this->daftarPeriode->first()->tanggal_selesai?->format('d M Y') . ')') : 'Pilih Periode') }}'
+                }" @click.outside="open = false" class="relative">
+                    <input type="hidden" name="periode_wfo_id" :value="selectedId">
+                    
+                    <button type="button" @click="open = !open"
+                        :class="open ? 'ring-2 ring-blue-500 border-blue-500' : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400'"
+                        class="w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-left transition-colors">
+                        <span class="truncate text-zinc-900 dark:text-zinc-100 font-medium" x-text="selectedLabel"></span>
+                        <svg class="h-4 w-4 text-zinc-400 shrink-0 transition-transform duration-200" :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+
+                    <div x-show="open" x-transition class="absolute z-50 mt-1 w-full rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 shadow-xl py-1 max-h-60 overflow-y-auto">
+                        @foreach ($this->daftarPeriode as $p)
+                            @php
+                                $pLabel = $p->nama . ' (' . $p->tanggal_mulai?->format('d M Y') . ' - ' . $p->tanggal_selesai?->format('d M Y') . ')' . ($p->status === 'aktif' ? ' • [Aktif]' : '');
+                            @endphp
+                            <button type="button" 
+                                @click="selectedId = '{{ $p->id }}'; selectedLabel = '{{ addslashes($pLabel) }}'; open = false"
+                                :class="selectedId == '{{ $p->id }}' ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-medium' : 'text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700/60'"
+                                class="w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 transition-colors">
+                                <span class="truncate">{{ $pLabel }}</span>
+                                <svg x-show="selectedId == '{{ $p->id }}'" class="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </button>
+                        @endforeach
+                    </div>
+                    <flux:description class="text-xs mt-1.5 text-zinc-500">
+                        Mengekspor jadwal seluruh minggu dalam satu periode ini.
+                    </flux:description>
+                </div>
+
+                <div x-show="mode === 'minggu'" x-cloak class="p-3 bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 text-sm">
+                    <div class="font-medium text-zinc-800 dark:text-zinc-200">
+                        Minggu yang sedang dilihat:
+                    </div>
+                    <div class="text-xs text-zinc-500 mt-0.5">
+                        {{ \Carbon\Carbon::parse($this->tanggalMulaiMinggu)->isoFormat('D MMMM Y') }} s.d. {{ \Carbon\Carbon::parse($this->tanggalMulaiMinggu)->addDays(5)->isoFormat('D MMMM Y') }}
+                    </div>
+                    <input type="hidden" name="custom_tanggal" :value="mode === 'minggu' ? '1' : '0'">
+                    <input type="hidden" name="tanggal_mulai" value="{{ $this->tanggalMulaiMinggu }}">
+                    <input type="hidden" name="tanggal_selesai" value="{{ \Carbon\Carbon::parse($this->tanggalMulaiMinggu)->addDays(5)->toDateString() }}">
+                </div>
+            </div>
+
+            {{-- Komponen Konten dengan Alpine.js --}}
+            <div class="space-y-3" x-data="{
+                allSelected: false,
+                surat: false,
+                wfo: false,
+                kelompok: false,
+                ruangan: true,
+                adzan: false,
+                briefing: false,
+                toggleAll() {
+                    this.allSelected = !this.allSelected;
+                    this.surat = this.allSelected;
+                    this.wfo = this.allSelected;
+                    this.kelompok = this.allSelected;
+                    this.ruangan = this.allSelected;
+                    this.adzan = this.allSelected;
+                    this.briefing = false;
+                },
+                selectOnly(type) {
+                    this.surat = (type === 'wfo');
+                    this.wfo = (type === 'wfo');
+                    this.kelompok = (type === 'wfo');
+                    this.ruangan = (type === 'ruangan');
+                    this.adzan = (type === 'adzan');
+                    this.briefing = false;
+                    this.allSelected = false;
+                }
+            }">
+                <div class="flex items-center justify-between">
+                    <flux:label class="font-medium text-sm">Pilih Jadwal yang Di-include</flux:label>
+                    <button type="button" @click="toggleAll()" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                        <span x-text="allSelected ? 'Batal Pilih Semua' : 'Pilih Semua'"></span>
+                    </button>
+                </div>
+
+                {{-- Preset Cepat --}}
+                <div class="flex flex-wrap gap-1.5 pb-1">
+                    <button type="button" @click="selectOnly('ruangan')" class="px-2.5 py-1 text-xs rounded-md bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition">
+                        Hanya Ruangan
+                    </button>
+                    <button type="button" @click="selectOnly('wfo')" class="px-2.5 py-1 text-xs rounded-md bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition">
+                        Hanya WFO
+                    </button>
+                    <button type="button" @click="toggleAll()" class="px-2.5 py-1 text-xs rounded-md bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition">
+                        Semua Jadwal
+                    </button>
+                </div>
+
+                <div class="space-y-2 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 bg-zinc-50/50 dark:bg-zinc-900/50">
+                    <label class="flex items-start gap-3 p-2 rounded hover:bg-white dark:hover:bg-zinc-800/80 cursor-pointer transition">
+                        <input type="checkbox" name="include_ruangan" value="1" x-model="ruangan" class="mt-0.5 rounded border-zinc-300 dark:border-zinc-600 text-blue-600 shadow-sm focus:ring-blue-500">
+                        <div class="text-sm">
+                            <div class="font-medium text-zinc-900 dark:text-zinc-100">Jadwal Alokasi Ruangan Mingguan</div>
+                            <div class="text-xs text-zinc-500 dark:text-zinc-400">Matriks pembagian ruangan tim WFO per hari & kapasitas</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-2 rounded hover:bg-white dark:hover:bg-zinc-800/80 cursor-pointer transition">
+                        <input type="checkbox" name="include_wfo" value="1" x-model="wfo" class="mt-0.5 rounded border-zinc-300 dark:border-zinc-600 text-blue-600 shadow-sm focus:ring-blue-500">
+                        <div class="text-sm">
+                            <div class="font-medium text-zinc-900 dark:text-zinc-100">Jadwal WFO Mingguan (Lampiran 1)</div>
+                            <div class="text-xs text-zinc-500 dark:text-zinc-400">Matriks pembagian hari WFO tim Senin s.d. Sabtu</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-2 rounded hover:bg-white dark:hover:bg-zinc-800/80 cursor-pointer transition">
+                        <input type="checkbox" name="include_surat" value="1" x-model="surat" class="mt-0.5 rounded border-zinc-300 dark:border-zinc-600 text-blue-600 shadow-sm focus:ring-blue-500">
+                        <div class="text-sm">
+                            <div class="font-medium text-zinc-900 dark:text-zinc-100">Surat Resmi Pemberitahuan WFO</div>
+                            <div class="text-xs text-zinc-500 dark:text-zinc-400">Surat pengantar resmi Inovindo dengan tanda tangan direktur</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-2 rounded hover:bg-white dark:hover:bg-zinc-800/80 cursor-pointer transition">
+                        <input type="checkbox" name="include_kelompok" value="1" x-model="kelompok" class="mt-0.5 rounded border-zinc-300 dark:border-zinc-600 text-blue-600 shadow-sm focus:ring-blue-500">
+                        <div class="text-sm">
+                            <div class="font-medium text-zinc-900 dark:text-zinc-100">Daftar Kelompok Peserta PKL (Lampiran 2)</div>
+                            <div class="text-xs text-zinc-500 dark:text-zinc-400">Daftar tim asal sekolah dan seluruh anggota personil</div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-2 rounded hover:bg-white dark:hover:bg-zinc-800/80 cursor-pointer transition">
+                        <input type="checkbox" name="include_adzan" value="1" x-model="adzan" class="mt-0.5 rounded border-zinc-300 dark:border-zinc-600 text-blue-600 shadow-sm focus:ring-blue-500">
+                        <div class="text-sm">
+                            <div class="font-medium text-zinc-900 dark:text-zinc-100">Jadwal Petugas Adzan & Pembacaan Kitab</div>
+                            <div class="text-xs text-zinc-500 dark:text-zinc-400">Petugas sholat Zuhur dan Ashar per tanggal</div>
+                        </div>
+                    </label>
+
+                    <div class="flex items-start gap-3 p-2 rounded border border-dashed border-zinc-200 dark:border-zinc-800 bg-zinc-100/60 dark:bg-zinc-800/40 opacity-60 cursor-not-allowed">
+                        <input type="checkbox" name="include_briefing" value="1" disabled class="mt-0.5 rounded border-zinc-300 dark:border-zinc-600 text-zinc-400 cursor-not-allowed">
+                        <div class="text-sm">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-zinc-500 dark:text-zinc-400">Jadwal Petugas Briefing</span>
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-400 border border-amber-300 dark:border-amber-800/60">
+                                    In Development
+                                </span>
+                            </div>
+                            <div class="text-xs text-zinc-400 dark:text-zinc-500">Jadwal penugasan notulis & pemateri sesi Pagi dan Sore (Segera Hadir)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2">
+                <flux:modal.close>
+                    <flux:button variant="ghost">Batal</flux:button>
+                </flux:modal.close>
+                <flux:button type="submit" variant="primary" icon="arrow-down-tray">
+                    Download PDF
+                </flux:button>
+            </div>
+        </form>
+    </flux:modal>
 </div>
+
 
 
     

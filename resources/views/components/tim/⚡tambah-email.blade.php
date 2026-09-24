@@ -8,7 +8,7 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title('Tambah Email')] #[Layout('layouts.tim')] class extends Component {
+new #[Title('Tambah Email')] #[Layout('layouts.app')] class extends Component {
     public string $email = '';
     public string $otp = '';
     public bool $otpSent = false;
@@ -69,6 +69,14 @@ new #[Title('Tambah Email')] #[Layout('layouts.tim')] class extends Component {
                 variant: 'danger',
                 text: 'Gagal mengirim kode OTP. Silakan coba lagi atau hubungi admin.'
             );
+        }
+    }
+
+    public function updatedOtp($value): void
+    {
+        $clean = preg_replace('/\D/', '', (string) $value);
+        if (strlen($clean) === 6) {
+            $this->verifikasiOtp();
         }
     }
 
@@ -219,7 +227,7 @@ new #[Title('Tambah Email')] #[Layout('layouts.tim')] class extends Component {
                 <flux:field>
                     <flux:label>Kode OTP</flux:label>
                     <flux:input
-                        wire:model="otp"
+                        wire:model.live="otp"
                         type="text"
                         placeholder="000000"
                         maxlength="6"
@@ -235,6 +243,12 @@ new #[Title('Tambah Email')] #[Layout('layouts.tim')] class extends Component {
                             </span>
                         @endif
                     </flux:description>
+                    @if (config('mail.default') === 'log' && auth()->user()?->email_verification_otp)
+                        <div class="mt-2 text-xs bg-blue-50 dark:bg-blue-950/30 p-2.5 rounded-lg border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 flex items-center justify-between">
+                            <span>Mode Log Mailer aktif (kode OTP):</span>
+                            <span class="font-mono font-bold tracking-wider text-sm bg-white dark:bg-zinc-900 px-2 py-0.5 rounded border border-blue-300 dark:border-blue-700">{{ auth()->user()->email_verification_otp }}</span>
+                        </div>
+                    @endif
                     <flux:error name="otp" />
                 </flux:field>
 

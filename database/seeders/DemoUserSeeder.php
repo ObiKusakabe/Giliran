@@ -12,7 +12,7 @@ class DemoUserSeeder extends Seeder
 {
     public function run(): void
     {
-        $generator = new TimAccountGenerator();
+        $generator = new TimAccountGenerator;
 
         // Admin
         User::updateOrCreate(

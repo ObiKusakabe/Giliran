@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 class GenerateMissingTimAccounts extends Command
 {
     protected $signature = 'tim:generate-accounts';
+
     protected $description = 'Generate user accounts for all tim that do not have one yet';
 
     public function handle(TimAccountGenerator $generator): int

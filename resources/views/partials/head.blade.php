@@ -5,6 +5,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="Giliran" />
+<meta name="csrf-token" content="{{ csrf_token() }}">
 
 <title>
     {{ filled($title ?? null) ? $title.' - Giliran' : 'Giliran - Sistem Penjadwalan' }}
@@ -145,16 +146,41 @@
         box-shadow: none !important;
     }
     
-    /* Avatar container: bulat penuh */
+    /* Avatar container: rounded kotak khas Flux & overflow hidden */
+    [data-flux-avatar],
     [data-flux-sidebar-profile] [data-flux-avatar] {
-        border-radius: 9999px !important;
-        background: transparent !important;
+        border-radius: 0.5rem !important; /* rounded-lg bawaan Flux */
         overflow: hidden !important;
     }
     
-    /* Avatar image: bulat penuh */
+    /* Avatar image: rounded kotak khas Flux & ukuran pas */
+    [data-flux-avatar] img,
     [data-flux-sidebar-profile] [data-flux-avatar] img {
-        border-radius: 9999px !important;
+        border-radius: 0.5rem !important;
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+        display: block !important;
+    }
+
+    /* Cegah tombol disabled Flux menampilkan loading spinner otomatis */
+    button[data-flux-button].no-disabled-spinner[disabled] [data-flux-loading-indicator],
+    button[data-flux-button][data-no-disabled-spinner][disabled] [data-flux-loading-indicator] {
+        display: none !important;
+        opacity: 0 !important;
+    }
+    button[data-flux-button].no-disabled-spinner[disabled] > :not([data-flux-loading-indicator]),
+    button[data-flux-button][data-no-disabled-spinner][disabled] > :not([data-flux-loading-indicator]) {
+        opacity: 1 !important;
+    }
+    button[data-flux-button].no-disabled-spinner[data-flux-loading] [data-flux-loading-indicator],
+    button[data-flux-button][data-no-disabled-spinner][data-flux-loading] [data-flux-loading-indicator] {
+        display: flex !important;
+        opacity: 1 !important;
+    }
+    button[data-flux-button].no-disabled-spinner[data-flux-loading] > :not([data-flux-loading-indicator]),
+    button[data-flux-button][data-no-disabled-spinner][data-flux-loading] > :not([data-flux-loading-indicator]) {
+        opacity: 0 !important;
     }
 
     /* Fix Flux button hover - prevent white background on colored buttons */

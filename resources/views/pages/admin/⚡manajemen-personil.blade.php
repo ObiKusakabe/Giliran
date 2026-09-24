@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use App\Models\Personil;
 use App\Models\Tim;
@@ -92,16 +92,27 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
         return Tim::count();
     }
 
+    public function bukaFormTambah(): void
+    {
+        $this->resetForm();
+        $this->modal('form-personil')->show();
+    }
+
     public function bukaFormEdit(int $id): void
     {
-        $personil           = Personil::findOrFail($id);
-        $this->editingId    = $id;
-        $this->tim_id       = $personil->tim_id;
-        $this->nama         = $personil->nama;
+        $personil            = Personil::findOrFail($id);
+        $this->editingId     = $id;
+        $this->tim_id        = $personil->tim_id;
+        $this->nama          = $personil->nama;
         $this->jenis_kelamin = $personil->jenis_kelamin ?? 'laki-laki';
-        $this->no_hp        = $personil->no_hp ?? '';
-        $this->status       = $personil->status;
+        $this->no_hp         = $personil->no_hp ?? '';
+        $this->status        = $personil->status;
         $this->modal('form-personil')->show();
+    }
+
+    public function updatedNoHp(string $value): void
+    {
+        $this->no_hp = preg_replace('/[^0-9]/', '', $value);
     }
 
     public function simpan(): void
@@ -110,14 +121,21 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
             'tim_id'        => 'required|exists:tim,id',
             'nama'          => 'required|string|max:150',
             'jenis_kelamin' => 'required|in:laki-laki,perempuan',
-            'no_hp'         => 'nullable|string|max:20',
+            'no_hp'         => 'nullable|string|regex:/^[0-9]+$/|max:20',
             'status'        => 'required|in:aktif,nonaktif',
+        ], [
+            'tim_id.required'        => 'Tim wajib dipilih.',
+            'tim_id.exists'          => 'Tim yang dipilih tidak valid.',
+            'nama.required'          => 'Nama lengkap wajib diisi.',
+            'jenis_kelamin.required' => 'Jenis kelamin wajib dipilih.',
+            'no_hp.regex'            => 'No. HP hanya boleh berisi angka.',
+            'status.required'        => 'Status wajib dipilih.',
         ]);
 
         if ($this->editingId) {
             Personil::findOrFail($this->editingId)->update([
-                'tim_id'        => $this->tim_id,
-                'nama'          => $this->nama,
+                'tim_id'        => (int) $this->tim_id,
+                'nama'          => trim($this->nama),
                 'jenis_kelamin' => $this->jenis_kelamin,
                 'no_hp'         => $this->no_hp ?: null,
                 'status'        => $this->status,
@@ -125,8 +143,8 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
             Flux::toast(variant: 'success', text: 'Personil berhasil diperbarui.');
         } else {
             Personil::create([
-                'tim_id'        => $this->tim_id,
-                'nama'          => $this->nama,
+                'tim_id'        => (int) $this->tim_id,
+                'nama'          => trim($this->nama),
                 'jenis_kelamin' => $this->jenis_kelamin,
                 'no_hp'         => $this->no_hp ?: null,
                 'status'        => $this->status,
@@ -158,13 +176,14 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
         unset($this->semuaPersonil, $this->totalPersonil, $this->totalPersonilAktif, $this->totalPersonilNonaktif);
     }
 
-    private function resetForm(): void
+    public function resetForm(): void
     {
-        $this->editingId = null;
-        $this->tim_id    = '';
-        $this->nama      = '';
-        $this->no_hp     = '';
-        $this->status    = 'aktif';
+        $this->editingId     = null;
+        $this->tim_id        = '';
+        $this->nama          = '';
+        $this->jenis_kelamin = 'laki-laki';
+        $this->no_hp         = '';
+        $this->status        = 'aktif';
         $this->resetValidation();
     }
 
@@ -277,7 +296,7 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
             @endif
         </div>
         <flux:modal.trigger name="form-personil">
-            <flux:button variant="primary" icon="plus" class="flex-shrink-0">Tambah Personil</flux:button>
+            <flux:button variant="primary" icon="plus" class="flex-shrink-0" wire:click="bukaFormTambah">Tambah Personil</flux:button>
         </flux:modal.trigger>
     </div>
 
@@ -574,30 +593,36 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
         </div>
     </flux:card>
 
-    <flux:modal name="form-personil" class="max-w-md" 
+    <flux:modal name="form-personil" class="w-full sm:w-[480px] max-w-md" 
         x-on:close="$wire.editingId = null; $wire.tim_id = ''; $wire.nama = ''; $wire.jenis_kelamin = 'laki-laki'; $wire.no_hp = ''; $wire.status = 'aktif';">
-        <div class="flex flex-col gap-6 p-1">
+        <div class="flex flex-col gap-4">
             <flux:heading size="lg">{{ $editingId ? 'Edit Personil' : 'Tambah Personil' }}</flux:heading>
             <form wire:submit="simpan" class="flex flex-col gap-4">
-                <x-searchable-select
-                    name="tim_id"
-                    label="Tim"
-                    placeholder="Pilih tim..."
-                    wire:model="tim_id"
-                    :model-value="$tim_id"
-                    :required="true"
-                    :options="$this->timOptions->map(fn($t) => ['value' => $t->id, 'label' => $t->nama_tim])->toArray()"
-                />
-                <flux:input wire:model="nama" label="Nama Lengkap" placeholder="cth. Budi Santoso" required />
+                <div>
+                    <x-searchable-select
+                        name="tim_id"
+                        label="Tim"
+                        placeholder="Pilih tim..."
+                        wire:model="tim_id"
+                        :model-value="$tim_id"
+                        :required="true"
+                        :options="$this->timOptions->map(fn($t) => ['value' => $t->id, 'label' => $t->nama_tim])->toArray()"
+                    />
+                    <flux:error name="tim_id" />
+                </div>
+                <div>
+                    <flux:input wire:model="nama" label="Nama Lengkap" placeholder="cth. Budi Santoso" required />
+                    <flux:error name="nama" />
+                </div>
                 <div>
                     <label class="text-sm font-medium text-zinc-950 dark:text-white">Jenis Kelamin <span class="text-red-500">*</span></label>
                     <div class="relative mt-1.5" x-data="{ open: false }" @click.outside="open = false">
                         <button type="button" @click="open = !open"
                             :class="open ? 'ring-2 ring-brand border-brand' : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400'"
                             class="w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-left transition-colors">
-                            <span :class="$wire.jenis_kelamin ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-400'" 
+                            <span class="truncate" :class="$wire.jenis_kelamin ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-400'" 
                                 x-text="$wire.jenis_kelamin === 'laki-laki' ? 'Laki-laki (Dapat ditugaskan adzan/kitab)' : ($wire.jenis_kelamin === 'perempuan' ? 'Perempuan' : 'Pilih jenis kelamin')"></span>
-                            <svg class="h-4 w-4 text-zinc-400 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <svg class="h-4 w-4 text-zinc-400 shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
@@ -605,26 +630,37 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
                             <template x-for="opt in [{value:'laki-laki',label:'Laki-laki (Dapat ditugaskan adzan/kitab)'},{value:'perempuan',label:'Perempuan'}]" :key="opt.value">
                                 <button type="button" @click="$wire.jenis_kelamin = opt.value; open = false"
                                     :class="$wire.jenis_kelamin === opt.value ? 'bg-brand/10 text-brand font-medium' : 'text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700'"
-                                    class="w-full text-left px-3 py-2 text-sm flex items-center justify-between">
-                                    <span x-text="opt.label"></span>
-                                    <svg x-show="$wire.jenis_kelamin === opt.value" class="h-4 w-4 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    class="w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2">
+                                    <span x-text="opt.label" class="truncate"></span>
+                                    <svg x-show="$wire.jenis_kelamin === opt.value" class="h-4 w-4 text-brand shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
                                     </svg>
                                 </button>
                             </template>
                         </div>
                     </div>
+                    <flux:error name="jenis_kelamin" />
                 </div>
-                <flux:input wire:model="no_hp" label="No. HP" placeholder="cth. 08123456789" type="tel" />
+                <div>
+                    <flux:input 
+                        wire:model="no_hp" 
+                        label="No. HP" 
+                        placeholder="cth. 08123456789" 
+                        type="tel"
+                        inputmode="numeric"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                    />
+                    <flux:error name="no_hp" />
+                </div>
                 <div>
                     <label class="text-sm font-medium text-zinc-950 dark:text-white">Status <span class="text-red-500">*</span></label>
                     <div class="relative mt-1.5" x-data="{ open: false }" @click.outside="open = false">
                         <button type="button" @click="open = !open"
                             :class="open ? 'ring-2 ring-brand border-brand' : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400'"
                             class="w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-left transition-colors">
-                            <span :class="$wire.status ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-400'" 
+                            <span class="truncate" :class="$wire.status ? 'text-zinc-900 dark:text-zinc-100' : 'text-zinc-400'" 
                                 x-text="$wire.status === 'aktif' ? 'Aktif' : ($wire.status === 'nonaktif' ? 'Nonaktif' : 'Pilih status')"></span>
-                            <svg class="h-4 w-4 text-zinc-400 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <svg class="h-4 w-4 text-zinc-400 shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
@@ -632,15 +668,16 @@ new #[Title('Personil')] #[Layout('layouts.admin')] #[Lazy] class extends Compon
                             <template x-for="opt in [{value:'aktif',label:'Aktif'},{value:'nonaktif',label:'Nonaktif'}]" :key="opt.value">
                                 <button type="button" @click="$wire.status = opt.value; open = false"
                                     :class="$wire.status === opt.value ? 'bg-brand/10 text-brand font-medium' : 'text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700'"
-                                    class="w-full text-left px-3 py-2 text-sm flex items-center justify-between">
-                                    <span x-text="opt.label"></span>
-                                    <svg x-show="$wire.status === opt.value" class="h-4 w-4 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                    class="w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2">
+                                    <span x-text="opt.label" class="truncate"></span>
+                                    <svg x-show="$wire.status === opt.value" class="h-4 w-4 text-brand shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
                                     </svg>
                                 </button>
                             </template>
                         </div>
                     </div>
+                    <flux:error name="status" />
                 </div>
                 <div class="flex justify-end gap-2 pt-2">
                     <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>

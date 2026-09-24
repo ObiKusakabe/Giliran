@@ -9,7 +9,7 @@
     <title>Jadwal WFO & Petugas Internal — PT Inovindo Digital Media</title>
     <style>
         @page {
-            margin: 18mm 18mm 30mm 18mm; /* Increased bottom margin for footer */
+            margin: 16mm 16mm 30mm 16mm; /* Safe bottom margin so content never overlaps footer */
             size: a4 portrait;
         }
 
@@ -22,24 +22,48 @@
             padding: 0;
         }
 
-        /* Footer Watermark */
+        /* Prevent awkward table row breaks */
+        table {
+            page-break-inside: auto;
+        }
+        tr {
+            page-break-inside: avoid;
+        }
+
+        /* Footer Formal (Times New Roman - Konsisten dengan Kop Surat Header) */
         .pdf-footer {
             position: fixed;
-            bottom: 5mm;
+            bottom: -22mm;
             left: 0;
             right: 0;
-            height: 18mm;
+            height: 14mm;
             text-align: center;
-            font-size: 8pt;
-            color: #666666;
-            border-top: 1px solid #cccccc;
-            padding-top: 6px;
+            border-top: 1.5px solid #000000;
+            padding-top: 4px;
             font-family: 'Times New Roman', Times, Georgia, serif;
         }
 
-        .pdf-footer .watermark-text {
+        .pdf-footer .footer-title {
+            font-size: 8.5pt;
             font-weight: bold;
-            color: #333333;
+            color: #000000;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+            font-family: 'Times New Roman', Times, Georgia, serif;
+        }
+
+        .pdf-footer .footer-sub {
+            font-size: 8pt;
+            color: #111111;
+            line-height: 1.3;
+            margin-bottom: 2px;
+            font-family: 'Times New Roman', Times, Georgia, serif;
+        }
+
+        .pdf-footer .footer-meta {
+            font-size: 7.5pt;
+            color: #444444;
             font-family: 'Times New Roman', Times, Georgia, serif;
         }
 
@@ -213,17 +237,26 @@
 </head>
 <body>
 
-<!-- Footer Watermark - Appears on every page -->
+@php
+    $includeSurat = $includeSurat ?? true;
+    $includeWfo = $includeWfo ?? true;
+    $includeKelompok = $includeKelompok ?? true;
+    $includeAdzan = $includeAdzan ?? true;
+    $includeBriefing = $includeBriefing ?? true;
+    $includeRuangan = $includeRuangan ?? true;
+@endphp
+
+<!-- Footer Formal - Appears on every page -->
 <div class="pdf-footer">
-    <div class="watermark-text">Website Giliran</div>
-    <div>Sistem Manajemen Jadwal PT Inovindo Digital Media</div>
-    <div>Halaman <span class="page-number"></span> | Generated: {{ now()->translatedFormat('d F Y, H:i') }} WIB</div>
+    <div class="footer-title">PT INOVINDO DIGITAL MEDIA &bull; WEBSITE GILIRAN</div>
+    <div class="footer-sub">Sistem Manajemen Jadwal WFO & Petugas Internal</div>
+    <div class="footer-meta">Halaman <span class="page-number"></span> | Dokumen Resmi &bull; Generated: {{ now()->translatedFormat('d F Y, H:i') }} WIB</div>
 </div>
 
 {{-- ========================================================================= --}}
 {{-- HALAMAN 1: SURAT RESMI PEMBERITAHUAN JADWAL WFO                            --}}
 {{-- ========================================================================= --}}
-@if ($jenis === 'semua' || $jenis === 'ruangan' || $jenis === 'wfo')
+@if ($includeSurat)
     {{-- Kop Surat Inovindo (Times New Roman & PNG Logo) --}}
     <table class="kop-table">
         <tr>
@@ -294,11 +327,15 @@
         </tr>
     </table>
 
-    <div class="page-break"></div>
+    @if ($includeWfo || $includeKelompok || ($includeAdzan && $adzan->isNotEmpty()) || ($includeBriefing && $briefing->isNotEmpty()) || ($includeRuangan && !empty($dataRuangan) && $dataRuangan->isNotEmpty()))
+        <div class="page-break"></div>
+    @endif
+@endif
 
     {{-- ========================================================================= --}}
     {{-- HALAMAN 2: LAMPIRAN 1 — JADWAL WFO PESERTA PKL/MAGANG                      --}}
     {{-- ========================================================================= --}}
+@if ($includeWfo)
     <table class="kop-table">
         <tr>
             <td class="kop-logo">
@@ -381,11 +418,15 @@
         <div>Kehadiran dibawah 80% nilai default C (tidak mendapatkan sertifikat PKL)</div>
     </div>
 
-    <div class="page-break"></div>
+    @if ($includeKelompok || ($includeAdzan && $adzan->isNotEmpty()) || ($includeBriefing && $briefing->isNotEmpty()) || ($includeRuangan && !empty($dataRuangan) && $dataRuangan->isNotEmpty()))
+        <div class="page-break"></div>
+    @endif
+@endif
 
     {{-- ========================================================================= --}}
     {{-- HALAMAN 3 & 4: LAMPIRAN 2 — DAFTAR KELOMPOK PESERTA PKL/MAGANG             --}}
     {{-- ========================================================================= --}}
+@if ($includeKelompok)
     <table class="kop-table">
         <tr>
             <td class="kop-logo">
@@ -440,13 +481,15 @@
         </tbody>
     </table>
 
-    <div class="page-break"></div>
+    @if (($includeAdzan && $adzan->isNotEmpty()) || ($includeBriefing && $briefing->isNotEmpty()) || ($includeRuangan && !empty($dataRuangan) && $dataRuangan->isNotEmpty()))
+        <div class="page-break"></div>
+    @endif
 @endif
 
 {{-- ========================================================================= --}}
-{{-- HALAMAN 5+: JADWAL PETUGAS ADZAN & PEMBACAAN KITAB ZUHUR DAN ASHAR        --}}
+{{-- HALAMAN ADZAN: JADWAL PETUGAS ADZAN & PEMBACAAN KITAB ZUHUR DAN ASHAR     --}}
 {{-- ========================================================================= --}}
-@if ($adzan->isNotEmpty())
+@if ($includeAdzan && $adzan->isNotEmpty())
     @php
         $groupedAdzan = $adzan->groupBy(fn($j) => $j->tanggal->toDateString())
             ->map(function ($rows) {
@@ -524,6 +567,238 @@
             @endforeach
         </tbody>
     </table>
+
+    @if (($includeBriefing && $briefing->isNotEmpty()) || ($includeRuangan && !empty($dataRuangan) && $dataRuangan->isNotEmpty()))
+        <div class="page-break"></div>
+    @endif
+@endif
+
+{{-- ========================================================================= --}}
+{{-- HALAMAN BRIEFING: JADWAL PETUGAS BRIEFING PAGI & SORE (3 ROLES)           --}}
+{{-- ========================================================================= --}}
+@if ($includeBriefing && $briefing->isNotEmpty())
+    <table class="kop-table">
+        <tr>
+            <td class="kop-logo">
+                @if ($logoBase64)
+                    <img src="{{ $logoBase64 }}" class="kop-logo-img" alt="Inovindo Logo">
+                @else
+                    <div class="kop-brand-text">Inovindo</div>
+                    <div class="kop-brand-sub">digital - media</div>
+                @endif
+            </td>
+            <td class="kop-address">
+                <div class="kop-company">PT INOVINDO DIGITAL MEDIA</div>
+                <div>Komplek Buana Citra Ciwastra No. D3, Kab. Bandung</div>
+                <div>WhatsApp. 08562251196 Website www.inovindo.com</div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="subtitle-lampiran" style="font-size: 12pt; margin-top: 10px;">Jadwal Petugas Briefing Pagi & Sore</div>
+    <div class="periode-lampiran" style="font-size: 10pt; font-weight: bold; margin-bottom: 18px;">
+        Tanggal {{ $mulai->translatedFormat('d F Y') }} s.d {{ $selesai->translatedFormat('d F Y') }}
+    </div>
+
+    @php
+        $groupedBriefing = $briefing->groupBy(function($item) {
+            return \Carbon\Carbon::parse($item->tanggal)->toDateString();
+        })->map(function($dateItems) {
+            return $dateItems->groupBy('sesi');
+        });
+        $no = 1;
+    @endphp
+
+    <table class="table-blue">
+        <thead>
+            <tr>
+                <th style="width: 4%;">No</th>
+                <th style="width: 17%;">Hari, Tanggal</th>
+                <th style="width: 9%;">Sesi</th>
+                <th style="width: 26%;">Nama Personil</th>
+                <th style="width: 17%;">Tim</th>
+                <th style="width: 13%;">Peran</th>
+                <th style="width: 14%;">Keterangan</th>
+            </tr>
+        </thead>
+        @foreach ($groupedBriefing as $dateStr => $sessions)
+            @php
+                $dateCarbon = \Carbon\Carbon::parse($dateStr);
+                $dateRowCount = $sessions->sum(fn($s) => $s->count());
+                $isFirstRowOfDate = true;
+            @endphp
+            <tbody style="page-break-inside: avoid;">
+                @foreach ($sessions as $sesiName => $items)
+                    @php
+                        $sessionRowCount = $items->count();
+                        $isFirstRowOfSession = true;
+                    @endphp
+
+                    @foreach ($items as $j)
+                        @php
+                            $pName = $j->personil?->nama ?? '—';
+                            $tName = $j->tim?->nama_tim ?? '—';
+                            $isMod = ($j->moderator_id && $j->moderator_id === $j->personil_id);
+                            $isDoa = ($j->doa_id && $j->doa_id === $j->personil_id);
+
+                            $roleLabels = [];
+                            if ($j->is_notulen) {
+                                $roleLabels[] = 'Notulen';
+                            }
+                            if ($isMod) {
+                                $roleLabels[] = 'Moderator';
+                            }
+                            if ($isDoa) {
+                                $roleLabels[] = 'Doa';
+                            }
+                            $roleText = !empty($roleLabels) ? implode(', ', $roleLabels) : 'Peserta';
+                        @endphp
+                        <tr>
+                            <td class="text-center">{{ $no++ }}</td>
+
+                            @if ($isFirstRowOfDate)
+                                <td rowspan="{{ $dateRowCount }}" class="text-center font-bold" style="vertical-align: middle;">
+                                    {{ $dateCarbon->translatedFormat('l') }}<br>
+                                    <span style="font-weight: normal; font-size: 7.5pt; color: #444;">{{ $dateCarbon->translatedFormat('d F Y') }}</span>
+                                </td>
+                                @php $isFirstRowOfDate = false; @endphp
+                            @endif
+
+                            @if ($isFirstRowOfSession)
+                                <td rowspan="{{ $sessionRowCount }}" class="text-center font-bold" style="vertical-align: middle; text-transform: capitalize;">
+                                    {{ $sesiName }}
+                                </td>
+                                @php $isFirstRowOfSession = false; @endphp
+                            @endif
+
+                            <td style="padding-left: 8px;">
+                                <strong>{{ $pName }}</strong>
+                            </td>
+                            <td class="text-center">{{ $tName }}</td>
+                            <td class="text-center font-bold" style="color: #1e3a8a;">
+                                {{ $roleText }}
+                            </td>
+                            <td class="text-center" style="font-size: 8pt;">
+                                @if ($j->is_switched)
+                                    <span style="color: #c2410c; font-weight: bold;">Pengganti</span>
+                                    @if ($j->originalPersonil)
+                                        <br><span style="color: #555; font-size: 7pt;">(Gantikan {{ $j->originalPersonil->nama }})</span>
+                                    @endif
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                @endforeach
+            </tbody>
+        @endforeach
+    </table>
+
+    @if ($includeRuangan && !empty($dataRuangan) && $dataRuangan->isNotEmpty())
+        <div class="page-break"></div>
+    @endif
+@endif
+
+{{-- ========================================================================= --}}
+{{-- HALAMAN RUANGAN: JADWAL ALOKASI RUANGAN KERJA                             --}}
+{{-- ========================================================================= --}}
+@if ($includeRuangan && !empty($dataRuangan) && $dataRuangan->isNotEmpty())
+    @php
+        $alokasiByWeek = $dataRuangan->groupBy(function($a) {
+            return \Carbon\Carbon::parse($a->tanggal)->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString();
+        });
+        $daftarRuanganList = (!empty($semuaRuangan) && $semuaRuangan->isNotEmpty())
+            ? $semuaRuangan 
+            : $dataRuangan->pluck('ruangan')->filter()->unique('id')->values();
+    @endphp
+
+    @foreach ($alokasiByWeek as $startOfWeekStr => $weekAllocations)
+        @php
+            $weekStart = \Carbon\Carbon::parse($startOfWeekStr);
+            $weekEnd = $weekStart->copy()->addDays(5);
+            $daysInWeek = [];
+            for ($d = 0; $d < 6; $d++) {
+                $daysInWeek[] = $weekStart->copy()->addDays($d);
+            }
+
+            // Map: [ruangan_id][tanggal] => alloc
+            $matrixAlloc = [];
+            foreach ($weekAllocations as $alloc) {
+                $tglStr = \Carbon\Carbon::parse($alloc->tanggal)->toDateString();
+                $matrixAlloc[$alloc->ruangan_id][$tglStr] = $alloc;
+            }
+        @endphp
+
+        <table class="kop-table">
+            <tr>
+                <td class="kop-logo">
+                    @if ($logoBase64)
+                        <img src="{{ $logoBase64 }}" class="kop-logo-img" alt="Inovindo Logo">
+                    @else
+                        <div class="kop-brand-text">Inovindo</div>
+                        <div class="kop-brand-sub">digital - media</div>
+                    @endif
+                </td>
+                <td class="kop-address">
+                    <div class="kop-company">PT INOVINDO DIGITAL MEDIA</div>
+                    <div>Komplek Buana Citra Ciwastra No. D3, Kab. Bandung</div>
+                    <div>WhatsApp. 08562251196 Website www.inovindo.com</div>
+                </td>
+            </tr>
+        </table>
+
+        <div class="subtitle-lampiran" style="font-size: 12pt; margin-top: 10px;">Jadwal Alokasi Ruangan Kerja</div>
+        <div class="periode-lampiran" style="font-size: 9.5pt; font-weight: bold; margin-bottom: 18px;">
+            Rentang: {{ $weekStart->translatedFormat('d F Y') }} s.d {{ $weekEnd->translatedFormat('d F Y') }}
+        </div>
+
+        <table class="table-cyan">
+            <thead>
+                <tr>
+                    <th style="width: 22%;">Ruangan</th>
+                    @foreach ($daysInWeek as $day)
+                        <th style="width: 13%; text-align: center;">
+                            {{ $day->translatedFormat('l') }}<br>
+                            <span style="font-size: 7.5pt; font-weight: normal; opacity: 0.9;">{{ $day->translatedFormat('d M') }}</span>
+                        </th>
+                    @endforeach
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($daftarRuanganList as $ruang)
+                    <tr>
+                        <td style="font-weight: bold; vertical-align: middle; background: #f8fafc;">
+                            {{ $ruang->nama_ruangan }}<br>
+                            <span style="font-size: 7.5pt; font-weight: normal; color: #555;">Kapasitas: {{ $ruang->kapasitas }} org</span>
+                        </td>
+                        @foreach ($daysInWeek as $day)
+                            @php
+                                $dayStr = $day->toDateString();
+                                $item = $matrixAlloc[$ruang->id][$dayStr] ?? null;
+                            @endphp
+                            <td style="text-align: center; vertical-align: middle; font-size: 8pt; padding: 4px;">
+                                @if ($item && $item->tim)
+                                    <div style="font-weight: bold; color: #1e3a8a;">
+                                        {{ $item->tim->nama_tim }}
+                                    </div>
+                                    @if ($item->expected_attendance)
+                                        <div style="font-size: 7pt; color: #555;">
+                                            {{ $item->expected_attendance }} org
+                                        </div>
+                                    @endif
+                                @else
+                                    <span style="color: #bbb;">—</span>
+                                @endif
+                            </td>
+                        @endforeach
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+
+        @if (! $loop->last)
+            <div class="page-break"></div>
+        @endif
+    @endforeach
 @endif
 
 </body>

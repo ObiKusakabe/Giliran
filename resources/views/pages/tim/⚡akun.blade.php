@@ -36,12 +36,18 @@ new #[Title('Akun')] #[Layout('layouts.app')] class extends Component {
     public string $password_baru = '';
     public string $password_baru_confirmation = '';
 
+    // Email Akun State (Section: Pengaturan)
+    public string $email = '';
+
     public function mount(): void
     {
         $user = auth()->user();
-        if ($user && $user->tim) {
-            $this->nama_tim = $user->tim->nama_tim;
-            $this->keterangan = $user->tim->keterangan ?? '';
+        if ($user) {
+            $this->email = $user->email ?? '';
+            if ($user->tim) {
+                $this->nama_tim = $user->tim->nama_tim;
+                $this->keterangan = $user->tim->keterangan ?? '';
+            }
         }
     }
 
@@ -211,6 +217,31 @@ new #[Title('Akun')] #[Layout('layouts.app')] class extends Component {
 
             Flux::toast(variant: 'success', text: 'Password akun tim berhasil diperbarui!');
         }
+    }
+
+    public function updateEmail(): void
+    {
+        $user = auth()->user();
+        if (! $user) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'email' => ['nullable', 'email', 'max:255', 'unique:users,email,'.$user->id],
+        ], [
+            'email.email' => 'Format alamat email tidak valid.',
+            'email.unique' => 'Email ini sudah digunakan oleh akun lain.',
+        ]);
+
+        $emailValue = ! empty($validated['email']) ? $validated['email'] : null;
+
+        $user->update([
+            'email' => $emailValue,
+        ]);
+
+        $this->email = $emailValue ?? '';
+
+        Flux::toast(variant: 'success', text: 'Alamat email akun tim berhasil diperbarui!');
     }
 }; ?>
 
@@ -478,34 +509,52 @@ new #[Title('Akun')] #[Layout('layouts.app')] class extends Component {
         @else
             {{-- SECTION: PENGATURAN --}}
             <div class="space-y-6">
-                {{-- Alert: Tambah Email untuk Keamanan --}}
-                @if (!auth()->user()->email)
-                    <flux:card class="border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/10 p-4">
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-                            <div class="flex items-start gap-3 flex-1">
-                                <flux:icon icon="shield-exclamation" class="size-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                                <div>
-                                    <h4 class="font-semibold text-sm text-amber-900 dark:text-amber-100">Tingkatkan Keamanan Akun Anda</h4>
-                                    <p class="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                                        Tambahkan email untuk keamanan akun dan pemulihan password jika lupa.
-                                    </p>
-                                </div>
-                            </div>
-                            <flux:button
-                                size="sm"
-                                variant="primary"
-                                href="{{ route('tim.tambah-email') }}"
-                                wire:navigate
-                                icon="envelope"
-                            >
-                                Tambah Email
+                {{-- Card: Alamat Email Akun Tim --}}
+                <flux:card class="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-4">
+                    <div>
+                        <flux:heading size="md">Alamat Email Akun</flux:heading>
+                        <flux:subheading class="text-xs">Digunakan untuk notifikasi keamanan, pemulihan akun, dan reset password saat lupa</flux:subheading>
+                    </div>
+
+                    <form wire:submit="updateEmail" class="space-y-4">
+                        <div class="space-y-1">
+                            <flux:input
+                                wire:model="email"
+                                type="email"
+                                label="Email Tim"
+                                placeholder="cth. tim@instansi.sch.id atau email ketua"
+                            />
+                            @if (!auth()->user()->email)
+                                <p class="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                                    <flux:icon icon="exclamation-circle" class="size-3.5 shrink-0" />
+                                    <span>Akun ini belum memiliki email. Masukkan email agar fitur Lupa Password dapat digunakan.</span>
+                                </p>
+                            @else
+                                <p class="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                                    <flux:icon icon="check-circle" class="size-3.5 shrink-0" />
+                                    <span>Email terdaftar dan aktif.</span>
+                                </p>
+                            @endif
+                        </div>
+
+                        <div class="flex items-center justify-between gap-3 pt-1">
+                            @if (!auth()->user()->email)
+                                <flux:link href="{{ route('tim.tambah-email') }}" wire:navigate class="text-xs text-[#3B71CA] hover:underline">
+                                    Verifikasi via OTP &rarr;
+                                </flux:link>
+                            @else
+                                <span></span>
+                            @endif
+
+                            <flux:button type="submit" variant="primary" size="sm">
+                                Simpan Email
                             </flux:button>
                         </div>
-                    </flux:card>
-                @endif
+                    </form>
+                </flux:card>
 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {{-- Left Column: Password & UI Preference --}}
+                    {{-- Left Column: Password --}}
                     <div class="space-y-6">
                         {{-- Form Ubah Password Akun --}}
                         <flux:card class="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-4">
@@ -514,9 +563,19 @@ new #[Title('Akun')] #[Layout('layouts.app')] class extends Component {
                                 <flux:subheading class="text-xs">Ganti password akun tim agar lebih aman</flux:subheading>
                             </div>
 
-                            <form wire:submit="ubahPassword" class="space-y-4">
+                            <form wire:submit="ubahPassword" class="space-y-4" x-data="{
+                                pw: '',
+                                pwConfirm: '',
+                                get isMatch() {
+                                    return this.pw.length > 0 && this.pwConfirm.length > 0 && this.pw === this.pwConfirm;
+                                },
+                                get isMismatch() {
+                                    return this.pw.length > 0 && this.pwConfirm.length > 0 && this.pw !== this.pwConfirm;
+                                }
+                            }">
                                 <flux:input
                                     wire:model="password_baru"
+                                    x-model="pw"
                                     type="password"
                                     label="Password Baru"
                                     required
@@ -524,17 +583,34 @@ new #[Title('Akun')] #[Layout('layouts.app')] class extends Component {
                                     viewable
                                 />
 
-                                <flux:input
-                                    wire:model="password_baru_confirmation"
-                                    type="password"
-                                    label="Ulangi Password Baru"
-                                    required
-                                    placeholder="Konfirmasi password"
-                                    viewable
-                                />
+                                <div>
+                                    <flux:input
+                                        wire:model="password_baru_confirmation"
+                                        x-model="pwConfirm"
+                                        type="password"
+                                        label="Ulangi Password Baru"
+                                        required
+                                        placeholder="Konfirmasi password"
+                                        viewable
+                                    />
+
+                                    {{-- Client-side Password Match Feedback --}}
+                                    <div x-show="isMatch" x-cloak class="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 font-medium mt-1.5">
+                                        <svg class="size-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                        <span>Password cocok</span>
+                                    </div>
+                                    <div x-show="isMismatch" x-cloak class="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-medium mt-1.5">
+                                        <svg class="size-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                        <span>Konfirmasi password belum sama</span>
+                                    </div>
+                                </div>
 
                                 <div class="pt-1">
-                                    <flux:button type="submit" variant="filled" class="w-full">
+                                    <flux:button type="submit" variant="filled" class="w-full" x-bind:disabled="isMismatch">
                                         Perbarui Password
                                     </flux:button>
                                 </div>
@@ -542,8 +618,22 @@ new #[Title('Akun')] #[Layout('layouts.app')] class extends Component {
                         </flux:card>
                     </div>
 
-                    {{-- Right Column: Logout --}}
+                    {{-- Right Column: 2FA/Passkey & Logout --}}
                     <div class="space-y-6">
+                        {{-- 2FA & Passkey Card --}}
+                        <flux:card class="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-4">
+                            <div>
+                                <flux:heading size="md">Autentikasi 2 Langkah & Passkey</flux:heading>
+                                <flux:subheading class="text-xs">Tingkatkan proteksi akun dengan Google Authenticator / Authy atau login instan dengan sensor sidik jari / Face ID</flux:subheading>
+                            </div>
+
+                            <div class="space-y-2">
+                                <flux:button href="{{ route('profile.edit') }}" wire:navigate variant="outline" class="w-full" icon="finger-print">
+                                    Kelola 2FA & Passkey
+                                </flux:button>
+                            </div>
+                        </flux:card>
+
                         {{-- Logout Card --}}
                         <flux:card class="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs space-y-4">
                             <div>

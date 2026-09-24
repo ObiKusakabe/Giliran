@@ -110,6 +110,19 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
 
     public function processGenerate(): void
     {
+        if (! $this->periodeAktif) {
+            Flux::toast(variant: 'danger', text: 'Tidak ada periode WFO aktif.');
+            return;
+        }
+
+        // Cek ketersediaan Jadwal WFO sebelum loading & preview
+        $jadwalWfoAda = \App\Models\JadwalWfo::where('periode_wfo_id', $this->periodeAktif->id)->exists();
+        if (! $jadwalWfoAda) {
+            $this->modalModeSelection = false;
+            $this->modalWfoKosong = true;
+            return;
+        }
+
         // Validate custom mode
         if ($this->selectedMode === 'custom' && empty($this->selectedJadwal)) {
             Flux::toast(variant: 'warning', text: 'Pilih minimal 1 jadwal untuk di-generate.');
@@ -120,7 +133,6 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
         if ($this->selectedMode === 'custom') {
             // If Ruangan selected, check if WFO jadwal exists
             if (in_array('ruangan', $this->selectedJadwal)) {
-                $jadwalWfoAda = \App\Models\JadwalWfo::where('periode_wfo_id', $this->periodeAktif->id)->exists();
                 if (!$jadwalWfoAda) {
                     Flux::toast(variant: 'danger', text: 'Alokasi Ruangan memerlukan Jadwal WFO. Generate Jadwal WFO terlebih dahulu.');
                     return;
@@ -172,21 +184,12 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
             return;
         }
         
-        // 🆕 For Alokasi Ruangan: Generate full week (Senin-Sabtu) bukan hanya workdays
-        // Ambil minggu pertama dari tanggalList
-        $firstDate = $tanggalList[0] ?? $mulai;
-        $startOfWeek = $firstDate->copy()->startOfWeek(Carbon::MONDAY);
-        $tanggalListFullWeek = [];
-        for ($i = 0; $i < 6; $i++) {
-            $tanggalListFullWeek[] = $startOfWeek->copy()->addDays($i);
-        }
-
         // Generate preview based on selected mode
         if ($this->selectedMode === 'periode_baru') {
             // Mode Periode Baru: Generate ALL
             $this->previewAdzan    = $scheduler->generateAdzanKajian($tanggalList, $periode->id);
             $this->previewBriefing = $scheduler->generateBriefing($tanggalList, $periode->id);
-            $this->previewRuangan  = $scheduler->generateAlokasiRuangan($tanggalListFullWeek, $periode->id); // Use full week
+            $this->previewRuangan  = $scheduler->generateAlokasiRuangan($tanggalList, $periode->id);
         } else {
             // Mode Custom: Only generate selected schedules
             $this->previewAdzan = [];
@@ -207,7 +210,7 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
             
             // Generate Ruangan
             if (in_array('ruangan', $this->selectedJadwal)) {
-                $this->previewRuangan = $scheduler->generateAlokasiRuangan($tanggalListFullWeek, $periode->id); // Use full week
+                $this->previewRuangan = $scheduler->generateAlokasiRuangan($tanggalList, $periode->id);
             }
         }
 
@@ -309,6 +312,9 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
             }
 
             if (! empty($this->previewRuangan)) {
+                $ruanganDates = collect($this->previewRuangan)->pluck('tanggal')->unique()->values()->all();
+                AlokasiRuangan::whereIn('tanggal', $ruanganDates)->delete();
+
                 $cleanRuangan = array_map(function ($row) {
                     unset($row['kapasitas']);
                     return $row;
@@ -380,10 +386,17 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                 <div class="flex items-center gap-3">
                     <flux:button
                         variant="primary"
-                        @click="$wire.set('modalModeSelection', true)"
+                        wire:click="openModeSelection"
                         icon="sparkles"
                     >
-                        Pilih Mode Generate
+                        <span wire:loading.remove wire:target="openModeSelection">Pilih Mode Generate</span>
+                        <span wire:loading wire:target="openModeSelection" class="flex items-center gap-1.5">
+                            <svg class="animate-spin size-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            Memeriksa...
+                        </span>
                     </flux:button>
                 </div>
             </div>
@@ -877,19 +890,19 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
     </flux:modal>
 
     {{-- Modal: Mode Selection --}}
-    <flux:modal wire:model="modalModeSelection" class="max-w-2xl max-h-[90vh] flex flex-col">
+    <flux:modal wire:model="modalModeSelection" class="max-w-2xl">
         {{-- Content: Mode Selection (default) --}}
-        <div wire:loading.remove wire:target="processGenerate,preview" class="flex flex-col h-full">
-        {{-- Sticky Header --}}
-        <div class="sticky top-0 z-10 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 px-6 py-4">
-            <flux:heading size="lg">Pilih Mode Generate Jadwal</flux:heading>
-            <flux:text class="text-zinc-500 mt-1">
-                Tentukan cara generate jadwal: semua sekaligus atau pilih jadwal tertentu saja.
-            </flux:text>
-        </div>
+        <div wire:loading.remove wire:target="processGenerate,preview" class="space-y-5">
+            {{-- Header --}}
+            <div class="pr-8">
+                <flux:heading size="lg">Pilih Mode Generate Jadwal</flux:heading>
+                <flux:subheading class="mt-1">
+                    Tentukan cara generate jadwal: semua sekaligus atau pilih jadwal tertentu saja.
+                </flux:subheading>
+            </div>
 
-        {{-- Scrollable Content --}}
-        <div class="overflow-y-auto flex-1 px-6 py-6 space-y-4">
+            {{-- Scrollable Content --}}
+            <div class="max-h-[55vh] overflow-y-auto space-y-4 pr-1.5 -mr-1.5">
                 {{-- Mode: Periode Baru (Recommended) --}}
                 <label class="flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all"
                     :class="$wire.selectedMode === 'periode_baru' ? 'border-[#3B71CA] bg-[#3B71CA]/5' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'">
@@ -946,7 +959,7 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
 
                 {{-- Custom Mode: Checkbox Group --}}
                 @if ($selectedMode === 'custom')
-                    <div class="ml-10 space-y-2 animate-in fade-in duration-200">
+                    <div class="ml-4 sm:ml-8 space-y-2 animate-in fade-in duration-200">
                         <flux:checkbox.group variant="cards" class="flex-col">
                             <flux:checkbox 
                                 wire:model="selectedJadwal" 
@@ -999,17 +1012,17 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                         @endif
                     </div>
                 @endif
-        </div>
+            </div>
 
-        {{-- Sticky Footer Actions --}}
-        <div class="sticky bottom-0 z-10 flex items-center justify-between gap-3 pt-4 border-t border-zinc-200 dark:border-zinc-700 px-6 pb-6 bg-white dark:bg-zinc-900 rounded-b-xl">
-            <flux:button variant="ghost" @click="$wire.set('modalModeSelection', false)">
-                Batal
-            </flux:button>
-            <flux:button variant="primary" wire:click="processGenerate" :disabled="$selectedMode === 'custom' && empty($selectedJadwal)">
-                Generate Jadwal
-            </flux:button>
-        </div>
+            {{-- Footer Actions --}}
+            <div class="flex items-center justify-between gap-3 pt-4 border-t border-zinc-200 dark:border-zinc-700">
+                <flux:button variant="ghost" @click="$wire.set('modalModeSelection', false)">
+                    Batal
+                </flux:button>
+                <flux:button variant="primary" wire:click="processGenerate" :disabled="$selectedMode === 'custom' && empty($selectedJadwal)">
+                    Generate Jadwal
+                </flux:button>
+            </div>
         </div>
 
         {{-- Content: Processing Steps (during loading) --}}

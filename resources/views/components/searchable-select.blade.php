@@ -1,4 +1,4 @@
-﻿@props([
+@props([
     'name' => '',
     'label'       => null,
     'placeholder' => 'Pilih...',
@@ -20,6 +20,13 @@
         selectedLabel: @js($selectedLabel),
         options: @js($options),
 
+        init() {
+            this.$watch('selected', val => {
+                const opt = this.options.find(o => String(o.value) === String(val));
+                this.selectedLabel = opt ? opt.label : '';
+            });
+        },
+
         get filtered() {
             if (!this.q) return this.options;
             return this.options.filter(o =>
@@ -32,8 +39,12 @@
             this.selectedLabel = option.label;
             this.open = false;
             this.q = '';
-            
 
+            @if($wireModelName)
+                if (typeof $wire !== 'undefined') {
+                    $wire.set('{{ $wireModelName }}', option.value);
+                }
+            @endif
 
             // Trigger native change event
             this.$nextTick(() => {

@@ -41,6 +41,16 @@ class SecurityHeaders
             $styleSrc .= ' http://localhost:5173';
             $connectSrc .= ' http://localhost:5173 ws://localhost:5173';
             $fontSrc .= ' http://localhost:5173';
+
+            // Allow Cloudflare Tunnel domain
+            $appUrl = config('app.url');
+            if (str_contains($appUrl, 'trycloudflare.com')) {
+                $domain = parse_url($appUrl, PHP_URL_HOST);
+                $scriptSrc .= " https://{$domain} http://{$domain}";
+                $styleSrc .= " https://{$domain} http://{$domain}";
+                $connectSrc .= " https://{$domain} http://{$domain} wss://{$domain} ws://{$domain}";
+                $fontSrc .= " https://{$domain} http://{$domain}";
+            }
         }
 
         $response->headers->set('Content-Security-Policy',

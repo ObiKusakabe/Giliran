@@ -415,24 +415,81 @@
                 <livewire:notifikasi-dropdown />
 
                 <flux:dropdown position="bottom" align="end">
-                    <flux:profile
-                        :src="auth()->user()->tim?->foto_bersama ? \Illuminate\Support\Facades\Storage::url(auth()->user()->tim->foto_bersama) : null"
-                        :initials="auth()->user()->initials()"
-                        icon-trailing="chevron-down"
-                    />
+                    {{-- Custom Profile Button dengan Alternating Text --}}
+                    @php
+                        $currentUser = auth()->user();
+                        $displayUsername = $currentUser->email ?: '@' . $currentUser->username;
+                        $userAvatarUrl = $currentUser->tim?->foto_bersama 
+                            ? asset('storage/' . $currentUser->tim->foto_bersama) 
+                            : null;
+                    @endphp
+                    
+                    <button 
+                        class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                        x-data="{
+                            showName: true,
+                            init() {
+                                setInterval(() => {
+                                    this.showName = !this.showName;
+                                }, 5000);
+                            }
+                        }"
+                    >
+                        <flux:avatar 
+                            size="sm"
+                            :src="$userAvatarUrl"
+                            :name="$currentUser->name" 
+                            :initials="$currentUser->initials()" 
+                            class="shrink-0"
+                        />
+                        <div class="relative" style="width: {{ strlen($displayUsername) * 0.55 }}rem; min-width: 80px; max-width: 150px;">
+                            {{-- Nama Tim (with truncate) --}}
+                            <span 
+                                x-show="showName"
+                                x-transition:enter="transition ease-out duration-300"
+                                x-transition:enter-start="opacity-0"
+                                x-transition:enter-end="opacity-100"
+                                x-transition:leave="transition ease-in duration-300"
+                                x-transition:leave-start="opacity-100"
+                                x-transition:leave-end="opacity-0"
+                                class="absolute inset-0 text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate"
+                            >
+                                {{ $currentUser->name }}
+                            </span>
+                            
+                            {{-- Username --}}
+                            <span 
+                                x-show="!showName"
+                                x-transition:enter="transition ease-out duration-300"
+                                x-transition:enter-start="opacity-0"
+                                x-transition:enter-end="opacity-100"
+                                x-transition:leave="transition ease-in duration-300"
+                                x-transition:leave-start="opacity-100"
+                                x-transition:leave-end="opacity-0"
+                                class="absolute inset-0 text-sm font-mono text-zinc-600 dark:text-zinc-400 truncate"
+                            >
+                                {{ $displayUsername }}
+                            </span>
+                            
+                            {{-- Spacer untuk maintain height (based on username length) --}}
+                            <span class="invisible text-sm font-mono">{{ $displayUsername }}</span>
+                        </div>
+                        <flux:icon.chevron-down class="size-4 text-zinc-400 flex-shrink-0" />
+                    </button>
 
                     <flux:menu>
                         <flux:menu.radio.group>
                             <div class="p-0 text-sm font-normal">
                                 <div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
                                     <flux:avatar 
-                                        :src="auth()->user()->isTim() && auth()->user()->tim?->foto_bersama ? \Illuminate\Support\Facades\Storage::url(auth()->user()->tim->foto_bersama) : null"
-                                        :name="auth()->user()->name" 
-                                        :initials="auth()->user()->initials()" 
+                                        :src="$userAvatarUrl"
+                                        :name="$currentUser->name" 
+                                        :initials="$currentUser->initials()" 
+                                        class="shrink-0"
                                     />
                                     <div class="grid flex-1 text-start text-sm leading-tight">
-                                        <flux:heading class="truncate">{{ auth()->user()->name }}</flux:heading>
-                                        <flux:text class="truncate">{{ auth()->user()->email }}</flux:text>
+                                        <flux:heading class="truncate">{{ $currentUser->name }}</flux:heading>
+                                        <flux:text class="truncate text-xs font-mono text-zinc-500 dark:text-zinc-400">{{ $displayUsername }}</flux:text>
                                     </div>
                                 </div>
                             </div>
@@ -469,6 +526,11 @@
                 <a href="https://obikusakabe.github.io/MyPortfolio/" target="_blank" rel="noopener noreferrer" class="font-semibold text-[#3B71CA] dark:text-blue-400 hover:underline">Roby Rachmat Firdaus</a>
             </div>
         </flux:footer>
+
+        {{-- Dev Mode Floating UI (only in local/dev environment) --}}
+        @if (app()->environment('local') || config('app.debug'))
+            <x-dev-mode-floating />
+        @endif
 
         @if (!auth()->user()?->hasRole('admin'))
             {{-- Mobile & Tablet Bottom Navigation Bar (< 1024px) --}}

@@ -82,6 +82,10 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
 
         $validated = $this->validate($this->profileRules($user->id));
 
+        if (array_key_exists('email', $validated) && empty($validated['email'])) {
+            $validated['email'] = null;
+        }
+
         $user->fill($validated);
 
         if ($user->isDirty('email')) {
@@ -247,7 +251,7 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
                 <flux:input wire:model="name" label="Nama" type="text" required autofocus autocomplete="name" />
 
                 <div>
-                    <flux:input wire:model="email" label="Email" type="email" required autocomplete="email" />
+                    <flux:input wire:model="email" label="Email (Opsional)" placeholder="cth. nama@email.com" type="email" autocomplete="email" />
 
                     @if ($this->hasUnverifiedEmail)
                         <div class="mt-4">
@@ -292,7 +296,19 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
 
         <div class="flex-1 space-y-8">
             {{-- Update Password Form --}}
-            <form method="POST" wire:submit="updatePassword" class="space-y-6">
+            <form method="POST" wire:submit="updatePassword" class="space-y-6"
+                @submit.capture="if (isMismatch) { $event.preventDefault(); $event.stopImmediatePropagation(); }"
+                @keydown.enter="if (isMismatch) { $event.preventDefault(); }"
+                x-data="{
+                    pw: '',
+                    pwConfirm: '',
+                    get isMatch() {
+                        return this.pw.length > 0 && this.pwConfirm.length > 0 && this.pw === this.pwConfirm;
+                    },
+                    get isMismatch() {
+                        return this.pw.length > 0 && this.pwConfirm.length > 0 && this.pw !== this.pwConfirm;
+                    }
+                }">
                 <flux:input
                     wire:model="current_password"
                     label="Password Saat Ini"
@@ -303,25 +319,51 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
                 />
                 <flux:input
                     wire:model="password"
+                    x-model="pw"
                     label="Password Baru"
                     type="password"
                     required
                     autocomplete="new-password"
-                    passwordrules="{{ \Illuminate\Validation\Rules\Password::defaults()->toPasswordRulesString() }}"
+                    placeholder="Minimal 8 karakter"
                     viewable
                 />
-                <flux:input
-                    wire:model="password_confirmation"
-                    label="Konfirmasi Password"
-                    type="password"
-                    required
-                    autocomplete="new-password"
-                    passwordrules="{{ \Illuminate\Validation\Rules\Password::defaults()->toPasswordRulesString() }}"
-                    viewable
-                />
+                <div>
+                    <flux:input
+                        wire:model="password_confirmation"
+                        x-model="pwConfirm"
+                        label="Konfirmasi Password"
+                        type="password"
+                        required
+                        autocomplete="new-password"
+                        placeholder="Ulangi password baru"
+                        viewable
+                    />
+
+                    {{-- Client-side Password Match Feedback --}}
+                    <div x-show="isMatch" x-cloak class="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 font-medium mt-2">
+                        <svg class="size-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        <span>Password cocok</span>
+                    </div>
+                    <div x-show="isMismatch" x-cloak class="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-medium mt-2">
+                        <svg class="size-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        <span>Konfirmasi password belum sama</span>
+                    </div>
+                </div>
 
                 <div class="flex justify-end">
-                    <flux:button variant="primary" type="submit" data-test="update-password-button">
+                    <flux:button
+                        variant="primary"
+                        type="submit"
+                        class="no-disabled-spinner"
+                        data-no-disabled-spinner
+                        data-test="update-password-button"
+                        x-bind:disabled="isMismatch"
+                        x-bind:class="isMismatch ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''"
+                    >
                         Perbarui Password
                     </flux:button>
                 </div>
@@ -333,15 +375,15 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
 
                 <div class="space-y-4">
                     <div>
-                        <flux:heading size="md">{{ __('Two-factor authentication') }}</flux:heading>
-                        <flux:text class="mt-1 text-zinc-500">{{ __('Manage your two-factor authentication settings') }}</flux:text>
+                        <flux:heading size="md">{{ __('Two-factor authentication') }} (2FA)</flux:heading>
+                        <flux:text class="mt-1 text-zinc-500">Amankan akun Anda dengan verifikasi kode tambahan saat proses masuk</flux:text>
                     </div>
 
                     <div class="flex flex-col w-full space-y-4 text-sm" wire:cloak>
                         @if ($twoFactorEnabled)
                             <div class="space-y-4">
                                 <flux:text>
-                                    {{ __('You will be prompted for a secure, random pin during login, which you can retrieve from the TOTP-supported application on your phone.') }}
+                                    Anda akan diminta memasukkan PIN acak dari aplikasi autentikator di ponsel Anda (seperti Google Authenticator atau Authy) setiap kali login.
                                 </flux:text>
 
                                 <div class="flex justify-start">
@@ -349,7 +391,7 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
                                         variant="danger"
                                         wire:click="disable"
                                     >
-                                        {{ __('Disable 2FA') }}
+                                        Nonaktifkan 2FA
                                     </flux:button>
                                 </div>
 
@@ -358,7 +400,7 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
                         @else
                             <div class="space-y-4">
                                 <flux:text variant="subtle">
-                                    {{ __('When you enable two-factor authentication, you will be prompted for a secure pin during login. This pin can be retrieved from a TOTP-supported application on your phone.') }}
+                                    Saat Anda mengaktifkan autentikasi dua langkah, Anda akan diminta memasukkan PIN keamanan saat masuk. PIN ini dapat diambil dari aplikasi pendukung TOTP di ponsel Anda.
                                 </flux:text>
 
                                 <flux:modal.trigger name="two-factor-setup-modal">
@@ -366,7 +408,7 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
                                         variant="primary"
                                         wire:click="$dispatch('start-two-factor-setup')"
                                     >
-                                        {{ __('Enable 2FA') }}
+                                        Aktifkan 2FA
                                     </flux:button>
                                 </flux:modal.trigger>
 
@@ -383,8 +425,8 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
 
                 <div class="space-y-4">
                     <div>
-                        <flux:heading size="md">{{ __('Passkeys') }}</flux:heading>
-                        <flux:text class="mt-1 text-zinc-500">{{ __('Manage your passkeys for passwordless sign-in') }}</flux:text>
+                        <flux:heading size="md">Passkeys (Masuk Tanpa Password)</flux:heading>
+                        <flux:text class="mt-1 text-zinc-500">Kelola passkey perangkat Anda untuk login cepat menggunakan sensor sidik jari, Face ID, atau PIN perangkat</flux:text>
                     </div>
 
                     <div class="flex flex-col w-full space-y-4 text-sm" wire:cloak>
@@ -403,10 +445,10 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
                                                 @endif
                                             </div>
                                             <p class="text-zinc-500 dark:text-zinc-400 text-xs">
-                                                {{ __('Added :time', ['time' => $passkey['created_at_diff']]) }}
+                                                Ditambahkan {{ $passkey['created_at_diff'] }}
                                                 @if ($passkey['last_used_at_diff'])
                                                     <span class="opacity-50 mx-1">/</span>
-                                                    {{ __('Last used :time', ['time' => $passkey['last_used_at_diff']]) }}
+                                                    Terakhir digunakan {{ $passkey['last_used_at_diff'] }}
                                                 @endif
                                             </p>
                                         </div>
@@ -531,9 +573,9 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
     >
         <div class="space-y-6">
             <div class="space-y-2">
-                <flux:heading size="lg">{{ __('Remove passkey') }}</flux:heading>
+                <flux:heading size="lg">Hapus Passkey</flux:heading>
                 <flux:text>
-                    {{ __('Are you sure you want to remove the passkey ":name"? You will no longer be able to use it to sign in.', ['name' => $deletingPasskeyName]) }}
+                    Apakah Anda yakin ingin menghapus passkey "<strong>{{ $deletingPasskeyName }}</strong>"? Anda tidak dapat lagi menggunakannya untuk masuk ke akun ini.
                 </flux:text>
             </div>
 
@@ -542,13 +584,13 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
                     variant="outline"
                     wire:click="closeDeleteModal"
                 >
-                    {{ __('Cancel') }}
+                    Batal
                 </flux:button>
                 <flux:button
                     variant="danger"
                     wire:click="deletePasskey"
                 >
-                    {{ __('Remove passkey') }}
+                    Hapus Passkey
                 </flux:button>
             </div>
         </div>

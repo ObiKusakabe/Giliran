@@ -1,5 +1,6 @@
 <?php
 
+use App\Helpers\DevModeHelper;
 use App\Models\JadwalBriefing;
 use App\Models\JadwalWfo;
 use App\Models\NotulenBriefing;
@@ -184,9 +185,56 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
     }
 
     /**
-     * Check if current time is within allowed time window for the selected session.
-     * Pagi: 08:50 - 11:00
-     * Sore: 16:50 - 18:00
+     * Get start time Carbon instance for the current session.
+     */
+    private function getWindowStart(): Carbon
+    {
+        $tanggalNotulen = Carbon::parse($this->tanggal ?? DevModeHelper::now()->toDateString());
+
+        return $this->sesi === 'pagi'
+            ? $tanggalNotulen->copy()->setTime(8, 50, 0)
+            : $tanggalNotulen->copy()->setTime(16, 50, 0);
+    }
+
+    /**
+     * Get end time Carbon instance for the current session.
+     */
+    private function getWindowEnd(): Carbon
+    {
+        $tanggalNotulen = Carbon::parse($this->tanggal ?? DevModeHelper::now()->toDateString());
+
+        return $this->sesi === 'pagi'
+            ? $tanggalNotulen->copy()->setTime(11, 0, 0)
+            : $tanggalNotulen->copy()->setTime(18, 0, 0);
+    }
+
+    /**
+     * Check if current time is before the briefing window starts.
+     * Pagi: before 08:50
+     * Sore: before 16:50
+     */
+    #[Computed]
+    public function isBeforeWindow(): bool
+    {
+        if (! $this->tanggal) {
+            return false;
+        }
+
+        $currentTime = DevModeHelper::now();
+        $tanggalNotulen = Carbon::parse($this->tanggal);
+
+        // If date is in the future
+        if (! $currentTime->isSameDay($tanggalNotulen)) {
+            return $tanggalNotulen->isAfter($currentTime);
+        }
+
+        return $currentTime->lessThan($this->getWindowStart());
+    }
+
+    /**
+     * Check if current time has passed the deadline for the selected session.
+     * Pagi: after 11:00
+     * Sore: after 18:00
      */
     #[Computed]
     public function isPastDeadline(): bool
@@ -195,32 +243,74 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
             return false;
         }
 
-        $currentTime = \App\Helpers\DevModeHelper::now();
+        $currentTime = DevModeHelper::now();
         $tanggalNotulen = Carbon::parse($this->tanggal);
-        
-        // Check if selected date is in the past (not today)
-        if ($currentTime->toDateString() !== $tanggalNotulen->toDateString()) {
-            // If tanggal is past date, it's definitely past deadline
-            if ($currentTime->greaterThan($tanggalNotulen->endOfDay())) {
-                return true;
-            }
-            // If tanggal is future date, not past deadline yet
+
+        // If date is in the past
+        if (! $currentTime->isSameDay($tanggalNotulen)) {
+            return $tanggalNotulen->isBefore($currentTime);
+        }
+
+        return $currentTime->greaterThan($this->getWindowEnd());
+    }
+
+    /**
+     * Check if current time is within allowed window.
+     */
+    #[Computed]
+    public function isWindowOpen(): bool
+    {
+        return ! $this->isBeforeWindow && ! $this->isPastDeadline;
+    }
+
+    /**
+     * Check if selected date is in the future.
+     */
+    #[Computed]
+    public function isFutureDate(): bool
+    {
+        if (! $this->tanggal) {
             return false;
         }
 
-        // If tanggal is today, check time window based on sesi
-        if ($this->sesi === 'pagi') {
-            // Pagi window: 08:50 - 11:00
-            $windowStart = $tanggalNotulen->copy()->setTime(8, 50);
-            $windowEnd = $tanggalNotulen->copy()->setTime(11, 0);
-        } else {
-            // Sore window: 16:50 - 18:00
-            $windowStart = $tanggalNotulen->copy()->setTime(16, 50);
-            $windowEnd = $tanggalNotulen->copy()->setTime(18, 0);
+        $currentTime = DevModeHelper::now();
+        $tanggalNotulen = Carbon::parse($this->tanggal);
+
+        return ! $currentTime->isSameDay($tanggalNotulen) && $tanggalNotulen->isAfter($currentTime);
+    }
+
+    /**
+     * Check if selected date is in the past.
+     */
+    #[Computed]
+    public function isPastDate(): bool
+    {
+        if (! $this->tanggal) {
+            return false;
         }
 
-        // Past deadline if current time is outside window
-        return $currentTime->lessThan($windowStart) || $currentTime->greaterThan($windowEnd);
+        $currentTime = DevModeHelper::now();
+        $tanggalNotulen = Carbon::parse($this->tanggal);
+
+        return ! $currentTime->isSameDay($tanggalNotulen) && $tanggalNotulen->isBefore($currentTime);
+    }
+
+    /**
+     * Window start formatted string (e.g. 08:50 or 16:50).
+     */
+    #[Computed]
+    public function windowStartFormatted(): string
+    {
+        return $this->sesi === 'pagi' ? '08:50' : '16:50';
+    }
+
+    /**
+     * Window end formatted string (e.g. 11:00 or 18:00).
+     */
+    #[Computed]
+    public function windowEndFormatted(): string
+    {
+        return $this->sesi === 'pagi' ? '11:00' : '18:00';
     }
 
     /**
@@ -233,17 +323,7 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
             return '';
         }
 
-        $tanggalNotulen = Carbon::parse($this->tanggal);
-        
-        if ($this->sesi === 'pagi') {
-            // Pagi deadline: 11:00
-            $deadline = $tanggalNotulen->copy()->setTime(11, 0);
-        } else {
-            // Sore deadline: 18:00
-            $deadline = $tanggalNotulen->copy()->setTime(18, 0);
-        }
-
-        return $deadline->translatedFormat('l, d F Y \p\u\k\u\l H:i');
+        return $this->getWindowEnd()->translatedFormat('l, d F Y \p\u\k\u\l H:i');
     }
 
     /**
@@ -564,6 +644,27 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
             'penulisNotes.min' => 'Catatan penulis minimal 50 karakter.',
             'penulisNotes.max' => 'Catatan penulis maksimal 5000 karakter.',
         ]);
+
+        // Check time window
+        if ($this->isBeforeWindow) {
+            Flux::toast(
+                variant: 'warning',
+                heading: 'Pengisian Belum Dibuka',
+                text: 'Notulen sesi ' . ucfirst($this->sesi) . " belum dibuka. Pengisian dibuka pada jam {$this->windowStartFormatted} - {$this->windowEndFormatted} WIB."
+            );
+
+            return;
+        }
+
+        if ($this->isPastDeadline) {
+            Flux::toast(
+                variant: 'danger',
+                heading: 'Tidak Dapat Menyimpan',
+                text: 'Batas waktu pengisian notulen sesi ' . ucfirst($this->sesi) . " telah berakhir ({$this->deadlineFormatted} WIB)."
+            );
+
+            return;
+        }
         
         // Validate assigned penulis exists
         if (!$this->assignedPenulisId) {
@@ -685,28 +786,21 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
         ]);
 
         // Check time window: must be within allowed time for the sesi
-        $tanggalNotulen = Carbon::parse($this->tanggal);
-        $now = \App\Helpers\DevModeHelper::now();
+        if ($this->isBeforeWindow) {
+            Flux::toast(
+                variant: 'warning',
+                heading: 'Pengisian Belum Dibuka',
+                text: 'Notulen sesi ' . ucfirst($this->sesi) . " belum dibuka. Pengisian dibuka pada jam {$this->windowStartFormatted} - {$this->windowEndFormatted} WIB."
+            );
 
-        // Determine time window based on sesi
-        if ($this->sesi === 'pagi') {
-            $windowStart = $tanggalNotulen->copy()->setTime(8, 50);
-            $windowEnd = $tanggalNotulen->copy()->setTime(11, 0);
-            $sesiLabel = 'Pagi (08:50 - 11:00)';
-        } else {
-            $windowStart = $tanggalNotulen->copy()->setTime(16, 50);
-            $windowEnd = $tanggalNotulen->copy()->setTime(18, 0);
-            $sesiLabel = 'Sore (16:50 - 18:00)';
+            return;
         }
 
-        // Check if current time is within window
-        if ($now->lessThan($windowStart) || $now->greaterThan($windowEnd)) {
-            $deadlineFormatted = $windowEnd->translatedFormat('l, d F Y \p\u\k\u\l H:i');
-            
+        if ($this->isPastDeadline) {
             Flux::toast(
                 variant: 'danger',
                 heading: 'Tidak Dapat Menyimpan',
-                text: "Notulen hanya dapat diisi pada {$sesiLabel}. Batas waktu input: {$deadlineFormatted}."
+                text: 'Batas waktu pengisian notulen sesi ' . ucfirst($this->sesi) . " telah berakhir ({$this->deadlineFormatted} WIB)."
             );
 
             return;
@@ -718,10 +812,15 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
         if ($service->notulenExists($this->tanggal, $this->sesi)) {
             $existing = $service->getNotulenForDateSesi($this->tanggal, $this->sesi);
             $creatorTim = $existing?->tim?->nama_tim ?? 'Tim lain';
+            
+            // Check if the creator is from the same tim as current user
+            $isSameTim = $existing?->tim_id === Auth::user()->tim_id;
 
             Flux::toast(
                 variant: 'warning',
-                text: "Notulen untuk sesi {$this->sesi} pada tanggal ini sudah diisi oleh {$creatorTim}."
+                text: $isSameTim 
+                    ? "Notulen untuk sesi {$this->sesi} pada tanggal ini sudah diisi oleh tim Anda."
+                    : "Notulen untuk sesi {$this->sesi} pada tanggal ini sudah diisi oleh {$creatorTim}."
             );
 
             return;
@@ -874,8 +973,25 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
                 </div>
             @endif
 
+            {{-- Notice: Pengisian Belum Dibuka --}}
+            @if ($this->isBeforeWindow)
+                <div class="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <flux:icon icon="clock" class="size-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div class="flex-1">
+                        <flux:text class="font-semibold text-amber-900 dark:text-amber-100 text-sm">
+                            Pengisian Belum Dibuka
+                        </flux:text>
+                        <flux:text class="text-amber-700 dark:text-amber-300 text-xs mt-1">
+                            @if ($this->isFutureDate)
+                                Pengisian notulen untuk tanggal {{ Carbon::parse($this->tanggal)->translatedFormat('l, d F Y') }} belum dibuka. Sesi briefing belum dimulai.
+                            @else
+                                Sesi briefing {{ ucfirst($sesi) }} belum dimulai. Notulen baru dapat diisi pada jam {{ $this->windowStartFormatted }} - {{ $this->windowEndFormatted }} WIB.
+                            @endif
+                        </flux:text>
+                    </div>
+                </div>
             {{-- Warning: Past Deadline --}}
-            @if ($this->isPastDeadline)
+            @elseif ($this->isPastDeadline)
                 <div class="flex items-start gap-3 p-4 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
                     <flux:icon icon="exclamation-triangle" class="size-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                     <div class="flex-1">
@@ -883,12 +999,11 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
                             Tidak Dapat Menyimpan - Melewati Batas Waktu
                         </flux:text>
                         <flux:text class="text-red-700 dark:text-red-300 text-xs mt-1">
-                            @if ($sesi === 'pagi')
-                                Notulen sesi Pagi hanya dapat diisi pada jam 08:50 - 11:00. Batas waktu input: {{ $this->deadlineFormatted }}.
+                            @if ($this->isPastDate)
+                                Batas waktu pengisian notulen untuk tanggal {{ Carbon::parse($this->tanggal)->translatedFormat('l, d F Y') }} telah berakhir. Silakan hubungi admin untuk bantuan.
                             @else
-                                Notulen sesi Sore hanya dapat diisi pada jam 16:50 - 18:00. Batas waktu input: {{ $this->deadlineFormatted }}.
+                                Notulen sesi {{ ucfirst($sesi) }} hanya dapat diisi pada jam {{ $this->windowStartFormatted }} - {{ $this->windowEndFormatted }} WIB. Batas waktu input telah berakhir pada {{ $this->deadlineFormatted }} WIB. Silakan hubungi admin untuk bantuan.
                             @endif
-                            Silakan hubungi admin untuk bantuan.
                         </flux:text>
                     </div>
                 </div>
@@ -1069,10 +1184,23 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
                     <flux:button
                         type="submit"
                         variant="primary"
-                        icon="clipboard-document-check"
+                        :icon="$this->isBeforeWindow ? 'clock' : ($this->isPastDeadline ? 'exclamation-circle' : 'clipboard-document-check')"
                         wire:loading.attr="disabled"
+                        :disabled="!$this->isWindowOpen"
                     >
-                        Simpan Notulen WFH
+                        <span wire:loading.remove>
+                            @if ($this->isBeforeWindow)
+                                <span class="sm:hidden">Belum Dibuka ({{ $this->windowStartFormatted }})</span>
+                                <span class="hidden sm:inline">Pengisian Belum Dibuka (Mulai {{ $this->windowStartFormatted }} WIB)</span>
+                            @elseif ($this->isPastDeadline)
+                                <span class="sm:hidden">Lewat Batas Waktu</span>
+                                <span class="hidden sm:inline">Tidak Dapat Menyimpan (Melewati Batas Waktu)</span>
+                            @else
+                                <span class="sm:hidden">Simpan WFH</span>
+                                <span class="hidden sm:inline">Simpan Notulen WFH</span>
+                            @endif
+                        </span>
+                        <span wire:loading>Menyimpan...</span>
                     </flux:button>
 
                     <flux:button
@@ -1084,7 +1212,7 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
                     </flux:button>
                 </div>
 
-            @elseif (!$isTimWfh && !$this->isPastDeadline)
+            @elseif (!$isTimWfh && $this->isWindowOpen)
                 {{-- WFO MODE: Original form fields --}}
                 
             {{-- Nama Tim Penulis (Auto-filled, Readonly) --}}
@@ -1227,14 +1355,19 @@ new #[Title('Isi Notulen Briefing')] #[Layout('layouts.app')] class extends Comp
                     variant="primary"
                     wire:loading.attr="disabled"
                     wire:target="simpan"
-                    :disabled="$this->isPastDeadline"
-                    icon="check"
+                    :disabled="!$this->isWindowOpen"
+                    :icon="$this->isBeforeWindow ? 'clock' : ($this->isPastDeadline ? 'exclamation-circle' : 'check')"
                 >
                     <span wire:loading.remove wire:target="simpan">
-                        @if ($this->isPastDeadline)
-                            Tidak Dapat Menyimpan (Melewati Deadline)
+                        @if ($this->isBeforeWindow)
+                            <span class="sm:hidden">Belum Dibuka ({{ $this->windowStartFormatted }})</span>
+                            <span class="hidden sm:inline">Pengisian Belum Dibuka (Mulai {{ $this->windowStartFormatted }} WIB)</span>
+                        @elseif ($this->isPastDeadline)
+                            <span class="sm:hidden">Lewat Batas Waktu</span>
+                            <span class="hidden sm:inline">Tidak Dapat Menyimpan (Melewati Batas Waktu)</span>
                         @else
-                            Simpan Notulen
+                            <span class="sm:hidden">Simpan</span>
+                            <span class="hidden sm:inline">Simpan Notulen</span>
                         @endif
                     </span>
                     <span wire:loading wire:target="simpan">Menyimpan...</span>

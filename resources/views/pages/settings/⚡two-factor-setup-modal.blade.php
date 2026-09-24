@@ -80,6 +80,14 @@ new class extends Component {
         $this->dispatch('two-factor-enabled');
     }
 
+    public function updatedCode($value): void
+    {
+        $clean = preg_replace('/\D/', '', (string) $value);
+        if (strlen($clean) === 6) {
+            $this->confirmTwoFactor(app(ConfirmTwoFactorAuthentication::class));
+        }
+    }
+
     /**
      * Confirm two-factor authentication for the user.
      */
@@ -130,24 +138,24 @@ new class extends Component {
     {
         if ($this->setupComplete) {
             return [
-                'title' => __('Two-factor authentication enabled'),
-                'description' => __('Two-factor authentication is now enabled. Scan the QR code or enter the setup key in your authenticator app.'),
-                'buttonText' => __('Close'),
+                'title' => '2FA Berhasil Diaktifkan',
+                'description' => 'Autentikasi dua langkah kini aktif. Gunakan kode 6 digit dari aplikasi autentikator Anda saat login berikutnya.',
+                'buttonText' => 'Tutup',
             ];
         }
 
         if ($this->showVerificationStep) {
             return [
-                'title' => __('Verify authentication code'),
-                'description' => __('Enter the 6-digit code from your authenticator app.'),
-                'buttonText' => __('Continue'),
+                'title' => 'Verifikasi Kode 2FA',
+                'description' => 'Masukkan 6 digit kode dari aplikasi autentikator di ponsel Anda.',
+                'buttonText' => 'Lanjutkan',
             ];
         }
 
         return [
-            'title' => __('Enable two-factor authentication'),
-            'description' => __('To finish enabling two-factor authentication, scan the QR code or enter the setup key in your authenticator app.'),
-            'buttonText' => __('Continue'),
+            'title' => 'Aktifkan Autentikasi Dua Langkah',
+            'description' => 'Pindai kode QR di bawah ini menggunakan aplikasi autentikator (Google Authenticator / Authy) atau salin kode penyiapan manual.',
+            'buttonText' => 'Lanjut ke Verifikasi',
         ];
     }
 }; ?>
@@ -192,7 +200,7 @@ new class extends Component {
                     >
                         <flux:otp
                             name="code"
-                            wire:model="code"
+                            wire:model.live="code"
                             length="6"
                             label="OTP Code"
                             label:sr-only
@@ -206,7 +214,7 @@ new class extends Component {
                             class="flex-1"
                             wire:click="resetVerification"
                         >
-                            {{ __('Back') }}
+                            Kembali
                         </flux:button>
 
                         <flux:button
@@ -215,7 +223,7 @@ new class extends Component {
                             wire:click="confirmTwoFactor"
                             x-bind:disabled="$wire.code.length < 6"
                         >
-                            {{ __('Confirm') }}
+                            Verifikasi & Aktifkan
                         </flux:button>
                     </div>
                 </div>
@@ -258,7 +266,7 @@ new class extends Component {
                     <div class="relative flex items-center justify-center w-full">
                         <div class="absolute inset-0 w-full h-px top-1/2 bg-stone-200 dark:bg-stone-600"></div>
                         <span class="relative px-2 text-sm bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-400">
-                            {{ __('or, enter the code manually') }}
+                            atau salin kode penyiapan manual
                         </span>
                     </div>
 

@@ -1,3 +1,8 @@
+@props([
+    'title' => null,
+    'skipSplash' => request()->routeIs('two-factor.login*'),
+])
+
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
@@ -45,13 +50,34 @@
         </style>
     </head>
     <body class="min-h-screen bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
-        <div class="flex min-h-screen" x-data="{ mobileLayerActive: true }" x-init="if (window.innerWidth >= 640) mobileLayerActive = false;">
+        <div 
+            class="flex min-h-screen" 
+            x-data="{ 
+                mobileLayerActive: {{ $skipSplash ? 'false' : 'true' }},
+                sheetHeight: 0,
+                updateSheetHeight() {
+                    if (this.$refs.whiteSheet) {
+                        this.sheetHeight = this.$refs.whiteSheet.offsetHeight;
+                    }
+                }
+            }" 
+            x-init="
+                if (window.innerWidth >= 640) mobileLayerActive = false;
+                $nextTick(() => {
+                    updateSheetHeight();
+                    if (window.ResizeObserver && $refs.whiteSheet) {
+                        new ResizeObserver(() => updateSheetHeight()).observe($refs.whiteSheet);
+                    }
+                });
+            "
+        >
             @php
                 use App\Support\GreetingHelper;
                 $salam = GreetingHelper::sapaanHari(); // "Selamat Pagi", "Selamat Sore", etc.
                 $pesan = GreetingHelper::sapaanWaktu(); // Random message based on time
             @endphp
 
+            @if(! $skipSplash)
             <!-- Mobile Layer 1: Splash Screen dengan Logo Center (< 640px only) -->
             <div 
                 x-show="mobileLayerActive"
@@ -89,33 +115,43 @@
                     <p class="text-sm text-blue-200/70 animate-pulse pt-4">Ketuk untuk melanjutkan</p>
                 </div>
             </div>
+            @endif
 
             <!-- Mobile Layer Background Biru - Always Visible (< 640px only) -->
             <div class="sm:hidden fixed inset-0 z-30 bg-gradient-to-br from-[#12314F] via-[#1a4268] to-[#1591D8]">
-                <!-- Logo & Brand di pojok kiri atas - GESER dari center -->
+                <!-- Logo & Brand di pojok kiri atas - GESER dari center jika ada splash -->
                 <div 
                     x-show="!mobileLayerActive"
                     class="absolute top-6 left-6 origin-center"
+                    @if(! $skipSplash)
                     style="
                         animation: logo-slide-to-corner 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
                     "
+                    @endif
                 >
                     <a href="{{ route('home') }}" class="group flex items-center gap-2.5" wire:navigate>
                         <x-app-logo-icon class="size-7 text-white transition-transform group-hover:scale-105" />
                         <span 
-                            class="text-base font-bold tracking-tight text-white opacity-0"
+                            class="text-base font-bold tracking-tight text-white {{ $skipSplash ? 'opacity-100' : 'opacity-0' }}"
+                            @if(! $skipSplash)
                             style="animation: fade-in-text 0.3s ease-out 0.7s forwards;"
+                            @endif
                         >{{ config('app.name', 'Giliran') }}</span>
                     </a>
                 </div>
 
-                <!-- Sapaan Text - Muncul setelah logo selesai bounce -->
+                <!-- Sapaan Text - Tepat di tengah antara logo atas dan sheet putih -->
                 <div 
                     x-show="!mobileLayerActive"
-                    class="px-8 pt-32 text-white opacity-0"
-                    style="animation: fade-in-sapaan 0.5s ease-out 0.9s forwards;"
+                    class="absolute px-6 left-0 right-0 flex items-center text-white pointer-events-none"
+                    :style="sheetHeight > 0 ? ('top: 4.5rem; bottom: ' + sheetHeight + 'px;') : 'top: 4.5rem; bottom: 58vh;'"
                 >
-                    <h1 class="text-4xl font-bold tracking-tight text-left leading-tight">
+                    <h1 
+                        class="text-2xl min-[400px]:text-3xl font-bold tracking-tight text-left leading-tight {{ $skipSplash ? 'opacity-100' : 'opacity-0' }}"
+                        @if(! $skipSplash)
+                        style="animation: fade-in-sapaan 0.5s ease-out 0.9s forwards;"
+                        @endif
+                    >
                         {{ $salam }},<br>{{ $pesan }}
                     </h1>
                 </div>
@@ -123,6 +159,7 @@
 
             <!-- Mobile Layer 2: White Sheet Slides Up (< 640px only) -->
             <div 
+                x-ref="whiteSheet"
                 x-show="!mobileLayerActive"
                 x-transition:enter="transition ease-out duration-500"
                 x-transition:enter-start="translate-y-full"

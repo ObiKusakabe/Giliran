@@ -58,6 +58,9 @@
 <body>
     <div class="container">
         <div class="logo">
+            @if (isset($message) && method_exists($message, 'embed') && file_exists(public_path('images/inovindo-logo.png')))
+                <img src="{{ $message->embed(public_path('images/inovindo-logo.png')) }}" alt="Logo Inovindo" style="max-height: 44px; width: auto; margin-bottom: 10px; display: inline-block;">
+            @endif
             <h2 style="color: #3b82f6; margin: 0;">Sistem Giliran WFO</h2>
             <p style="color: #6b7280; margin: 5px 0 0 0;">PT Inovindo Digital Media</p>
         </div>

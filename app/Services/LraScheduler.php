@@ -487,6 +487,10 @@ class LraScheduler
      */
     public function generateAlokasiRuangan(array $tanggalList, int $periodeWfoId): array
     {
+        if (empty($tanggalList)) {
+            return [];
+        }
+
         // Counter: [tim_id => [ruangan_id => count]]
         $counterPerTim = [];
 
@@ -500,18 +504,27 @@ class LraScheduler
 
         $ruangans = Ruangan::where('status', 'tersedia')->orderBy('id')->get();
 
-        $hasil = [];
-
+        // 1. Tentukan tanggal unik untuk siklus 1 minggu pertama (Senin - Sabtu)
+        $seenDays = [];
+        $firstWeekDates = [];
         foreach ($tanggalList as $tanggal) {
             $namaHari = $this->namaHariIndonesia($tanggal);
+            if (! isset($seenDays[$namaHari]) && in_array($namaHari, ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'])) {
+                $seenDays[$namaHari] = true;
+                $firstWeekDates[] = $tanggal;
+            }
+        }
 
-            // Fix: Ambil tim IDs yang active dan tidak deleted
+        // 2. Generate alokasi untuk 1 minggu pola
+        $dayPatternMap = [];
+        foreach ($firstWeekDates as $tanggal) {
+            $namaHari = $this->namaHariIndonesia($tanggal);
+
             $timIds = JadwalWfo::where('periode_wfo_id', $periodeWfoId)
                 ->where('hari', $namaHari)
                 ->whereHas('tim', fn ($q) => $q->where('status', 'active')->whereNull('deleted_at'))
                 ->pluck('tim_id');
 
-            // Track ruangan yang sudah dipakai hari ini (GEN-15: cegah bentrok)
             $ruanganDipakai = [];
 
             foreach ($timIds as $timId) {
@@ -519,10 +532,8 @@ class LraScheduler
                     $counterPerTim[$timId] = $baseCount[$timId] ?? [];
                 }
 
-                // FASE 4.4 - Task #3: Calculate expected attendance for capacity filtering
                 $expectedAttendance = $this->hitungExpectedAttendance($timId);
 
-                // Cari ruangan LRA yang belum dipakai hari ini (dengan capacity filter)
                 $ruanganTerpilih = $this->pilihRuangan(
                     $ruangans,
                     $counterPerTim[$timId],
@@ -531,15 +542,12 @@ class LraScheduler
                 );
 
                 if (! $ruanganTerpilih) {
-                    // Tidak ada ruangan tersedia — skip tim ini
                     continue;
                 }
 
-                // FASE 4.4 - Task #4: Store expected attendance for utilization tracking
-                $hasil[] = [
+                $dayPatternMap[$namaHari][] = [
                     'tim_id' => $timId,
                     'ruangan_id' => $ruanganTerpilih->id,
-                    'tanggal' => $tanggal->toDateString(),
                     'expected_attendance' => $expectedAttendance,
                 ];
 
@@ -547,6 +555,24 @@ class LraScheduler
                     ($counterPerTim[$timId][$ruanganTerpilih->id] ?? 0) + 1;
 
                 $ruanganDipakai[] = $ruanganTerpilih->id;
+            }
+        }
+
+        // 3. Ulangi pola 1 minggu tersebut ke SEMUA tanggal dalam periode
+        $hasil = [];
+        foreach ($tanggalList as $tanggal) {
+            $namaHari = $this->namaHariIndonesia($tanggal);
+            if (! isset($dayPatternMap[$namaHari])) {
+                continue;
+            }
+
+            foreach ($dayPatternMap[$namaHari] as $item) {
+                $hasil[] = [
+                    'tim_id' => $item['tim_id'],
+                    'ruangan_id' => $item['ruangan_id'],
+                    'tanggal' => $tanggal->toDateString(),
+                    'expected_attendance' => $item['expected_attendance'],
+                ];
             }
         }
 

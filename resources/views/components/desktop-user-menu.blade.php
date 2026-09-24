@@ -3,8 +3,8 @@
         :name="auth()->user()->name"
         :initials="auth()->user()->initials()"
         {{-- Tambah foto profil dari tim atau fallback ke avatar --}}
-        @if(auth()->user()->personil?->tim?->foto_bersama)
-            :src="asset('storage/' . auth()->user()->personil->tim->foto_bersama)"
+        @if(auth()->user()->tim?->foto_bersama)
+            :src="asset('storage/' . auth()->user()->tim->foto_bersama)"
         @endif
         icon:trailing="chevrons-up-down"
         data-test="sidebar-menu-button"
@@ -16,8 +16,8 @@
                 :name="auth()->user()->name"
                 :initials="auth()->user()->initials()"
                 {{-- Tambah foto profil di dropdown juga --}}
-                @if(auth()->user()->personil?->tim?->foto_bersama)
-                    :src="asset('storage/' . auth()->user()->personil->tim->foto_bersama)"
+                @if(auth()->user()->tim?->foto_bersama)
+                    :src="asset('storage/' . auth()->user()->tim->foto_bersama)"
                 @endif
             />
             <div class="grid flex-1 text-start text-sm leading-tight">

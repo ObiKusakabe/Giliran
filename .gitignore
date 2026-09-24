@@ -37,3 +37,10 @@ yarn-error.log
 /sess_*
 /storage/framework/lsp-*.php
 
+# Cloudflare tunnel & local helper scripts
+cloudflared.exe
+*.log
+*tunnel*.bat
+*tunnel*.ps1
+fix-tunnel.bat
+

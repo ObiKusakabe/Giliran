@@ -39,6 +39,59 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
 
     public ?int $fotoTimId = null;
 
+    // Reset Password State
+    public ?int $resetPasswordTimId = null;
+    public ?string $resetPasswordTimNama = null;
+    public ?string $resetPasswordUsername = null;
+    public string $resetPasswordBaru = '';
+    public string $resetPasswordKonfirmasi = '';
+
+    public function bukaResetPassword(int $timId): void
+    {
+        $tim = Tim::with('user')->findOrFail($timId);
+        if (! $tim->user) {
+            Flux::toast(variant: 'warning', text: "Tim {$tim->nama_tim} belum memiliki akun login.");
+            return;
+        }
+
+        $this->resetPasswordTimId = $timId;
+        $this->resetPasswordTimNama = $tim->nama_tim;
+        $this->resetPasswordUsername = $tim->user->username ?? $tim->user->email;
+        $this->resetPasswordBaru = '';
+        $this->resetPasswordKonfirmasi = '';
+        $this->resetValidation();
+        $this->modal('modal-reset-password')->show();
+    }
+
+    public function simpanResetPassword(): void
+    {
+        $this->validate([
+            'resetPasswordBaru' => 'required|min:8',
+            'resetPasswordKonfirmasi' => 'required|same:resetPasswordBaru',
+        ], [
+            'resetPasswordBaru.required' => 'Password baru wajib diisi.',
+            'resetPasswordBaru.min' => 'Password minimal 8 karakter.',
+            'resetPasswordKonfirmasi.required' => 'Konfirmasi password wajib diisi.',
+            'resetPasswordKonfirmasi.same' => 'Konfirmasi password tidak sama.',
+        ]);
+
+        $tim = Tim::with('user')->findOrFail($this->resetPasswordTimId);
+        if (! $tim->user) {
+            Flux::toast(variant: 'danger', text: 'Akun tim tidak ditemukan.');
+            return;
+        }
+
+        $tim->user->update([
+            'password' => \Illuminate\Support\Facades\Hash::make($this->resetPasswordBaru),
+        ]);
+
+        Flux::toast(variant: 'success', text: "Password untuk akun tim {$tim->nama_tim} ({$this->resetPasswordUsername}) berhasil diubah.");
+        $this->modal('modal-reset-password')->close();
+        $this->resetPasswordTimId = null;
+        $this->resetPasswordBaru = '';
+        $this->resetPasswordKonfirmasi = '';
+    }
+
     #[Computed]
     public function semuaTim(): array
     {
@@ -80,12 +133,12 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
                 'has_account' => $t->user !== null,
                 'account_user' => $t->user?->username ?? $t->user?->email,
                 'foto_bersama' => $t->foto_bersama,
-                'is_wfo_today' => $t->is_wfo_today ?? false,
+                'is_wfo_today' => (bool) ($t->is_wfo_today ?? false),
             ])
             ->toArray();
     }
 
-    public function showFotoModal(int $timId): void
+    public function bukaFotoModal(int $timId): void
     {
         $this->fotoTimId = $timId;
         $this->showFotoModal = true;
@@ -343,7 +396,7 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
         filterStatus: 'active',
         page: 1,
         perPage: 10,
-        sortField: 'nama_tim',
+        sortField: 'default',
         sortDir: 'asc',
 
         get filtered() {
@@ -361,14 +414,27 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
             } else if (this.filterStatus === 'no_account') {
                 data = data.filter(r => !r.has_account);
             }
-            data.sort((a, b) => {
-                let va = a[this.sortField] ?? ''; let vb = b[this.sortField] ?? '';
-                if (typeof va === 'string') va = va.toLowerCase();
-                if (typeof vb === 'string') vb = vb.toLowerCase();
-                if (va < vb) return this.sortDir === 'asc' ? -1 : 1;
-                if (va > vb) return this.sortDir === 'asc' ? 1 : -1;
-                return 0;
-            });
+
+            if (this.sortField === 'default') {
+                // Default: Tim yang WFO hari ini paling atas, lalu A-Z. Sisanya non-WFO juga urut A-Z.
+                data.sort((a, b) => {
+                    const wfoA = a.is_wfo_today ? 1 : 0;
+                    const wfoB = b.is_wfo_today ? 1 : 0;
+                    if (wfoA !== wfoB) {
+                        return wfoB - wfoA;
+                    }
+                    return a.nama_tim.localeCompare(b.nama_tim, undefined, { sensitivity: 'base' });
+                });
+            } else {
+                data.sort((a, b) => {
+                    let va = a[this.sortField] ?? ''; let vb = b[this.sortField] ?? '';
+                    if (typeof va === 'string') va = va.toLowerCase();
+                    if (typeof vb === 'string') vb = vb.toLowerCase();
+                    if (va < vb) return this.sortDir === 'asc' ? -1 : 1;
+                    if (va > vb) return this.sortDir === 'asc' ? 1 : -1;
+                    return 0;
+                });
+            }
             return data;
         },
         get totalPages() { return Math.max(1, Math.ceil(this.filtered.length / this.perPage)); },
@@ -384,12 +450,24 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
         nextPage() { if (this.page < this.totalPages) this.page++; },
         goPage(p)  { if (p !== '...' && p >= 1 && p <= this.totalPages) this.page = p; },
         toggleSort(field) {
-            if (this.sortField === field) { this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc'; }
-            else { this.sortField = field; this.sortDir = 'asc'; }
+            if (this.sortField === field) {
+                if (this.sortDir === 'asc') {
+                    this.sortDir = 'desc';
+                } else {
+                    this.sortField = 'default';
+                    this.sortDir = 'asc';
+                }
+            } else {
+                this.sortField = field;
+                this.sortDir = 'asc';
+            }
             this.page = 1;
         }
     }"
-    x-effect="if (q !== undefined || filterStatus !== undefined) page = 1"
+    x-effect="
+        rows = @js($this->semuaTim);
+        if (q !== undefined || filterStatus !== undefined) page = 1;
+    "
     class="flex flex-col gap-6"
 >
     {{-- Header --}}
@@ -587,6 +665,9 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
                             <template x-if="!tim.has_account">
                                 <flux:menu.item icon="key" @click="$wire.konfirmasiGenerateAkun(tim.id)">Generate Akun</flux:menu.item>
                             </template>
+                            <template x-if="tim.has_account">
+                                <flux:menu.item icon="key" @click="$wire.bukaResetPassword(tim.id)">Ubah Password</flux:menu.item>
+                            </template>
                             <flux:menu.item icon="pencil" @click="$wire.bukaFormEdit(tim.id)">Edit</flux:menu.item>
                             <template x-if="tim.status === 'active'">
                                 <flux:menu.item icon="x-circle" @click="$wire.konfirmasiToggleStatus(tim.id)">Set Inactive</flux:menu.item>
@@ -651,12 +732,12 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
                                     {{-- Foto/Avatar --}}
                                     <button 
                                         type="button"
-                                        @click="$wire.showFotoModal(tim.id)" 
+                                        @click="$wire.bukaFotoModal(tim.id)" 
                                         class="relative group flex-shrink-0"
                                         x-show="tim.foto_bersama"
                                     >
                                         <img 
-                                            :src="'/storage/' + tim.foto_bersama" 
+                                            :src="tim.foto_bersama ? ('/storage/' + tim.foto_bersama) : ''" 
                                             :alt="'Foto ' + tim.nama_tim"
                                             class="size-10 rounded-lg object-cover border border-zinc-200 dark:border-zinc-700 group-hover:ring-2 group-hover:ring-brand transition-all cursor-pointer"
                                         />
@@ -726,6 +807,9 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
                                     <flux:menu>
                                         <template x-if="!tim.has_account">
                                             <flux:menu.item icon="key" @click="$wire.konfirmasiGenerateAkun(tim.id)">Generate Akun</flux:menu.item>
+                                        </template>
+                                        <template x-if="tim.has_account">
+                                            <flux:menu.item icon="key" @click="$wire.bukaResetPassword(tim.id)">Ubah Password</flux:menu.item>
                                         </template>
                                         <flux:menu.item icon="pencil" @click="$wire.bukaFormEdit(tim.id)">Edit</flux:menu.item>
                                         <template x-if="tim.status === 'active'">
@@ -1010,5 +1094,49 @@ new #[Title('Tim')] #[Layout('layouts.admin')] class extends Component
                 <p class="text-sm">Tidak ada foto bersama untuk tim ini.</p>
             </div>
         @endif
+    </flux:modal>
+
+    {{-- Modal Ubah Password Akun Tim --}}
+    <flux:modal name="modal-reset-password" class="max-w-md"
+        x-on:close="$wire.resetPasswordTimId = null; $wire.resetPasswordBaru = ''; $wire.resetPasswordKonfirmasi = '';">
+        <div class="flex flex-col gap-4 p-1">
+            <div>
+                <flux:heading size="lg">Ubah Password Akun Tim</flux:heading>
+                <flux:subheading class="mt-1">
+                    Atur ulang kata sandi login untuk <strong>{{ $resetPasswordTimNama }}</strong>
+                    @if ($resetPasswordUsername)
+                        (Username: <code class="font-mono text-zinc-900 dark:text-zinc-100 font-semibold">{{ $resetPasswordUsername }}</code>)
+                    @endif
+                </flux:subheading>
+            </div>
+
+            <form wire:submit="simpanResetPassword" class="flex flex-col gap-4">
+                <flux:input 
+                    wire:model="resetPasswordBaru" 
+                    label="Password Baru" 
+                    type="password" 
+                    placeholder="Minimal 8 karakter" 
+                    required 
+                    viewable 
+                />
+
+                <flux:input 
+                    wire:model="resetPasswordKonfirmasi" 
+                    label="Konfirmasi Password Baru" 
+                    type="password" 
+                    placeholder="Ulangi password baru" 
+                    required 
+                    viewable 
+                />
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
+                    <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="simpanResetPassword">
+                        <span wire:loading.remove wire:target="simpanResetPassword">Simpan Password</span>
+                        <span wire:loading wire:target="simpanResetPassword">Menyimpan…</span>
+                    </flux:button>
+                </div>
+            </form>
+        </div>
     </flux:modal>
 </div>

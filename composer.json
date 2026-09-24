@@ -60,6 +60,10 @@
             "Composer\\Config::disableProcessTimeout",
             "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74\" \"npm run dev\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" --names='vite,server,queue'"
         ],
+        "dev:simtime": [
+            "Composer\\Config::disableProcessTimeout",
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74\" \"npm run dev\" \"php artisan serve:devsimtime\" \"php artisan queue:listen --tries=1\" --names='vite,server,queue'"
+        ],
         "lint": [
             "pint --parallel"
         ],

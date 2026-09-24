@@ -6,12 +6,15 @@ use App\Models\NotulenBriefing;
 use App\Policies\NotulenBriefingPolicy;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -30,9 +33,39 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Force HTTPS scheme untuk Cloudflare Tunnel
+        if (config('app.env') === 'local' && str_contains(config('app.url'), 'trycloudflare.com')) {
+            URL::forceScheme('https');
+        }
+
         $this->configureDefaults();
         $this->configurePolicies();
         $this->configureRateLimiting();
+        $this->configurePasswordReset();
+    }
+
+    /**
+     * Configure password reset notification email in Indonesian.
+     */
+    protected function configurePasswordReset(): void
+    {
+        ResetPassword::toMailUsing(function (object $notifiable, string $token) {
+            $url = url(route('password.reset', [
+                'token' => $token,
+                'email' => $notifiable->getEmailForPasswordReset(),
+            ], false));
+
+            $username = $notifiable->nama ?? $notifiable->username ?? 'Pengguna';
+            $expiresInMinutes = config('auth.passwords.'.config('auth.defaults.passwords').'.expire', 60);
+
+            return (new MailMessage)
+                ->subject('Atur Ulang Kata Sandi - '.config('app.name'))
+                ->view('emails.reset-password', [
+                    'url' => $url,
+                    'username' => $username,
+                    'expiresInMinutes' => $expiresInMinutes,
+                ]);
+        });
     }
 
     /**
@@ -77,18 +110,6 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
-                ->mixedCase()
-                ->letters()
-                ->numbers()
-                ->symbols()
-                ->uncompromised()
-            : Password::min(8)
-                ->mixedCase()
-                ->letters()
-                ->numbers()
-                ->symbols(),
-        );
+        Password::defaults(fn (): ?Password => Password::min(8));
     }
 }
