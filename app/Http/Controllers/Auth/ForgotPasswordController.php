@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\OtpService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
@@ -41,7 +42,28 @@ class ForgotPasswordController extends Controller
             ]);
         }
 
-        // Send reset link using password broker
+        $otpService = app(OtpService::class);
+
+        // Cek rate-limit cooldown (60 detik)
+        if (! $otpService->canRequestPasswordResetOtp($user)) {
+            $cooldown = $otpService->getPasswordResetOtpCooldownRemaining($user);
+            $maskedEmail = $this->maskEmail($user->email);
+
+            return redirect()->route('password.reset', [
+                'token' => 'otp',
+                'email' => $user->email,
+            ])->with('status', "Kode OTP baru saja dikirim ke {$maskedEmail}. Silakan tunggu {$cooldown} detik sebelum meminta kode baru.");
+        }
+
+        // Generate dan simpan kode OTP pada user
+        $otp = $otpService->generateOtp();
+        $user->update([
+            'password_reset_otp' => $otp,
+            'password_reset_otp_expires_at' => now()->addMinutes(15),
+            'password_reset_otp_attempts' => 0,
+        ]);
+
+        // Send reset link using password broker (memicu ResetPassword notification ber-OTP)
         try {
             $status = Password::broker(config('fortify.passwords'))->sendResetLink([
                 'email' => $user->email,
@@ -60,14 +82,68 @@ class ForgotPasswordController extends Controller
 
         if ($status === Password::RESET_LINK_SENT) {
             $maskedEmail = $this->maskEmail($user->email);
-            $message = 'Tautan reset password telah dikirim ke alamat email terdaftar ('.$maskedEmail.'). Silakan periksa kotak masuk atau spam email Anda.';
+            $message = 'Kode OTP reset password telah dikirim ke alamat email terdaftar ('.$maskedEmail.'). Silakan masukkan kode OTP di bawah ini.';
 
-            return back()->with('status', $message);
+            return redirect()->route('password.reset', [
+                'token' => 'otp',
+                'email' => $user->email,
+            ])->with('status', $message)->with('reset_email', $user->email);
         }
 
         throw ValidationException::withMessages([
             'email' => [__($status)],
         ]);
+    }
+
+    /**
+     * Resend OTP code for password reset.
+     */
+    public function resendOtp(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+        ], [
+            'email.required' => 'Email wajib diisi.',
+            'email.email' => 'Format email tidak valid.',
+        ]);
+
+        $user = User::where('email', trim($request->input('email')))->first();
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'email' => ['Akun dengan email tersebut tidak ditemukan.'],
+            ]);
+        }
+
+        $otpService = app(OtpService::class);
+
+        if (! $otpService->canRequestPasswordResetOtp($user)) {
+            $cooldown = $otpService->getPasswordResetOtpCooldownRemaining($user);
+
+            return back()->withErrors([
+                'otp' => "Harap tunggu {$cooldown} detik sebelum meminta kode OTP baru.",
+            ]);
+        }
+
+        $otp = $otpService->generateOtp();
+        $user->update([
+            'password_reset_otp' => $otp,
+            'password_reset_otp_expires_at' => now()->addMinutes(15),
+            'password_reset_otp_attempts' => 0,
+        ]);
+
+        try {
+            Password::broker(config('fortify.passwords'))->sendResetLink([
+                'email' => $user->email,
+            ]);
+        } catch (\Throwable $e) {
+            return back()->withErrors([
+                'otp' => 'Gagal mengirim ulang kode OTP: '.$e->getMessage(),
+            ]);
+        }
+
+        $maskedEmail = $this->maskEmail($user->email);
+
+        return back()->with('status', "Kode OTP baru telah dikirim ke {$maskedEmail}.");
     }
 
     /**

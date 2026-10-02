@@ -705,7 +705,7 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                                 <thead>
                                     <tr class="bg-zinc-100 dark:bg-zinc-900 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
                                         {{-- Kolom Ruangan --}}
-                                        <th class="p-3.5 ps-5 border-b border-r border-zinc-200 dark:border-zinc-800 select-none sticky left-0 z-50 bg-zinc-100 dark:bg-zinc-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                                        <th class="p-3.5 ps-5 border-b border-r border-zinc-200 dark:border-zinc-800 select-none sticky left-0 z-25 bg-zinc-100 dark:bg-zinc-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
                                             <div class="flex items-center gap-2 font-semibold text-xs uppercase tracking-wider text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                                                 <flux:icon icon="building-office-2" class="size-4 text-zinc-400 shrink-0" />
                                                 <span>Ruangan</span>
@@ -720,7 +720,7 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                                                 $dateLabel = $carbonDate->translatedFormat('d M');
                                                 $isToday = $carbonDate->isToday();
                                             @endphp
-                                            <th class="p-3.5 text-center border-b border-r border-zinc-200 dark:border-zinc-800 select-none relative z-40 bg-zinc-100 dark:bg-zinc-900 {{ $isToday ? '!bg-blue-50/90 dark:!bg-blue-950/50 text-blue-600 dark:text-blue-400' : '' }}">
+                                            <th class="p-3.5 text-center border-b border-r border-zinc-200 dark:border-zinc-800 select-none relative z-20 bg-zinc-100 dark:bg-zinc-900 {{ $isToday ? '!bg-blue-50/90 dark:!bg-blue-950/50 text-blue-600 dark:text-blue-400' : '' }}">
                                                 <div class="font-bold text-sm">{{ $dayName }}</div>
                                                 <div class="text-[11px] font-normal opacity-80 mt-0.5">{{ $dateLabel }}</div>
                                             </th>

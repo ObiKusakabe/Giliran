@@ -39,9 +39,37 @@
             font-size: 13px;
             margin: 4px 0 0 0;
         }
+        .otp-box {
+            background-color: #f0f7ff;
+            border: 2px dashed #2563eb;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin: 25px 0;
+        }
+        .otp-label {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            color: #4b5563;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .otp-code {
+            font-size: 36px;
+            font-weight: 800;
+            color: #1d4ed8;
+            letter-spacing: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            -webkit-user-select: all;
+            -moz-user-select: all;
+            -ms-user-select: all;
+            user-select: all;
+            cursor: pointer;
+        }
         .action-box {
             text-align: center;
-            margin: 30px 0;
+            margin: 24px 0;
         }
         .btn-reset {
             display: inline-block;
@@ -67,8 +95,8 @@
             color: #92400e;
         }
         .subcopy {
-            margin-top: 28px;
-            padding-top: 20px;
+            margin-top: 24px;
+            padding-top: 18px;
             border-top: 1px solid #f3f4f6;
             font-size: 12.5px;
             color: #6b7280;
@@ -101,26 +129,54 @@
         <h3 style="color: #111827; margin-bottom: 12px; font-size: 18px;">Halo, {{ $username }}!</h3>
         
         <p style="font-size: 14.5px; color: #4b5563; margin-top: 0;">
-            Kami menerima permintaan untuk mengatur ulang kata sandi akun Anda di Sistem Giliran WFO. Klik tombol di bawah ini untuk membuat kata sandi baru:
+            Kami menerima permintaan untuk mengatur ulang kata sandi akun Anda di Sistem Giliran WFO.
         </p>
 
+        @if (!empty($otp))
+        <div class="otp-box">
+            <p class="otp-label">Kode OTP Reset Password</p>
+            <div class="otp-code" style="-webkit-user-select: all; -moz-user-select: all; -ms-user-select: all; user-select: all; cursor: pointer;" title="Klik angka untuk memilih/salin seluruh kode">{{ $otp }}</div>
+            <div style="margin-top: 10px;">
+                <span style="display: inline-block; background-color: #dbeafe; color: #1e40af; padding: 4px 14px; border-radius: 9999px; font-size: 11.5px; font-weight: 600;">
+                    📋 Klik angka di atas untuk menyeleksi & salin
+                </span>
+            </div>
+            <p style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280;">Kode berlaku selama <strong>{{ $expiresInMinutes }} menit</strong></p>
+        </div>
+
+        <p style="font-size: 14px; color: #4b5563; text-align: center; margin: 15px 0;">
+            Masukkan kode 6 digit di atas pada halaman reset password untuk membuat kata sandi baru.
+        </p>
+        @endif
+
+        @if (!empty($url))
         <div class="action-box">
+            @if (!empty($otp))
+            <p style="font-size: 13.5px; color: #4b5563; margin-bottom: 12px; font-weight: 500;">
+                Atau langsung buka halaman reset (kode OTP otomatis terisi tanpa perlu menyalin):
+            </p>
+            @endif
             <a href="{{ $url }}" class="btn-reset" target="_blank" rel="noopener">
-                Atur Ulang Kata Sandi
+                🔑 Atur Ulang Kata Sandi (Otomatis Isi Kode)
             </a>
+            @if (empty($otp))
             <p style="margin: 12px 0 0 0; font-size: 12.5px; color: #6b7280;">
                 Tautan ini hanya berlaku selama <strong>{{ $expiresInMinutes }} menit</strong>.
             </p>
+            @endif
         </div>
+        @endif
 
         <div class="warning">
-            ⚠️ <strong>Perhatian:</strong> Jika Anda tidak merasa meminta pengaturan ulang kata sandi, abaikan email ini. Kata sandi akun Anda akan tetap aman dan tidak akan diubah.
+            ⚠️ <strong>Perhatian:</strong> Jangan bagikan kode OTP atau tautan ini kepada siapapun. Jika Anda tidak merasa meminta pengaturan ulang kata sandi, abaikan email ini. Kata sandi akun Anda akan tetap aman.
         </div>
 
+        @if (!empty($url))
         <div class="subcopy">
-            Jika tombol di atas tidak dapat diklik, salin dan tempel tautan berikut ke browser web Anda:<br>
+            Jika tombol tidak dapat diklik, salin tautan berikut ke browser web Anda:<br>
             <a href="{{ $url }}">{{ $url }}</a>
         </div>
+        @endif
 
         <div class="footer">
             <p style="margin: 0;">Email ini dikirim secara otomatis oleh Sistem Giliran WFO.<br>

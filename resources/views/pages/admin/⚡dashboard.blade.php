@@ -467,6 +467,7 @@ new #[Title('')] #[Layout('layouts.admin')] #[Lazy] class extends Component {
                 @if ($viewMode === 'kalender')
                     <flux:select wire:model.live="filterJenis" class="w-40">
                         <flux:select.option value="">Semua Jenis</flux:select.option>
+                        <flux:select.option value="wfo">Jadwal WFO</flux:select.option>
                         <flux:select.option value="adzan">Adzan/Kajian</flux:select.option>
                         <flux:select.option value="briefing">Briefing</flux:select.option>
                         <flux:select.option value="ruangan">Alokasi Ruangan</flux:select.option>
@@ -489,6 +490,9 @@ new #[Title('')] #[Layout('layouts.admin')] #[Lazy] class extends Component {
         @if ($viewMode === 'kalender')
             <div class="px-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 flex gap-4 flex-wrap text-xs border-b border-zinc-100 dark:border-zinc-800">
                 <span class="flex items-center gap-1.5">
+                    <span class="h-3 w-3 rounded-sm bg-[#4F46E5]"></span> Jadwal WFO
+                </span>
+                <span class="flex items-center gap-1.5">
                     <span class="h-3 w-3 rounded-sm bg-[#3B71CA]"></span> Adzan & Kajian
                 </span>
                 <span class="flex items-center gap-1.5">
@@ -505,7 +509,7 @@ new #[Title('')] #[Layout('layouts.admin')] #[Lazy] class extends Component {
             <livewire:admin.calendar-widget 
                 :filterJenis="$filterJenis" 
                 :filterTimId="$filterTimId" 
-                :key="'calendar-'.$filterJenis.'-'.$filterTimId"
+                key="admin-calendar-widget"
             />
         @endif
 

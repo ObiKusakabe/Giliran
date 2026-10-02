@@ -8,6 +8,7 @@ use App\Models\Tim;
 use App\Services\LraScheduler;
 use Carbon\Carbon;
 use Flux\Flux;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -35,8 +36,9 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             $this->tanggalMulaiMinggu = Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString();
         }
         
-        // Cleanup orphaned allocations (tim yang sudah dihapus)
+        // Cleanup orphaned allocations (tim yang sudah dihapus & tim tidak WFO)
         $this->cleanupOrphanedAllocations();
+        $this->syncWithJadwalWfo();
         
         $this->refreshAlokasiCache();
     }
@@ -234,109 +236,478 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
 
     public function pindahRuangan(int $alokasiId, int $targetRuanganId, string $targetTanggal): void
     {
-        $alokasi = AlokasiRuangan::find($alokasiId);
+        $alokasi = AlokasiRuangan::with('tim')->find($alokasiId);
         if (! $alokasi) {
             Flux::toast(variant: 'danger', text: 'Data alokasi tidak ditemukan.');
+            $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal);
+            $this->refreshAlokasiCache();
             return;
         }
 
-        // Cek apakah ruangan target sudah dipakai oleh tim lain di tanggal tersebut
-        $bentrok = AlokasiRuangan::where('ruangan_id', $targetRuanganId)
-            ->where('tanggal', $targetTanggal)
+        $oldRuanganId = $alokasi->ruangan_id;
+        $oldTanggal = $alokasi->tanggal->toDateString();
+        $targetTanggal = Carbon::parse($targetTanggal)->toDateString();
+
+        // 1. Jika ruangan dan tanggal sama persis, tidak ada perubahan
+        if ($oldRuanganId === $targetRuanganId && $oldTanggal === $targetTanggal) {
+            return;
+        }
+
+        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+
+        // 2. Validasi Jadwal WFO untuk hari target
+        $targetDayOfWeek = Carbon::parse($targetTanggal)->dayOfWeekIso;
+        $targetHariKode = $namaHariIndo[$targetDayOfWeek - 1] ?? null;
+
+        if ($this->periodeAktif && $targetHariKode) {
+            $isWfo = JadwalWfo::where('periode_wfo_id', $this->periodeAktif->id)
+                ->where('tim_id', $alokasi->tim_id)
+                ->where('hari', $targetHariKode)
+                ->exists();
+
+            if (! $isWfo) {
+                Flux::toast(variant: 'danger', text: "Tim {$alokasi->tim?->nama_tim} tidak memiliki jadwal WFO pada hari ".ucfirst($targetHariKode).'.');
+                $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
+                $this->refreshAlokasiCache();
+                return;
+            }
+        }
+
+        // 3. Cek apakah ruangan target di tanggal target sudah terisi tim lain
+        $bentrok = AlokasiRuangan::with('tim')
+            ->where('ruangan_id', $targetRuanganId)
+            ->whereIn('tanggal', $this->expandDateQueryFormats([$targetTanggal]))
             ->where('id', '!=', $alokasiId)
             ->first();
 
-        $oldRuanganId = $alokasi->ruangan_id;
-        $oldTanggal = $alokasi->tanggal->toDateString();
-
-        if ($bentrok) {
-            // Swap ruangan jika target sudah terisi
-            $bentrok->update([
-                'ruangan_id' => $oldRuanganId,
-                'tanggal' => $oldTanggal,
-            ]);
+        // Jika ruangan target sudah berisi tim yang sama
+        if ($bentrok && $bentrok->tim_id === $alokasi->tim_id) {
+            Flux::toast(variant: 'warning', text: "Tim {$alokasi->tim?->nama_tim} sudah berada di ruangan tersebut.");
+            $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
+            return;
         }
 
-        $alokasi->update([
-            'ruangan_id' => $targetRuanganId,
-            'tanggal' => $targetTanggal,
-        ]);
+        // 4. Jika pindah hari (bukan hanya pindah ruangan di hari yang sama):
+        if ($oldTanggal !== $targetTanggal) {
+            // Cek apakah tim asal sudah punya alokasi ruangan lain di tanggal target
+            $timSudahAdaDiTargetTanggal = AlokasiRuangan::where('tim_id', $alokasi->tim_id)
+                ->whereIn('tanggal', $this->expandDateQueryFormats([$targetTanggal]))
+                ->where('id', '!=', $alokasiId)
+                ->exists();
 
-        // Jika ada periode aktif, sinkronkan ke seluruh minggu dalam periode untuk hari yang sama
-        if ($this->periodeAktif && $this->periodeAktif->tanggal_mulai && $this->periodeAktif->tanggal_selesai) {
-            $dayOfWeek = Carbon::parse($targetTanggal)->dayOfWeekIso;
-            $cur = Carbon::parse($this->periodeAktif->tanggal_mulai);
-            $end = Carbon::parse($this->periodeAktif->tanggal_selesai);
-            $allDates = [];
-            while ($cur->lte($end)) {
-                if ($cur->dayOfWeekIso === $dayOfWeek) {
-                    $allDates[] = $cur->toDateString();
-                }
-                $cur->addDay();
+            if ($timSudahAdaDiTargetTanggal) {
+                Flux::toast(variant: 'warning', text: "Tim {$alokasi->tim?->nama_tim} sudah dialokasikan di ruangan lain pada tanggal {$targetTanggal}.");
+                $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
+                $this->refreshAlokasiCache();
+                return;
             }
 
-            if (! empty($allDates)) {
-                if ($bentrok) {
-                    AlokasiRuangan::where('tim_id', $bentrok->tim_id)
-                        ->whereIn('tanggal', $allDates)
-                        ->update(['ruangan_id' => $oldRuanganId]);
+            // Jika ada tim bentrok di tanggal target dan kita swap:
+            if ($bentrok) {
+                $oldDayOfWeek = Carbon::parse($oldTanggal)->dayOfWeekIso;
+                $oldHariKode = $namaHariIndo[$oldDayOfWeek - 1] ?? null;
+
+                if ($this->periodeAktif && $oldHariKode) {
+                    $bentrokIsWfo = JadwalWfo::where('periode_wfo_id', $this->periodeAktif->id)
+                        ->where('tim_id', $bentrok->tim_id)
+                        ->where('hari', $oldHariKode)
+                        ->exists();
+
+                    if (! $bentrokIsWfo) {
+                        Flux::toast(variant: 'danger', text: "Tim {$bentrok->tim?->nama_tim} tidak memiliki jadwal WFO pada hari ".ucfirst($oldHariKode).' untuk ditukar.');
+                        $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
+                        $this->refreshAlokasiCache();
+                        return;
+                    }
                 }
 
-                AlokasiRuangan::where('tim_id', $alokasi->tim_id)
-                    ->whereIn('tanggal', $allDates)
-                    ->update(['ruangan_id' => $targetRuanganId]);
+                $bentrokSudahAdaDiOldTanggal = AlokasiRuangan::where('tim_id', $bentrok->tim_id)
+                    ->whereIn('tanggal', $this->expandDateQueryFormats([$oldTanggal]))
+                    ->where('id', '!=', $bentrok->id)
+                    ->exists();
+
+                if ($bentrokSudahAdaDiOldTanggal) {
+                    Flux::toast(variant: 'warning', text: "Tim {$bentrok->tim?->nama_tim} sudah dialokasikan di ruangan lain pada tanggal asal ({$oldTanggal}).");
+                    $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
+                    $this->refreshAlokasiCache();
+                    return;
+                }
             }
         }
 
-        $ruangan = Ruangan::find($targetRuanganId);
-        Flux::toast(
-            variant: 'success',
-            text: "Tim {$alokasi->tim?->nama_tim} berhasil dialokasikan ke {$ruangan?->nama_ruangan} (berlaku sepanjang periode)."
-        );
+        try {
+            DB::transaction(function () use ($alokasi, $bentrok, $targetRuanganId, $targetTanggal, $oldRuanganId, $oldTanggal) {
+                $timIdA = $alokasi->tim_id;
+                $attendanceA = $alokasi->expected_attendance;
+
+                // Jika ada periode aktif dan perpindahan terjadi pada hari yang sama (misal Senin Ruang A ⇄ Senin Ruang B sepanjang periode):
+                if ($this->periodeAktif && $this->periodeAktif->tanggal_mulai && $this->periodeAktif->tanggal_selesai && $oldTanggal === $targetTanggal) {
+                    $dayOfWeek = Carbon::parse($targetTanggal)->dayOfWeekIso;
+                    $allDates = $this->getDatesForDayOfWeek($this->periodeAktif, $dayOfWeek);
+                    $expandedDates = $this->expandDateQueryFormats($allDates);
+
+                    if ($bentrok) {
+                        $timIdB = $bentrok->tim_id;
+                        $attendanceB = $bentrok->expected_attendance;
+
+                        // SWAP DUA TIM SEPANJANG PERIODE:
+                        // Hapus alokasi kedua tim di tanggal-tanggal periode ini untuk mengosongkan kedua ruangan
+                        AlokasiRuangan::whereIn('tim_id', [$timIdA, $timIdB])
+                            ->whereIn('tanggal', $expandedDates)
+                            ->delete();
+
+                        // Bersihkan kedua ruangan dari sisa data lama pada tanggal-tanggal tersebut
+                        AlokasiRuangan::whereIn('ruangan_id', [$targetRuanganId, $oldRuanganId])
+                            ->whereIn('tanggal', $expandedDates)
+                            ->delete();
+
+                        // Masukkan kembali dengan ruangan yang sudah bertukar
+                        foreach ($allDates as $d) {
+                            AlokasiRuangan::create([
+                                'tim_id' => $timIdA,
+                                'ruangan_id' => $targetRuanganId,
+                                'tanggal' => $d,
+                                'expected_attendance' => $attendanceA,
+                            ]);
+                            AlokasiRuangan::create([
+                                'tim_id' => $timIdB,
+                                'ruangan_id' => $oldRuanganId,
+                                'tanggal' => $d,
+                                'expected_attendance' => $attendanceB,
+                            ]);
+                        }
+                    } else {
+                        // PINDAH KE RUANGAN KOSONG SEPANJANG PERIODE
+                        AlokasiRuangan::where('tim_id', $timIdA)
+                            ->whereIn('tanggal', $expandedDates)
+                            ->delete();
+
+                        // Bersihkan ruangan target dari sisa data lama pada tanggal-tanggal tersebut
+                        AlokasiRuangan::where('ruangan_id', $targetRuanganId)
+                            ->whereIn('tanggal', $expandedDates)
+                            ->delete();
+
+                        foreach ($allDates as $d) {
+                            AlokasiRuangan::create([
+                                'tim_id' => $timIdA,
+                                'ruangan_id' => $targetRuanganId,
+                                'tanggal' => $d,
+                                'expected_attendance' => $attendanceA,
+                            ]);
+                        }
+                    }
+                } else {
+                    // Single date swap/move atau beda tanggal
+                    if ($bentrok) {
+                        $timIdB = $bentrok->tim_id;
+                        $attendanceB = $bentrok->expected_attendance;
+
+                        $alokasi->delete();
+                        $bentrok->delete();
+
+                        AlokasiRuangan::create([
+                            'tim_id' => $timIdA,
+                            'ruangan_id' => $targetRuanganId,
+                            'tanggal' => $targetTanggal,
+                            'expected_attendance' => $attendanceA,
+                        ]);
+
+                        AlokasiRuangan::create([
+                            'tim_id' => $timIdB,
+                            'ruangan_id' => $oldRuanganId,
+                            'tanggal' => $oldTanggal,
+                            'expected_attendance' => $attendanceB,
+                        ]);
+                    } else {
+                        $alokasi->delete();
+
+                        AlokasiRuangan::create([
+                            'tim_id' => $timIdA,
+                            'ruangan_id' => $targetRuanganId,
+                            'tanggal' => $targetTanggal,
+                            'expected_attendance' => $attendanceA,
+                        ]);
+                    }
+                }
+            });
+
+            $targetRuangan = Ruangan::find($targetRuanganId);
+            if ($bentrok) {
+                $oldRuangan = Ruangan::find($oldRuanganId);
+                Flux::toast(
+                    variant: 'success',
+                    text: "Berhasil menukar: Tim {$alokasi->tim?->nama_tim} ({$targetRuangan?->nama_ruangan}) ⇄ Tim {$bentrok->tim?->nama_tim} ({$oldRuangan?->nama_ruangan})."
+                );
+            } else {
+                Flux::toast(
+                    variant: 'success',
+                    text: "Tim {$alokasi->tim?->nama_tim} berhasil dialokasikan ke {$targetRuangan?->nama_ruangan}."
+                );
+            }
+
+            $this->dispatch('alokasiActionFeedback', success: true, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
+        } catch (\Throwable $e) {
+            \Log::error('Error pindahRuangan: '.$e->getMessage(), ['exception' => $e]);
+            Flux::toast(variant: 'danger', text: 'Gagal memindahkan ruangan: '.$e->getMessage());
+            $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
+        }
 
         $this->refreshAlokasiCache();
     }
 
+    public function getDatesForDayOfWeek(PeriodeWfo $periode, int $dayOfWeekIso): array
+    {
+        $dates = [];
+        $cur = Carbon::parse($periode->tanggal_mulai)->copy();
+        $end = Carbon::parse($periode->tanggal_selesai)->copy();
+        while ($cur->lte($end)) {
+            if ($cur->dayOfWeekIso === $dayOfWeekIso) {
+                $dates[] = $cur->toDateString();
+            }
+            $cur = $cur->copy()->addDay();
+        }
+
+        return $dates;
+    }
+
+    public function expandDateQueryFormats(array $dates): array
+    {
+        $expanded = [];
+        foreach ($dates as $d) {
+            $dStr = is_string($d) ? substr($d, 0, 10) : Carbon::parse($d)->toDateString();
+            $expanded[] = $dStr;
+            $expanded[] = $dStr.' 00:00:00';
+        }
+
+        return array_values(array_unique($expanded));
+    }
+
+    /**
+     * Sinkronkan alokasi ruangan dengan Jadwal WFO:
+     * Hapus alokasi tim di tanggal yang bukan hari WFO-nya dalam periode aktif.
+     */
+    public function syncWithJadwalWfo(): int
+    {
+        if (! $this->periodeAktif || ! $this->periodeAktif->tanggal_mulai || ! $this->periodeAktif->tanggal_selesai) {
+            return 0;
+        }
+
+        // Ambil semua jadwal WFO untuk periode aktif: [tim_id => [hari1, hari2, ...]]
+        $wfoMap = JadwalWfo::where('periode_wfo_id', $this->periodeAktif->id)
+            ->get()
+            ->groupBy('tim_id')
+            ->map(fn ($rows) => $rows->pluck('hari')->toArray())
+            ->toArray();
+
+        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+
+        // Ambil semua alokasi dalam rentang periode
+        $start = Carbon::parse($this->periodeAktif->tanggal_mulai)->startOfDay();
+        $end = Carbon::parse($this->periodeAktif->tanggal_selesai)->endOfDay();
+
+        $alokasiList = AlokasiRuangan::whereBetween('tanggal', [
+            $start->toDateTimeString(),
+            $end->toDateTimeString(),
+        ])->get();
+
+        $invalidIds = [];
+        foreach ($alokasiList as $alokasi) {
+            $dayOfWeek = $alokasi->tanggal->dayOfWeekIso; // 1..7
+            if ($dayOfWeek > 6) {
+                // Hari Minggu tidak ada WFO
+                $invalidIds[] = $alokasi->id;
+                continue;
+            }
+
+            $hariKode = $namaHariIndo[$dayOfWeek - 1] ?? null;
+            $timWfoDays = $wfoMap[$alokasi->tim_id] ?? [];
+
+            // Jika tim tidak terjadwal WFO pada hari ini
+            if (! in_array($hariKode, $timWfoDays)) {
+                $invalidIds[] = $alokasi->id;
+            }
+        }
+
+        if (! empty($invalidIds)) {
+            AlokasiRuangan::whereIn('id', $invalidIds)->delete();
+        }
+
+        return count($invalidIds);
+    }
+
+    public function sinkronkanJadwalWfo(): void
+    {
+        $cleaned = $this->syncWithJadwalWfo();
+        $this->replicateWeek1ToPeriod();
+        $this->refreshAlokasiCache();
+
+        if ($cleaned > 0) {
+            Flux::toast(variant: 'success', text: "Sinkronisasi selesai. {$cleaned} alokasi ruangan dibersihkan & pola 1 minggu diseragamkan sepanjang periode.");
+        } else {
+            Flux::toast(variant: 'success', text: 'Pola alokasi ruangan 1 minggu berhasil diseragamkan ke seluruh periode aktif.');
+        }
+    }
+
+    /**
+     * Replikasi pola alokasi Minggu ke-1 ke seluruh minggu dalam periode aktif
+     */
+    public function replicateWeek1ToPeriod(): void
+    {
+        if (! $this->periodeAktif || ! $this->periodeAktif->tanggal_mulai || ! $this->periodeAktif->tanggal_selesai) {
+            return;
+        }
+
+        $scheduler = app(LraScheduler::class);
+        $mulai = Carbon::parse($this->periodeAktif->tanggal_mulai);
+        $selesai = Carbon::parse($this->periodeAktif->tanggal_selesai);
+        $tanggalList = $scheduler->expandTanggal($mulai, $selesai);
+
+        $startWeek1 = Carbon::parse($this->tanggalMulaiMinggu);
+        $endWeek1 = $startWeek1->copy()->addDays(5);
+
+        $week1Allocs = AlokasiRuangan::whereBetween('tanggal', [
+            $startWeek1->toDateString(),
+            $endWeek1->toDateString(),
+        ])->get();
+
+        $patternPerDay = [];
+        foreach ($week1Allocs as $alloc) {
+            $dow = $alloc->tanggal->dayOfWeekIso;
+            $patternPerDay[$dow][] = [
+                'tim_id' => $alloc->tim_id,
+                'ruangan_id' => $alloc->ruangan_id,
+                'expected_attendance' => $alloc->expected_attendance,
+            ];
+        }
+
+        AlokasiRuangan::whereBetween('tanggal', [
+            $mulai->toDateString(),
+            $selesai->toDateString(),
+        ])->delete();
+
+        $rowsToInsert = [];
+        foreach ($tanggalList as $tgl) {
+            $dow = $tgl->dayOfWeekIso;
+            if (! isset($patternPerDay[$dow])) {
+                continue;
+            }
+
+            foreach ($patternPerDay[$dow] as $item) {
+                $rowsToInsert[] = [
+                    'tim_id' => $item['tim_id'],
+                    'ruangan_id' => $item['ruangan_id'],
+                    'tanggal' => $tgl->toDateString(),
+                    'expected_attendance' => $item['expected_attendance'],
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+        }
+
+        if (! empty($rowsToInsert)) {
+            AlokasiRuangan::insert($rowsToInsert);
+        }
+    }
+
     public function tambahAlokasi(int $timId, int $ruanganId, string $tanggal): void
     {
+        $dayOfWeek = Carbon::parse($tanggal)->dayOfWeekIso;
+        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+        $hariKode = $namaHariIndo[$dayOfWeek - 1] ?? null;
+
+        // Validasi: Apakah tim terjadwal WFO pada hari ini di periode aktif?
+        if ($this->periodeAktif && $hariKode) {
+            $isWfo = JadwalWfo::where('periode_wfo_id', $this->periodeAktif->id)
+                ->where('tim_id', $timId)
+                ->where('hari', $hariKode)
+                ->exists();
+
+            if (! $isWfo) {
+                Flux::toast(variant: 'danger', text: 'Tim tidak memiliki jadwal WFO pada hari '.ucfirst($hariKode).'.');
+                return;
+            }
+        }
+
         // Cek bentrok tim di tanggal sama
-        $sudahAdaTim = AlokasiRuangan::where('tim_id', $timId)->where('tanggal', $tanggal)->first();
+        $sudahAdaTim = AlokasiRuangan::where('tim_id', $timId)->whereIn('tanggal', $this->expandDateQueryFormats([$tanggal]))->first();
         if ($sudahAdaTim) {
             Flux::toast(variant: 'warning', text: 'Tim ini sudah memiliki ruangan pada tanggal tersebut.');
             return;
         }
 
         // Cek bentrok ruangan di tanggal sama
-        $sudahAdaRuangan = AlokasiRuangan::where('ruangan_id', $ruanganId)->where('tanggal', $tanggal)->first();
+        $sudahAdaRuangan = AlokasiRuangan::where('ruangan_id', $ruanganId)->whereIn('tanggal', $this->expandDateQueryFormats([$tanggal]))->first();
         if ($sudahAdaRuangan) {
             Flux::toast(variant: 'danger', text: 'Ruangan ini sudah dialokasikan ke tim lain pada tanggal tersebut.');
             return;
         }
 
-        $alokasi = AlokasiRuangan::create([
-            'tim_id' => $timId,
-            'ruangan_id' => $ruanganId,
-            'tanggal' => $tanggal,
-        ]);
-
-        $tim = Tim::find($timId);
+        $tim = Tim::withCount('personil')->find($timId);
         $ruangan = Ruangan::find($ruanganId);
+        $expectedAttendance = $tim?->personil_count ?? 0;
 
-        Flux::toast(
-            variant: 'success',
-            text: "Alokasi berhasil: {$tim?->nama_tim} → {$ruangan?->nama_ruangan}."
-        );
+        // Jika ada periode aktif, sinkronkan ke seluruh minggu dalam periode untuk hari yang sama
+        if ($this->periodeAktif && $this->periodeAktif->tanggal_mulai && $this->periodeAktif->tanggal_selesai) {
+            $allDates = $this->getDatesForDayOfWeek($this->periodeAktif, $dayOfWeek);
 
+            foreach ($allDates as $tgl) {
+                // Jangan timpa jika ruangan sudah terisi tim lain di tanggal tertentu
+                $occupied = AlokasiRuangan::where('ruangan_id', $ruanganId)
+                    ->whereIn('tanggal', $this->expandDateQueryFormats([$tgl]))
+                    ->where('tim_id', '!=', $timId)
+                    ->exists();
+                if ($occupied) {
+                    continue;
+                }
+
+                AlokasiRuangan::updateOrCreate(
+                    ['tim_id' => $timId, 'tanggal' => $tgl],
+                    ['ruangan_id' => $ruanganId, 'expected_attendance' => $expectedAttendance]
+                );
+            }
+
+            Flux::toast(
+                variant: 'success',
+                text: "Alokasi berhasil: {$tim?->nama_tim} → {$ruangan?->nama_ruangan} (berlaku sepanjang periode)."
+            );
+        } else {
+            AlokasiRuangan::create([
+                'tim_id' => $timId,
+                'ruangan_id' => $ruanganId,
+                'tanggal' => $tanggal,
+                'expected_attendance' => $expectedAttendance,
+            ]);
+
+            Flux::toast(
+                variant: 'success',
+                text: "Alokasi berhasil: {$tim?->nama_tim} → {$ruangan?->nama_ruangan}."
+            );
+        }
+
+        $this->dispatch('alokasiActionFeedback', success: true, targetRuanganId: $ruanganId, targetTanggal: $tanggal);
         $this->refreshAlokasiCache();
     }
 
     public function hapusAlokasi(int $alokasiId): void
     {
-        $alokasi = AlokasiRuangan::find($alokasiId);
+        $alokasi = AlokasiRuangan::with('tim')->find($alokasiId);
         if ($alokasi) {
             $nama = $alokasi->tim?->nama_tim;
-            $alokasi->delete();
-            Flux::toast(variant: 'success', text: "Alokasi ruangan tim {$nama} berhasil dihapus.");
+            $timId = $alokasi->tim_id;
+            $dayOfWeek = $alokasi->tanggal->dayOfWeekIso;
+
+            // Jika ada periode aktif, hapus alokasi ruangan tim ini untuk hari yang sama sepanjang periode
+            if ($this->periodeAktif && $this->periodeAktif->tanggal_mulai && $this->periodeAktif->tanggal_selesai) {
+                $allDates = $this->getDatesForDayOfWeek($this->periodeAktif, $dayOfWeek);
+                AlokasiRuangan::where('tim_id', $timId)
+                    ->whereIn('tanggal', $this->expandDateQueryFormats($allDates))
+                    ->delete();
+
+                Flux::toast(variant: 'success', text: "Alokasi ruangan tim {$nama} berhasil dihapus sepanjang periode.");
+            } else {
+                $alokasi->delete();
+                Flux::toast(variant: 'success', text: "Alokasi ruangan tim {$nama} berhasil dihapus.");
+            }
         }
 
         $this->refreshAlokasiCache();
@@ -348,7 +719,18 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             return;
         }
 
-        AlokasiRuangan::whereIn('id', $alokasiIds)->delete();
+        if ($this->periodeAktif && $this->periodeAktif->tanggal_mulai && $this->periodeAktif->tanggal_selesai) {
+            $alokasis = AlokasiRuangan::whereIn('id', $alokasiIds)->get();
+            foreach ($alokasis as $alokasi) {
+                $dayOfWeek = $alokasi->tanggal->dayOfWeekIso;
+                $allDates = $this->getDatesForDayOfWeek($this->periodeAktif, $dayOfWeek);
+                AlokasiRuangan::where('tim_id', $alokasi->tim_id)
+                    ->whereIn('tanggal', $this->expandDateQueryFormats($allDates))
+                    ->delete();
+            }
+        } else {
+            AlokasiRuangan::whereIn('id', $alokasiIds)->delete();
+        }
 
         $this->refreshAlokasiCache();
     }
@@ -556,13 +938,19 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         dragOverTanggal: null,
         overTrash: false,
         rows: [],
+        pendingRows: null,
         timWfoMap: @js($this->timWfoPerTanggal),
         isDragging: false,
-        scrollSpeed: 0,
+        scrollSpeedX: 0,
+        scrollSpeedY: 0,
         autoScrollTimer: null,
         
         // ✨ Multi-select state
         selectedRowIds: [],
+        swappingIds: [],
+        feedbackCells: {},
+        previewSwapTargetId: null,
+        previewSwapTransform: '',
         isDrawingBox: false,
         boxStartX: 0,
         boxStartY: 0,
@@ -575,8 +963,38 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             
             // Listen for cache updates
             $wire.on('alokasiRowsUpdated', (data) => {
-                this.rows = Array.isArray(data[0]) ? data[0] : (Array.isArray(data) ? data : []);
-                console.log('✅ Alokasi rows updated:', this.rows.length);
+                let newRows = [];
+                if (Array.isArray(data)) {
+                    newRows = Array.isArray(data[0]) ? data[0] : (data[0]?.rows || data);
+                } else if (data && typeof data === 'object') {
+                    newRows = data.rows || (Array.isArray(data[0]) ? data[0] : []);
+                }
+                const cleanRows = Array.isArray(newRows) ? newRows : [];
+
+                // Jika sedang ada drag aktif, jangan ganti rows sekarang karena akan merusak DOM node kartu yang sedang ditarik!
+                // Tunda update sampai drag selesai.
+                if (this.isDragging) {
+                    this.pendingRows = cleanRows;
+                    return;
+                }
+
+                this.rows = cleanRows;
+                this.cleanupHeaderStyles();
+            });
+
+            // Listen for feedback events (success / failure highlight)
+            $wire.on('alokasiActionFeedback', (data) => {
+                if (!this.isDragging) {
+                    this.resetDrag();
+                }
+                const payload = Array.isArray(data) ? (data[0] || {}) : (data || {});
+                const type = payload.success ? 'success' : 'error';
+                if (payload.targetRuanganId && payload.targetTanggal) {
+                    this.setCellFeedback(payload.targetRuanganId, payload.targetTanggal, type);
+                }
+                if (payload.oldRuanganId && payload.oldTanggal) {
+                    this.setCellFeedback(payload.oldRuanganId, payload.oldTanggal, type);
+                }
             });
             
             $wire.$watch('timWfoPerTanggal', val => {
@@ -592,12 +1010,14 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                     this.handleAutoScroll(e);
                 }
             });
-            window.addEventListener('dragend', () => {
-                if (this.isDragging) {
-                    this.stopAutoScrollLoop();
-                    this.isDragging = false;
-                }
-            });
+
+            // Global drag termination listeners on window and document
+            const handleGlobalDragEnd = () => {
+                this.resetDrag();
+            };
+
+            window.addEventListener('dragend', handleGlobalDragEnd);
+            document.addEventListener('dragend', handleGlobalDragEnd);
 
             // Direct synchronous sticky header on window scroll
             window.addEventListener('scroll', () => this.updateStickyHeader(), { passive: true });
@@ -617,7 +1037,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             if (tableRect.top < navHeight && tableRect.bottom > navHeight + theadHeight) {
                 const offset = Math.min(maxOffset, navHeight - tableRect.top);
                 thead.style.transform = `translate3d(0, ${offset}px, 0)`;
-                thead.style.zIndex = '40';
+                thead.style.zIndex = '20';
                 thead.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.08)';
             } else {
                 thead.style.transform = '';
@@ -627,30 +1047,52 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         },
 
         handleAutoScroll(event) {
-            if (!this.isDragging || !this.$refs.gridScroll) return;
-            const container = this.$refs.gridScroll;
-            const rect = container.getBoundingClientRect();
-
-            // Check if cursor is roughly near container vertically
-            if (event.clientY < rect.top - 60 || event.clientY > rect.bottom + 60) {
+            if (!this.isDragging || !this.$refs.gridScroll) {
                 this.stopAutoScrollLoop();
                 return;
             }
 
             const mouseX = event.clientX;
-            const edgeThreshold = 110;
-            const leftBoundary = rect.left + 240; // 240px is sticky Ruangan column
-            const rightBoundary = rect.right;
+            const mouseY = event.clientY;
+            const rect = this.$refs.gridScroll.getBoundingClientRect();
 
-            if (mouseX > rightBoundary - edgeThreshold && mouseX <= rightBoundary + 40) {
-                // Dragging near right edge -> auto scroll right
-                const intensity = Math.min(1, Math.max(0.1, (mouseX - (rightBoundary - edgeThreshold)) / edgeThreshold));
-                this.scrollSpeed = intensity * 18;
-                this.startAutoScrollLoop();
-            } else if (mouseX < leftBoundary + edgeThreshold && mouseX >= rect.left - 20) {
-                // Dragging near left edge (Ruangan boundary) -> auto scroll left
-                const intensity = Math.min(1, Math.max(0.1, ((leftBoundary + edgeThreshold) - mouseX) / edgeThreshold));
-                this.scrollSpeed = -intensity * 18;
+            let speedX = 0;
+            let speedY = 0;
+
+            // 1. Horizontal Auto-scroll (Ujung tabel kiri & kanan)
+            const edgeThresholdX = 120;
+            const leftBoundary = rect.left + 220; // 220px kolom Ruangan (sticky)
+            const rightBoundary = Math.min(rect.right, window.innerWidth);
+
+            if (mouseX > rightBoundary - edgeThresholdX && mouseX <= rightBoundary + 60) {
+                // Dragging mendekati ujung kanan tabel -> scroll kanan
+                const intensity = Math.min(1, Math.max(0.1, (mouseX - (rightBoundary - edgeThresholdX)) / edgeThresholdX));
+                speedX = intensity * 22;
+            } else if (mouseX < leftBoundary + edgeThresholdX && mouseX >= rect.left - 40) {
+                // Dragging mendekati batas kolom Ruangan di kiri -> scroll kiri
+                const intensity = Math.min(1, Math.max(0.1, ((leftBoundary + edgeThresholdX) - mouseX) / edgeThresholdX));
+                speedX = -intensity * 22;
+            }
+
+            // 2. Vertical Auto-scroll (Ujung tabel atas & bawah)
+            const edgeThresholdY = 90;
+            const topBoundary = Math.max(rect.top, 56); // Ujung atas tabel (atau batas bawah navbar jika tabel terscroll)
+            const bottomBoundary = Math.min(rect.bottom, window.innerHeight); // Ujung bawah tabel (atau batas bawah layar jika tabel melebihi layar)
+
+            if (mouseY < topBoundary + edgeThresholdY && mouseY >= topBoundary - 50) {
+                // Dragging mendekati ujung atas tabel -> scroll ke atas
+                const intensity = Math.min(1, Math.max(0.1, ((topBoundary + edgeThresholdY) - mouseY) / edgeThresholdY));
+                speedY = -intensity * 22;
+            } else if (mouseY > bottomBoundary - edgeThresholdY && mouseY <= bottomBoundary + 50) {
+                // Dragging mendekati ujung bawah tabel -> scroll ke bawah
+                const intensity = Math.min(1, Math.max(0.1, (mouseY - (bottomBoundary - edgeThresholdY)) / edgeThresholdY));
+                speedY = intensity * 22;
+            }
+
+            this.scrollSpeedX = speedX;
+            this.scrollSpeedY = speedY;
+
+            if (speedX !== 0 || speedY !== 0) {
                 this.startAutoScrollLoop();
             } else {
                 this.stopAutoScrollLoop();
@@ -660,11 +1102,24 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         startAutoScrollLoop() {
             if (this.autoScrollTimer) return;
             const step = () => {
-                if (!this.isDragging || this.scrollSpeed === 0 || !this.$refs.gridScroll) {
+                if (!this.isDragging || (this.scrollSpeedX === 0 && this.scrollSpeedY === 0)) {
                     this.stopAutoScrollLoop();
                     return;
                 }
-                this.$refs.gridScroll.scrollLeft += this.scrollSpeed;
+
+                // Horizontal scroll on table container
+                if (this.scrollSpeedX !== 0 && this.$refs.gridScroll) {
+                    this.$refs.gridScroll.scrollLeft += this.scrollSpeedX;
+                }
+
+                // Vertical scroll on window & table container
+                if (this.scrollSpeedY !== 0) {
+                    window.scrollBy(0, this.scrollSpeedY);
+                    if (this.$refs.gridScroll && this.$refs.gridScroll.scrollHeight > this.$refs.gridScroll.clientHeight) {
+                        this.$refs.gridScroll.scrollTop += this.scrollSpeedY;
+                    }
+                }
+
                 this.autoScrollTimer = requestAnimationFrame(step);
             };
             this.autoScrollTimer = requestAnimationFrame(step);
@@ -675,7 +1130,8 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 cancelAnimationFrame(this.autoScrollTimer);
                 this.autoScrollTimer = null;
             }
-            this.scrollSpeed = 0;
+            this.scrollSpeedX = 0;
+            this.scrollSpeedY = 0;
         },
 
         resetScroll() {
@@ -687,6 +1143,85 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         getAllocation(ruanganId, tanggal) {
             if (!Array.isArray(this.rows)) return null;
             return this.rows.find(r => r.ruangan_id == ruanganId && r.tanggal == tanggal);
+        },
+
+        setCellFeedback(ruanganId, tanggal, type) {
+            if (!ruanganId || !tanggal) return;
+            const key = `${ruanganId}_${tanggal}`;
+            this.feedbackCells = { ...this.feedbackCells, [key]: type };
+            setTimeout(() => {
+                if (this.feedbackCells[key] === type) {
+                    const updated = { ...this.feedbackCells };
+                    delete updated[key];
+                    this.feedbackCells = updated;
+                }
+            }, 2000);
+        },
+
+        isTeamWfoOnDate(timId, tanggal) {
+            if (!timId || !tanggal || !this.timWfoMap) return false;
+            const teams = this.timWfoMap[tanggal];
+            if (!Array.isArray(teams)) return false;
+            return teams.some(t => t.id == timId);
+        },
+
+        cleanupHeaderStyles() {
+            const dragClasses = [
+                'bg-emerald-500/20', '!bg-emerald-500/20', 'dark:bg-emerald-500/30', 'dark:!bg-emerald-500/30',
+                'text-emerald-800', '!text-emerald-800', 'dark:text-emerald-200', 'dark:!text-emerald-200',
+                '!border-b-4', '!border-b-emerald-500', '!border-b-rose-500', 'shadow-sm',
+                'bg-rose-500/15', '!bg-rose-500/15', 'dark:bg-rose-500/25', 'dark:!bg-rose-500/25',
+                'text-rose-800', '!text-rose-800', 'dark:text-rose-200', 'dark:!text-rose-200'
+            ];
+            document.querySelectorAll('[data-day-header]').forEach(el => {
+                dragClasses.forEach(c => el.classList.remove(c));
+                el.style.backgroundColor = '';
+                el.style.borderColor = '';
+                el.style.color = '';
+            });
+        },
+
+        resetDrag() {
+            this.clearSwapPreview();
+            this.stopAutoScrollLoop();
+            this.isDragging = false;
+            this.draggingItem = null;
+            this.dragOverRuanganId = null;
+            this.dragOverTanggal = null;
+            this.overTrash = false;
+            this.cleanupHeaderStyles();
+            requestAnimationFrame(() => this.cleanupHeaderStyles());
+            setTimeout(() => this.cleanupHeaderStyles(), 50);
+            setTimeout(() => this.cleanupHeaderStyles(), 200);
+
+            if (this.pendingRows) {
+                this.rows = this.pendingRows;
+                this.pendingRows = null;
+            }
+        },
+
+        getHeaderClass(tanggal) {
+            if (!this.isDragging || !this.draggingItem) {
+                return '';
+            }
+            const timId = this.draggingItem.isMulti ? this.draggingItem.items?.[0]?.tim_id : this.draggingItem.tim_id;
+            if (this.isTeamWfoOnDate(timId, tanggal)) {
+                return '!bg-emerald-500/20 dark:!bg-emerald-500/30 !text-emerald-800 dark:!text-emerald-200 !border-b-4 !border-b-emerald-500 shadow-sm';
+            } else {
+                return '!bg-rose-500/15 dark:!bg-rose-500/25 !text-rose-800 dark:!text-rose-200 !border-b-4 !border-b-rose-500';
+            }
+        },
+
+        isHeaderAllowed(tanggal) {
+            if (!this.isDragging || !this.draggingItem) return false;
+            const timId = this.draggingItem.isMulti ? this.draggingItem.items?.[0]?.tim_id : this.draggingItem.tim_id;
+            return this.isTeamWfoOnDate(timId, tanggal);
+        },
+
+        isHeaderDisallowed(tanggal) {
+            if (!this.isDragging || !this.draggingItem) return false;
+            const timId = this.draggingItem.isMulti ? this.draggingItem.items?.[0]?.tim_id : this.draggingItem.tim_id;
+            return !this.isTeamWfoOnDate(timId, tanggal);
         },
 
         getAvailableTeams(tanggal) {
@@ -898,16 +1433,14 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         },
 
         dragEnd(event) {
-            this.stopAutoScrollLoop();
-            this.isDragging = false;
-            this.draggingItem = null;
-            this.dragOverRuanganId = null;
-            this.dragOverTanggal = null;
-            this.overTrash = false;
+            this.resetDrag();
         },
 
         dropKeTrash() {
-            if (!this.draggingItem) return;
+            if (!this.draggingItem) {
+                this.resetDrag();
+                return;
+            }
 
             if (this.draggingItem.isMulti) {
                 const ids = this.draggingItem.ids;
@@ -925,66 +1458,189 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 $wire.hapusAlokasi(this.draggingItem.id);
             }
 
-            this.draggingItem = null;
-            this.overTrash = false;
-            this.isDragging = false;
+            this.resetDrag();
+        },
+
+        updateSwapPreview() {
+            if (!this.isDragging || !this.draggingItem || this.draggingItem.isMulti) {
+                this.clearSwapPreview();
+                return;
+            }
+
+            if (!this.dragOverRuanganId || !this.dragOverTanggal) {
+                this.clearSwapPreview();
+                return;
+            }
+
+            const sourceRuanganId = this.draggingItem.ruangan_id;
+            const sourceTanggal = this.draggingItem.tanggal;
+            const targetRuanganId = this.dragOverRuanganId;
+            const targetTanggal = this.dragOverTanggal;
+
+            if (sourceRuanganId == targetRuanganId && sourceTanggal == targetTanggal) {
+                this.clearSwapPreview();
+                return;
+            }
+
+            const targetAlloc = this.getAllocation(targetRuanganId, targetTanggal);
+            if (!targetAlloc || targetAlloc.id === this.draggingItem.id || targetAlloc.tim_id === this.draggingItem.tim_id) {
+                this.clearSwapPreview();
+                return;
+            }
+
+            // Validasi: Tim asal harus WFO di tanggal target
+            if (!this.isTeamWfoOnDate(this.draggingItem.tim_id, targetTanggal)) {
+                this.clearSwapPreview();
+                return;
+            }
+
+            // Validasi: Jika beda hari, tim target juga harus WFO di tanggal asal
+            if (sourceTanggal !== targetTanggal && !this.isTeamWfoOnDate(targetAlloc.tim_id, sourceTanggal)) {
+                this.clearSwapPreview();
+                return;
+            }
+
+            // Keduanya valid WFO! Hitung selisih koordinat antar cell
+            const sourceCell = document.querySelector(`[data-cell-id='${sourceRuanganId}_${sourceTanggal}']`);
+            const targetCell = document.querySelector(`[data-cell-id='${targetRuanganId}_${targetTanggal}']`);
+
+            if (sourceCell && targetCell) {
+                const sourceRect = sourceCell.getBoundingClientRect();
+                const targetRect = targetCell.getBoundingClientRect();
+                const deltaX = Math.round(sourceRect.left - targetRect.left);
+                const deltaY = Math.round(sourceRect.top - targetRect.top);
+
+                this.previewSwapTargetId = targetAlloc.id;
+                this.previewSwapTransform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
+            } else {
+                this.clearSwapPreview();
+            }
+        },
+
+        clearSwapPreview() {
+            if (this.previewSwapTargetId) {
+                const el = document.querySelector(`[data-alokasi-card='${this.previewSwapTargetId}']`);
+                if (el) {
+                    el.style.transition = 'none';
+                    el.style.transform = '';
+                }
+            }
+            this.previewSwapTargetId = null;
+            this.previewSwapTransform = '';
+        },
+
+        dragLeaveContainer(event) {
+            if (event.currentTarget && event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+                this.clearSwapPreview();
+                this.dragOverRuanganId = null;
+                this.dragOverTanggal = null;
+            }
         },
 
         dragOver(event, ruanganId, tanggal) {
             event.preventDefault();
+            if (this.dragOverRuanganId == ruanganId && this.dragOverTanggal == tanggal) {
+                return;
+            }
             this.dragOverRuanganId = ruanganId;
             this.dragOverTanggal = tanggal;
-        },
-
-        dragLeave(event, ruanganId, tanggal) {
-            if (this.dragOverRuanganId == ruanganId && this.dragOverTanggal == tanggal) {
-                this.dragOverRuanganId = null;
-                this.dragOverTanggal = null;
-            }
+            this.updateSwapPreview();
         },
 
         dropItem(event, targetRuanganId, targetTanggal) {
             event.preventDefault();
             this.stopAutoScrollLoop();
-            this.isDragging = false;
-            if (!this.draggingItem) return;
+            if (!this.draggingItem) {
+                this.resetDrag();
+                return;
+            }
 
             const alokasiId = this.draggingItem.id;
             const sourceRuanganId = this.draggingItem.ruangan_id;
             const sourceTanggal = this.draggingItem.tanggal;
+            this.resetDrag();
 
             if (sourceRuanganId == targetRuanganId && sourceTanggal == targetTanggal) {
-                this.draggingItem = null;
-                this.dragOverRuanganId = null;
-                this.dragOverTanggal = null;
                 return;
             }
 
-            // Optimistic update
-            const targetAlloc = this.getAllocation(targetRuanganId, targetTanggal);
-            if (targetAlloc) {
-                targetAlloc.ruangan_id = sourceRuanganId;
-                targetAlloc.tanggal = sourceTanggal;
+            // Temukan item asal di dalam array rows Alpine
+            const sourceAlloc = Array.isArray(this.rows) ? this.rows.find(r => r.id === alokasiId) : null;
+            if (!sourceAlloc) {
+                return;
             }
 
-            this.draggingItem.ruangan_id = targetRuanganId;
-            this.draggingItem.tanggal = targetTanggal;
+            // Validasi apakah tim asal memiliki jadwal WFO pada tanggal target
+            if (!this.isTeamWfoOnDate(sourceAlloc.tim_id, targetTanggal)) {
+                this.setCellFeedback(targetRuanganId, targetTanggal, 'error');
+                this.setCellFeedback(sourceRuanganId, sourceTanggal, 'error');
+                $wire.pindahRuangan(alokasiId, targetRuanganId, targetTanggal);
+                return;
+            }
 
+            // Temukan item di cell tujuan (jika cell sudah terisi tim lain)
+            const targetAlloc = this.getAllocation(targetRuanganId, targetTanggal);
+
+            if (targetAlloc) {
+                // Jangan lakukan apa-apa jika di drag ke tim yang sama
+                if (targetAlloc.tim_id === sourceAlloc.tim_id) {
+                    return;
+                }
+
+                // Jika beda hari, validasi apakah tim target juga memiliki jadwal WFO pada hari asal
+                if (sourceTanggal !== targetTanggal && !this.isTeamWfoOnDate(targetAlloc.tim_id, sourceTanggal)) {
+                    this.setCellFeedback(targetRuanganId, targetTanggal, 'error');
+                    this.setCellFeedback(sourceRuanganId, sourceTanggal, 'error');
+                    $wire.pindahRuangan(alokasiId, targetRuanganId, targetTanggal);
+                    return;
+                }
+
+                // SWAP KEDUA TIM: tukar ruangan & tanggal secara langsung di memory
+                sourceAlloc.ruangan_id = targetRuanganId;
+                sourceAlloc.tanggal = targetTanggal;
+
+                targetAlloc.ruangan_id = sourceRuanganId;
+                targetAlloc.tanggal = sourceTanggal;
+
+                // Animasi visual kartu yang bertukar tempat
+                this.swappingIds = [sourceAlloc.id, targetAlloc.id];
+
+                // ✨ Highlight kedua cell hijau setelah sukses ditukar
+                this.setCellFeedback(targetRuanganId, targetTanggal, 'success');
+                this.setCellFeedback(sourceRuanganId, sourceTanggal, 'success');
+            } else {
+                // Geser ke ruangan kosong
+                sourceAlloc.ruangan_id = targetRuanganId;
+                sourceAlloc.tanggal = targetTanggal;
+
+                this.swappingIds = [sourceAlloc.id];
+
+                // ✨ Highlight cell tujuan & asal hijau setelah sukses dipindah
+                this.setCellFeedback(targetRuanganId, targetTanggal, 'success');
+                this.setCellFeedback(sourceRuanganId, sourceTanggal, 'success');
+            }
+
+            // Trigger reaktifitas Alpine dengan array baru
+            this.rows = [...this.rows];
+
+            setTimeout(() => {
+                this.swappingIds = [];
+            }, 600);
+
+            // Jalankan atomic swap / pindah di backend
             $wire.pindahRuangan(alokasiId, targetRuanganId, targetTanggal);
-
-            this.draggingItem = null;
-            this.dragOverRuanganId = null;
-            this.dragOverTanggal = null;
         }
     }"
     @mousedown="startBoxSelection($event)"
     @mousemove="updateBoxSelection($event)"
     @mouseup="endBoxSelection()"
     @mouseleave="endBoxSelection()"
+    @dragend.window="resetDrag()"
+    @dragend.document="resetDrag()"
     @keydown.delete.window="selectedRowIds.length > 0 ? hapusBulk() : null"
     @keydown.backspace.window="selectedRowIds.length > 0 ? hapusBulk() : null"
     @keydown.ctrl.a.window.prevent="selectAll()"
-    @keydown.escape.window="clearSelection()"
+    @keydown.escape.window="clearSelection(); resetDrag()"
 >
     {{-- Top Header Section --}}
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1084,6 +1740,16 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                     <span class="hidden sm:inline">Generate</span> Fair/LRA
                 </flux:button>
 
+                <flux:button 
+                    variant="ghost" 
+                    icon="arrow-path"
+                    wire:click="sinkronkanJadwalWfo"
+                    wire:loading.attr="disabled"
+                    title="Sinkronkan alokasi ruangan dengan Jadwal WFO aktif"
+                >
+                    <span class="hidden sm:inline">Sinkronkan WFO</span>
+                </flux:button>
+
                 <flux:modal.trigger name="modal-export-ruangan-pdf">
                     <flux:button variant="filled" icon="arrow-down-tray">
                         Export PDF
@@ -1151,6 +1817,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         <div
             x-ref="gridScroll"
             @dragover="handleAutoScroll($event)"
+            @dragleave="dragLeaveContainer($event)"
             class="overflow-x-auto relative"
         >
             {{-- Loading Overlay --}}
@@ -1184,12 +1851,12 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 </colgroup>
                 <thead
                     x-ref="tableThead"
-                    class="relative z-40 bg-zinc-100 dark:bg-zinc-900 transition-none"
+                    class="relative z-20 bg-zinc-100 dark:bg-zinc-900 transition-none"
                     style="will-change: transform;"
                 >
                     <tr class="bg-zinc-100 dark:bg-zinc-900 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
                         {{-- Kolom Ruangan: Sticky Left --}}
-                        <th class="p-3.5 ps-5 border-b border-r border-zinc-200 dark:border-zinc-800 select-none sticky left-0 z-50 bg-zinc-100 dark:bg-zinc-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                        <th class="p-3.5 ps-5 border-b border-r border-zinc-200 dark:border-zinc-800 select-none sticky left-0 z-25 bg-zinc-100 dark:bg-zinc-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
                             <div class="flex items-center gap-2 font-semibold text-xs uppercase tracking-wider text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                                 <flux:icon icon="building-office-2" class="size-4 text-zinc-400 shrink-0" />
                                 <span>Ruangan</span>
@@ -1197,8 +1864,26 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                         </th>
                         {{-- Kolom Hari --}}
                         @foreach ($this->daftarHariMingguIni as $h)
-                            <th class="p-3.5 text-center border-b border-r border-zinc-200 dark:border-zinc-800 select-none relative z-40 bg-zinc-100 dark:bg-zinc-900 {{ $h['is_today'] ? '!bg-blue-50/90 dark:!bg-blue-950/50 text-blue-600 dark:text-blue-400' : '' }}">
-                                <div class="font-bold text-sm">{{ $h['nama'] }}</div>
+                            <th
+                                data-day-header="{{ $h['tanggal'] }}"
+                                class="p-3.5 text-center border-b border-r border-zinc-200 dark:border-zinc-800 select-none relative z-20 bg-zinc-100 dark:bg-zinc-900 transition-colors duration-150"
+                                :class="(isDragging && draggingItem) ? getHeaderClass('{{ $h['tanggal'] }}') : ({{ $h['is_today'] ? 'true' : 'false' }} ? '!bg-blue-50/90 dark:!bg-blue-950/50 text-blue-600 dark:text-blue-400' : '!bg-zinc-100 dark:!bg-zinc-900 text-zinc-600 dark:text-zinc-300')"
+                                @dragover.prevent
+                                @drop="resetDrag()"
+                            >
+                                <div class="flex items-center justify-center gap-1.5 font-bold text-sm">
+                                    <span>{{ $h['nama'] }}</span>
+                                    <template x-if="isDragging && draggingItem && isHeaderAllowed('{{ $h['tanggal'] }}')">
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500 text-white shadow-xs animate-pulse">
+                                            ✓ Boleh
+                                        </span>
+                                    </template>
+                                    <template x-if="isDragging && draggingItem && isHeaderDisallowed('{{ $h['tanggal'] }}')">
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500 text-white shadow-xs">
+                                            ✕ Bukan Hari WFO
+                                        </span>
+                                    </template>
+                                </div>
                                 <div class="text-[11px] font-normal opacity-75 mt-0.5">
                                     {{ $this->periodeAktif ? 'Setiap ' . $h['nama'] : $h['label_tanggal'] }}
                                 </div>
@@ -1227,15 +1912,50 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                             {{-- Daily Cells (Drop targets) --}}
                             @foreach ($this->daftarHariMingguIni as $h)
                                 <td
-                                    class="p-2 border-b border-r border-zinc-200 dark:border-zinc-800 align-top transition-colors relative"
+                                    data-cell-id="{{ $ruangan->id }}_{{ $h['tanggal'] }}"
+                                    class="p-2 border-b border-r border-zinc-200 dark:border-zinc-800 align-top transition-all duration-300 relative"
                                     :class="{
-                                        'bg-[#3B71CA]/10 ring-2 ring-[#3B71CA] ring-inset rounded-lg': dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}',
-                                        'bg-[#3B71CA]/5 dark:bg-[#3B71CA]/5': {{ $h['is_today'] ? 'true' : 'false' }}
+                                        'ring-2 !ring-red-500 !bg-red-500/20 dark:!bg-red-500/30 rounded-lg !border-red-500 shadow-md animate-pulse': feedbackCells['{{ $ruangan->id }}_{{ $h['tanggal'] }}'] === 'error',
+                                        'ring-2 !ring-emerald-500 !bg-emerald-500/20 dark:!bg-emerald-500/30 rounded-lg !border-emerald-500 shadow-md animate-pulse': feedbackCells['{{ $ruangan->id }}_{{ $h['tanggal'] }}'] === 'success',
+                                        'bg-emerald-500/10 dark:bg-emerald-500/15 !border-emerald-300/60 dark:!border-emerald-700/50': isDragging && draggingItem && isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}') && (dragOverRuanganId != {{ $ruangan->id }} || dragOverTanggal != '{{ $h['tanggal'] }}'),
+                                        'opacity-40 bg-zinc-100/70 dark:bg-zinc-900/70 cursor-not-allowed': isDragging && draggingItem && !isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}'),
+                                        'bg-[#3B71CA]/10 ring-2 ring-[#3B71CA] ring-inset rounded-lg': isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && !getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}') && (!draggingItem || isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}')),
+                                        'bg-amber-500/15 ring-2 ring-amber-500 ring-inset rounded-lg': isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}') && (!draggingItem || isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}')),
+                                        'bg-red-500/15 ring-2 ring-red-500 ring-inset rounded-lg cursor-not-allowed': isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && draggingItem && !isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}'),
+                                        '!z-40': previewSwapTargetId && getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')?.id === previewSwapTargetId,
+                                        'bg-[#3B71CA]/5 dark:bg-[#3B71CA]/5': !isDragging && {{ $h['is_today'] ? 'true' : 'false' }}
                                     }"
-                                    @dragover="dragOver($event, {{ $ruangan->id }}, '{{ $h['tanggal'] }}')"
-                                    @dragleave="dragLeave($event, {{ $ruangan->id }}, '{{ $h['tanggal'] }}')"
+                                    @dragover.prevent="dragOver($event, {{ $ruangan->id }}, '{{ $h['tanggal'] }}')"
                                     @drop="dropItem($event, {{ $ruangan->id }}, '{{ $h['tanggal'] }}')"
                                 >
+                                    {{-- Swap Indicator Badge on Hover when allowed --}}
+                                    <div
+                                        x-show="isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}') && draggingItem && draggingItem.id !== getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')?.id && isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}')"
+                                        x-cloak
+                                        class="absolute inset-x-2 -top-2.5 z-30 flex items-center justify-center pointer-events-none"
+                                    >
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-md flex items-center gap-1 animate-pulse">
+                                            <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                                            </svg>
+                                            Tukar Ruangan
+                                        </span>
+                                    </div>
+
+                                    {{-- Ghost Dropzone in target cell while target card is preview-swapped --}}
+                                    <div
+                                        x-show="isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && previewSwapTargetId === getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')?.id"
+                                        x-cloak
+                                        class="absolute inset-2 border-2 border-dashed border-amber-400 dark:border-amber-500 bg-amber-500/10 dark:bg-amber-500/15 rounded-xl flex items-center justify-center pointer-events-none z-10 transition-all duration-200"
+                                    >
+                                        <span class="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5 animate-pulse">
+                                            <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                                            </svg>
+                                            Lepas untuk Tukar
+                                        </span>
+                                    </div>
+
                                     <div class="min-h-[72px] flex flex-col justify-center">
                                         {{-- Assigned Team Card --}}
                                         <template x-if="getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')">
@@ -1244,14 +1964,17 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                                                 draggable="true"
                                                 @click="toggleSelect(getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id, $event)"
                                                 @dragstart="dragStart($event, getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}'))"
-                                                @dragend="dragEnd($event)"
+                                                @dragend="resetDrag()"
                                                 @mousedown.stop
-                                                class="group/card relative p-2.5 rounded-xl border shadow-xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing select-none"
+                                                class="group/card relative p-2.5 rounded-xl border shadow-xs hover:shadow-md transition-[background-color,border-color,box-shadow,opacity] duration-150 cursor-grab active:cursor-grabbing select-none"
                                                 :class="[
                                                     getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').color_classes || 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800/60 hover:border-blue-400 dark:hover:border-blue-600',
                                                     isSelected(getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id) && 'ring-2 ring-blue-500',
-                                                    (draggingItem && ((draggingItem.id === getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id) || (draggingItem.isMulti && draggingItem.ids?.includes(getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id)))) && 'opacity-40'
+                                                    (draggingItem && ((draggingItem.id === getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id) || (draggingItem.isMulti && draggingItem.ids?.includes(getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id)))) && 'opacity-40',
+                                                    swappingIds.includes(getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id) && 'ring-2 ring-emerald-500 dark:ring-emerald-400 shadow-md',
+                                                    (previewSwapTargetId === getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id) && 'z-50 shadow-2xl ring-2 ring-amber-400 dark:ring-amber-500 opacity-90'
                                                 ]"
+                                                :style="(previewSwapTargetId && previewSwapTargetId === getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')?.id) ? ('transform: ' + previewSwapTransform + '; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease; pointer-events: none;') : ''"
                                             >
                                                 <div class="flex items-start justify-between gap-1.5">
                                                     <div class="min-w-0 flex-1">

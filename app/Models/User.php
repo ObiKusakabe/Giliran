@@ -40,6 +40,11 @@ class User extends Authenticatable implements PasskeyUser
         'username',
         'name',
         'email',
+        'email_verification_otp',
+        'email_verification_otp_expires_at',
+        'password_reset_otp',
+        'password_reset_otp_expires_at',
+        'password_reset_otp_attempts',
         'password',
         'role',
         'ui_preference',
@@ -50,12 +55,15 @@ class User extends Authenticatable implements PasskeyUser
         'two_factor_secret',
         'two_factor_recovery_codes',
         'remember_token',
+        'password_reset_otp',
     ];
 
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
+            'email_verification_otp_expires_at' => 'datetime',
+            'password_reset_otp_expires_at' => 'datetime',
             'password' => 'hashed',
         ];
     }

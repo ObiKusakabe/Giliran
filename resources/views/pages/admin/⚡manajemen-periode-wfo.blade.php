@@ -189,85 +189,87 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
         </flux:card>
     </div>
 
-    <flux:card class="p-0 overflow-visible table-sticky-card border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
-        <div class="px-5">
-            <flux:table>
-                <flux:table.columns class="bg-white dark:bg-zinc-900">
-                    <flux:table.column>Keterangan</flux:table.column>
-                    <flux:table.column class="cursor-pointer select-none" wire:click="sortBy('tanggal_mulai')">
-                        <span class="inline-flex items-center gap-1">Tanggal Mulai
-                            @if ($sortField === 'tanggal_mulai')
-                                <flux:icon icon="{{ $sortDir === 'asc' ? 'chevron-up' : 'chevron-down' }}" class="size-3.5 text-brand" />
-                            @endif
-                        </span>
-                    </flux:table.column>
-                    <flux:table.column class="cursor-pointer select-none" wire:click="sortBy('tanggal_selesai')">
-                        <span class="inline-flex items-center gap-1">Tanggal Selesai
-                            @if ($sortField === 'tanggal_selesai')
-                                <flux:icon icon="{{ $sortDir === 'asc' ? 'chevron-up' : 'chevron-down' }}" class="size-3.5 text-brand" />
-                            @endif
-                        </span>
-                    </flux:table.column>
-                    <flux:table.column align="center" class="cursor-pointer select-none" wire:click="sortBy('status')">
-                        <span class="inline-flex items-center justify-center gap-1">Status
-                            @if ($sortField === 'status')
-                                <flux:icon icon="{{ $sortDir === 'asc' ? 'chevron-up' : 'chevron-down' }}" class="size-3.5 text-brand" />
-                            @endif
-                        </span>
-                    </flux:table.column>
-                    <flux:table.column align="end">Aksi</flux:table.column>
-                </flux:table.columns>
-                <flux:table.rows>
-                    @forelse ($this->periodeList as $periode)
-                        <flux:table.row class="{{ $periode->isAktif() ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : '' }}">
-                            <flux:table.cell class="font-medium text-zinc-900 dark:text-zinc-100">{{ $periode->keterangan ?? '—' }}</flux:table.cell>
-                            <flux:table.cell class="text-zinc-600 dark:text-zinc-400">{{ $periode->tanggal_mulai->translatedFormat('d M Y') }}</flux:table.cell>
-                            <flux:table.cell class="text-zinc-600 dark:text-zinc-400">{{ $periode->tanggal_selesai->translatedFormat('d M Y') }}</flux:table.cell>
-                            <flux:table.cell align="center"><x-status-badge :status="$periode->status" /></flux:table.cell>
-                            <flux:table.cell align="end">
-                                <div class="flex items-center justify-end gap-1.5">
-                                    <flux:button 
-                                        size="xs" 
-                                        variant="ghost" 
-                                        icon="pencil" 
-                                        wire:click="bukaEdit({{ $periode->id }})" 
-                                        wire:loading.attr="disabled" 
-                                        wire:target="bukaEdit({{ $periode->id }})"
-                                        title="Edit Periode"
-                                    >
-                                        <span wire:loading.remove wire:target="bukaEdit({{ $periode->id }})">Edit</span>
-                                        <span wire:loading wire:target="bukaEdit({{ $periode->id }})">
-                                            <flux:icon icon="arrow-path" class="size-4 animate-spin" />
-                                        </span>
-                                    </flux:button>
-                                    @if (! $periode->isAktif())
+    <flux:card class="p-0 overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
+        <div class="w-full overflow-x-auto scrollbar-thin">
+            <div class="min-w-[620px] px-5 py-1">
+                <flux:table>
+                    <flux:table.columns class="bg-white dark:bg-zinc-900">
+                        <flux:table.column class="whitespace-nowrap">Keterangan</flux:table.column>
+                        <flux:table.column class="cursor-pointer select-none whitespace-nowrap" wire:click="sortBy('tanggal_mulai')">
+                            <span class="inline-flex items-center gap-1">Tanggal Mulai
+                                @if ($sortField === 'tanggal_mulai')
+                                    <flux:icon icon="{{ $sortDir === 'asc' ? 'chevron-up' : 'chevron-down' }}" class="size-3.5 text-brand" />
+                                @endif
+                            </span>
+                        </flux:table.column>
+                        <flux:table.column class="cursor-pointer select-none whitespace-nowrap" wire:click="sortBy('tanggal_selesai')">
+                            <span class="inline-flex items-center gap-1">Tanggal Selesai
+                                @if ($sortField === 'tanggal_selesai')
+                                    <flux:icon icon="{{ $sortDir === 'asc' ? 'chevron-up' : 'chevron-down' }}" class="size-3.5 text-brand" />
+                                @endif
+                            </span>
+                        </flux:table.column>
+                        <flux:table.column align="center" class="cursor-pointer select-none whitespace-nowrap" wire:click="sortBy('status')">
+                            <span class="inline-flex items-center justify-center gap-1">Status
+                                @if ($sortField === 'status')
+                                    <flux:icon icon="{{ $sortDir === 'asc' ? 'chevron-up' : 'chevron-down' }}" class="size-3.5 text-brand" />
+                                @endif
+                            </span>
+                        </flux:table.column>
+                        <flux:table.column align="end" class="whitespace-nowrap">Aksi</flux:table.column>
+                    </flux:table.columns>
+                    <flux:table.rows>
+                        @forelse ($this->periodeList as $periode)
+                            <flux:table.row class="{{ $periode->isAktif() ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : '' }}">
+                                <flux:table.cell class="font-medium text-zinc-900 dark:text-zinc-100 whitespace-nowrap">{{ $periode->keterangan ?? '—' }}</flux:table.cell>
+                                <flux:table.cell class="text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{ $periode->tanggal_mulai->translatedFormat('d M Y') }}</flux:table.cell>
+                                <flux:table.cell class="text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{ $periode->tanggal_selesai->translatedFormat('d M Y') }}</flux:table.cell>
+                                <flux:table.cell align="center" class="whitespace-nowrap"><x-status-badge :status="$periode->status" /></flux:table.cell>
+                                <flux:table.cell align="end" class="whitespace-nowrap">
+                                    <div class="flex items-center justify-end gap-1.5">
                                         <flux:button 
                                             size="xs" 
-                                            variant="primary" 
-                                            wire:click="konfirmasiAktifkan({{ $periode->id }})"
+                                            variant="ghost" 
+                                            icon="pencil" 
+                                            wire:click="bukaEdit({{ $periode->id }})" 
                                             wire:loading.attr="disabled" 
-                                            wire:target="konfirmasiAktifkan({{ $periode->id }})"
+                                            wire:target="bukaEdit({{ $periode->id }})"
+                                            title="Edit Periode"
                                         >
-                                            <span wire:loading.remove wire:target="konfirmasiAktifkan({{ $periode->id }})">Aktifkan</span>
-                                            <span wire:loading wire:target="konfirmasiAktifkan({{ $periode->id }})">
+                                            <span wire:loading.remove wire:target="bukaEdit({{ $periode->id }})">Edit</span>
+                                            <span wire:loading wire:target="bukaEdit({{ $periode->id }})">
                                                 <flux:icon icon="arrow-path" class="size-4 animate-spin" />
                                             </span>
                                         </flux:button>
-                                    @else
-                                        <span class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold px-2">Sedang Aktif</span>
-                                    @endif
-                                </div>
-                            </flux:table.cell>
-                        </flux:table.row>
-                    @empty
-                        <flux:table.row>
-                            <flux:table.cell colspan="5" class="py-4">
-                                <x-empty-state icon="calendar-days" title="Belum ada periode WFO" description="Buat periode WFO pertama untuk mulai mengatur jadwal." action-label="Buat Periode Baru" action-wire="bukaTambah" />
-                            </flux:table.cell>
-                        </flux:table.row>
-                    @endforelse
-                </flux:table.rows>
-            </flux:table>
+                                        @if (! $periode->isAktif())
+                                            <flux:button 
+                                                size="xs" 
+                                                variant="primary" 
+                                                wire:click="konfirmasiAktifkan({{ $periode->id }})"
+                                                wire:loading.attr="disabled" 
+                                                wire:target="konfirmasiAktifkan({{ $periode->id }})"
+                                            >
+                                                <span wire:loading.remove wire:target="konfirmasiAktifkan({{ $periode->id }})">Aktifkan</span>
+                                                <span wire:loading wire:target="konfirmasiAktifkan({{ $periode->id }})">
+                                                    <flux:icon icon="arrow-path" class="size-4 animate-spin" />
+                                                </span>
+                                            </flux:button>
+                                        @else
+                                            <span class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold px-2">Sedang Aktif</span>
+                                        @endif
+                                    </div>
+                                </flux:table.cell>
+                            </flux:table.row>
+                        @empty
+                            <flux:table.row>
+                                <flux:table.cell colspan="5" class="py-4">
+                                    <x-empty-state icon="calendar-days" title="Belum ada periode WFO" description="Buat periode WFO pertama untuk mulai mengatur jadwal." action-label="Buat Periode Baru" action-wire="bukaTambah" />
+                                </flux:table.cell>
+                            </flux:table.row>
+                        @endforelse
+                    </flux:table.rows>
+                </flux:table>
+            </div>
         </div>
     </flux:card>
 

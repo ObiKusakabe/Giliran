@@ -75,6 +75,10 @@ new #[Title('Akun')] #[Layout('layouts.app')] class extends Component {
             'nama_tim' => 'required|string|max:100',
             'keterangan' => 'nullable|string|max:500',
             'foto_bersama' => 'nullable|image|max:5120',
+        ], [
+            'nama_tim.required' => 'Nama tim wajib diisi.',
+            'foto_bersama.image' => 'File harus berupa gambar (JPG, PNG, atau WebP).',
+            'foto_bersama.max' => 'Ukuran foto maksimal 5MB.',
         ]);
 
         if (! $this->tim) {
@@ -99,7 +103,15 @@ new #[Title('Akun')] #[Layout('layouts.app')] class extends Component {
 
         $this->tim->update($data);
 
-        Flux::toast(variant: 'success', text: 'Informasi tim berhasil diperbarui.');
+        // Sinkronisasi nama akun user dengan nama tim
+        $user = auth()->user();
+        if ($user && $user->name !== $this->nama_tim) {
+            $user->update(['name' => $this->nama_tim]);
+        }
+
+        $this->dispatch('photo-saved');
+
+        Flux::toast(variant: 'success', text: 'Informasi & foto tim berhasil diperbarui.');
         unset($this->tim);
     }
 
@@ -117,6 +129,7 @@ new #[Title('Akun')] #[Layout('layouts.app')] class extends Component {
         $this->foto_bersama = null;
         unset($this->tim);
 
+        $this->dispatch('photo-deleted');
         Flux::toast(variant: 'success', text: 'Foto bersama berhasil dihapus.');
     }
 
@@ -406,79 +419,255 @@ new #[Title('Akun')] #[Layout('layouts.app')] class extends Component {
                                 <flux:subheading class="text-xs">Ubah nama, keterangan, dan unggah foto bersama tim</flux:subheading>
                             </div>
 
-                            {{-- Foto Bersama Preview & Upload --}}
-                            <div class="space-y-3">
-                                <flux:label>Foto Bersama Tim</flux:label>
+                            {{-- Foto Bersama Preview & Upload with Instant Client-Side Preview & Lightbox Modal --}}
+                            <div 
+                                x-data="{
+                                    clientPreviewUrl: null,
+                                    previewModalOpen: false,
+                                    previewModalSrc: '',
+                                    previewModalTitle: 'Foto Bersama Tim',
+                                    
+                                    handleFileChange(event) {
+                                        const file = event.target.files[0];
+                                        if (!file) return;
+                                        
+                                        // Client-side validation
+                                        if (!file.type.match(/^image\/(jpeg|png|webp|jpg)$/i)) {
+                                            alert('Format file tidak didukung. Harap pilih gambar JPG, PNG, atau WebP.');
+                                            event.target.value = '';
+                                            return;
+                                        }
+                                        if (file.size > 5120 * 1024) {
+                                            alert('Ukuran file maksimal adalah 5MB.');
+                                            event.target.value = '';
+                                            return;
+                                        }
+                                        
+                                        if (this.clientPreviewUrl) {
+                                            URL.revokeObjectURL(this.clientPreviewUrl);
+                                        }
+                                        this.clientPreviewUrl = URL.createObjectURL(file);
+                                    },
+                                    
+                                    clearFile(inputId) {
+                                        if (this.clientPreviewUrl) {
+                                            URL.revokeObjectURL(this.clientPreviewUrl);
+                                            this.clientPreviewUrl = null;
+                                        }
+                                        const input = document.getElementById(inputId);
+                                        if (input) input.value = '';
+                                    },
+                                    
+                                    openLightbox(src, title) {
+                                        if (!src) return;
+                                        this.previewModalSrc = src;
+                                        this.previewModalTitle = title || 'Foto Bersama Tim';
+                                        this.previewModalOpen = true;
+                                    }
+                                }"
+                                @photo-saved.window="clearFile('foto-bersama-input-akun')"
+                                class="space-y-3"
+                            >
+                                <div class="flex items-center justify-between">
+                                    <flux:label>Foto Bersama Tim</flux:label>
+                                    <span class="text-[11px] text-zinc-400">JPG, PNG, WebP &bull; Maks 5MB</span>
+                                </div>
                                 
                                 <div class="relative overflow-hidden rounded-xl border-2 border-dashed border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-3 text-center transition-all hover:border-zinc-300 dark:hover:border-zinc-600">
-                                    @if ($foto_bersama)
-                                        {{-- Temporary uploaded preview --}}
-                                        <div class="relative group">
-                                            <img src="{{ $foto_bersama->temporaryUrl() }}" alt="Preview Foto Bersama" class="w-full h-44 object-cover rounded-lg shadow-xs" />
-                                            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                                                <span class="text-xs font-semibold text-white bg-black/60 px-2.5 py-1 rounded-full">Foto Siap Disimpan</span>
+                                    {{-- 1. Client-Side Instant Preview (immediately upon file selection) --}}
+                                    <template x-if="clientPreviewUrl">
+                                        <div class="relative group cursor-pointer" @click="openLightbox(clientPreviewUrl, 'Pratinjau Foto Baru')">
+                                            <img 
+                                                :src="clientPreviewUrl" 
+                                                alt="Pratinjau Foto Baru" 
+                                                class="w-full aspect-video sm:h-48 object-cover rounded-lg shadow-xs transition-transform duration-200 group-hover:scale-[1.01]" 
+                                            />
+                                            
+                                            {{-- Hover overlay for zoom preview --}}
+                                            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex flex-col items-center justify-center text-white gap-1.5 p-2">
+                                                <flux:icon icon="magnifying-glass-plus" class="size-6 text-white drop-shadow" />
+                                                <span class="text-xs font-semibold bg-black/60 px-2.5 py-1 rounded-full drop-shadow">Klik untuk perbesar</span>
+                                            </div>
+                                            
+                                            {{-- Badge: Siap Disimpan --}}
+                                            <div class="absolute top-2 left-2 pointer-events-none">
+                                                <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-100 dark:bg-emerald-950/80 dark:text-emerald-300 px-2.5 py-0.5 rounded-full shadow-xs">
+                                                    <span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                    Foto Baru Siap Disimpan
+                                                </span>
                                             </div>
                                         </div>
-                                    @elseif ($this->tim?->foto_bersama)
-                                        {{-- Existing saved photo --}}
-                                        <div class="relative group">
-                                            <img src="{{ \Illuminate\Support\Facades\Storage::url($this->tim->foto_bersama) }}" alt="Foto Bersama {{ $this->tim->nama_tim }}" class="w-full h-44 object-cover rounded-lg shadow-xs" />
-                                            <div class="absolute top-2 right-2">
-                                                <button 
-                                                    type="button" 
-                                                    wire:click="hapusFotoBersama" 
-                                                    wire:confirm="Yakin ingin menghapus foto bersama tim?" 
-                                                    class="p-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md transition-colors"
-                                                    title="Hapus foto"
-                                                >
-                                                    <flux:icon icon="trash" class="size-4" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    @else
-                                        {{-- Placeholder when no photo is uploaded --}}
-                                        <div class="py-5 flex flex-col items-center justify-center space-y-2 text-zinc-400">
-                                            <div class="size-12 rounded-full bg-zinc-200/70 dark:bg-zinc-700/60 flex items-center justify-center text-zinc-500 dark:text-zinc-400">
-                                                <flux:icon icon="camera" class="size-6" />
-                                            </div>
-                                            <div class="text-xs font-medium text-zinc-600 dark:text-zinc-300">Belum ada foto bersama</div>
-                                            <div class="text-[11px] text-zinc-400 max-w-[200px] leading-tight">Foto ini akan tampil di daftar tim admin sebagai identitas & kenang-kenangan.</div>
-                                        </div>
-                                    @endif
+                                    </template>
 
-                                    {{-- Upload Control --}}
+                                    {{-- 2. Fallback when no client blob: Livewire temporary OR existing saved photo OR placeholder --}}
+                                    <div x-show="!clientPreviewUrl">
+                                        @if ($foto_bersama)
+                                            {{-- Livewire temporary uploaded preview --}}
+                                            <div class="relative group cursor-pointer" @click="openLightbox('{{ $foto_bersama->temporaryUrl() }}', 'Pratinjau Foto Bersama')">
+                                                <img src="{{ $foto_bersama->temporaryUrl() }}" alt="Preview Foto Bersama" class="w-full aspect-video sm:h-48 object-cover rounded-lg shadow-xs" />
+                                                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex flex-col items-center justify-center text-white gap-1.5">
+                                                    <flux:icon icon="magnifying-glass-plus" class="size-6 text-white drop-shadow" />
+                                                    <span class="text-xs font-semibold bg-black/60 px-2.5 py-1 rounded-full">Klik untuk perbesar</span>
+                                                </div>
+                                            </div>
+                                        @elseif ($this->tim?->foto_bersama)
+                                            {{-- Existing saved photo --}}
+                                            <div class="relative group cursor-pointer" @click="openLightbox('{{ \Illuminate\Support\Facades\Storage::url($this->tim->foto_bersama) }}', 'Foto Bersama {{ addslashes($this->tim->nama_tim) }}')">
+                                                <img src="{{ \Illuminate\Support\Facades\Storage::url($this->tim->foto_bersama) }}" alt="Foto Bersama {{ $this->tim->nama_tim }}" class="w-full aspect-video sm:h-48 object-cover rounded-lg shadow-xs transition-transform duration-200 group-hover:scale-[1.01]" />
+                                                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex flex-col items-center justify-center text-white gap-1.5">
+                                                    <flux:icon icon="magnifying-glass-plus" class="size-6 text-white drop-shadow" />
+                                                    <span class="text-xs font-semibold bg-black/60 px-2.5 py-1 rounded-full">Klik untuk perbesar</span>
+                                                </div>
+                                                <div class="absolute top-2 right-2 z-10" @click.stop>
+                                                    <button 
+                                                        type="button" 
+                                                        wire:click="hapusFotoBersama" 
+                                                        wire:confirm="Yakin ingin menghapus foto bersama tim?" 
+                                                        class="p-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md transition-colors"
+                                                        title="Hapus foto"
+                                                    >
+                                                        <flux:icon icon="trash" class="size-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        @else
+                                            {{-- Placeholder when no photo is uploaded --}}
+                                            <div class="py-6 flex flex-col items-center justify-center space-y-2 text-zinc-400">
+                                                <div class="size-12 rounded-full bg-zinc-200/70 dark:bg-zinc-700/60 flex items-center justify-center text-zinc-500 dark:text-zinc-400">
+                                                    <flux:icon icon="camera" class="size-6" />
+                                                </div>
+                                                <div class="text-xs font-medium text-zinc-600 dark:text-zinc-300">Belum ada foto bersama</div>
+                                                <div class="text-[11px] text-zinc-400 max-w-[220px] leading-tight">Foto ini akan tampil di profil tim dan identitas tim di sistem.</div>
+                                            </div>
+                                        @endif
+                                    </div>
+
+                                    {{-- Livewire Uploading Overlay --}}
+                                    <div wire:loading wire:target="foto_bersama" class="absolute inset-0 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-2xs flex flex-col items-center justify-center gap-2 z-20">
+                                        <svg class="animate-spin size-6 text-[#3B71CA]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span class="text-xs font-medium text-[#3B71CA] dark:text-blue-400">Mengunggah pratinjau foto...</span>
+                                    </div>
+
+                                    {{-- Upload & Action Controls --}}
                                     <div class="mt-3 flex items-center justify-center gap-2">
                                         <label for="foto-bersama-input-akun" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer shadow-2xs transition-all">
                                             <flux:icon icon="arrow-up-tray" class="size-3.5 text-zinc-500" />
-                                            <span>{{ $this->tim?->foto_bersama || $foto_bersama ? 'Ganti Foto' : 'Unggah Foto' }}</span>
+                                            <span x-text="(clientPreviewUrl || '{{ $this->tim?->foto_bersama }}' || '{{ $foto_bersama }}') ? 'Ganti Foto' : 'Unggah Foto'"></span>
                                         </label>
                                         <input 
                                             id="foto-bersama-input-akun" 
                                             type="file" 
                                             wire:model="foto_bersama" 
+                                            @change="handleFileChange($event)"
                                             accept="image/jpeg,image/png,image/webp,image/jpg" 
                                             class="hidden" 
                                         />
                                         
-                                        @if ($foto_bersama)
+                                        <template x-if="clientPreviewUrl">
                                             <button 
                                                 type="button" 
-                                                wire:click="$set('foto_bersama', null)" 
-                                                class="px-2.5 py-1.5 text-xs text-zinc-500 hover:text-red-600 transition-colors"
+                                                @click="clearFile('foto-bersama-input-akun'); $wire.set('foto_bersama', null)" 
+                                                class="px-2.5 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 transition-colors"
                                             >
                                                 Batal
                                             </button>
-                                        @endif
+                                        </template>
+                                        <div x-show="!clientPreviewUrl">
+                                            @if ($foto_bersama)
+                                                <button 
+                                                    type="button" 
+                                                    wire:click="$set('foto_bersama', null)" 
+                                                    class="px-2.5 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 transition-colors"
+                                                >
+                                                    Batal
+                                                </button>
+                                            @endif
+                                        </div>
                                     </div>
 
-                                    {{-- Loading Indicator --}}
-                                    <div wire:loading wire:target="foto_bersama" class="text-xs text-blue-500 dark:text-blue-400 mt-2 font-medium">
-                                        Mengunggah pratinjau foto...
-                                    </div>
                                     @error('foto_bersama')
-                                        <div class="text-xs text-red-500 mt-1.5">{{ $message }}</div>
+                                        <div class="text-xs text-red-500 mt-1.5 font-medium">{{ $message }}</div>
                                     @enderror
                                 </div>
+
+                                {{-- Lightbox / Fullscreen Preview Image Modal --}}
+                                <template x-teleport="body">
+                                    <div 
+                                        x-show="previewModalOpen" 
+                                        x-cloak
+                                        @keydown.escape.window="previewModalOpen = false"
+                                        class="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm transition-opacity"
+                                        x-transition:enter="ease-out duration-200"
+                                        x-transition:enter-start="opacity-0"
+                                        x-transition:enter-end="opacity-100"
+                                        x-transition:leave="ease-in duration-150"
+                                        x-transition:leave-start="opacity-100"
+                                        x-transition:leave-end="opacity-0"
+                                    >
+                                        <div 
+                                            @click.away="previewModalOpen = false"
+                                            class="relative max-w-4xl w-full max-h-[92vh] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 flex flex-col"
+                                            x-transition:enter="ease-out duration-200"
+                                            x-transition:enter-start="opacity-0 scale-95"
+                                            x-transition:enter-end="opacity-100 scale-100"
+                                            x-transition:leave="ease-in duration-150"
+                                            x-transition:leave-start="opacity-100 scale-100"
+                                            x-transition:leave-end="opacity-0 scale-95"
+                                        >
+                                            {{-- Header --}}
+                                            <div class="flex items-center justify-between px-5 py-3.5 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="size-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-[#3B71CA] flex items-center justify-center">
+                                                        <flux:icon icon="photo" class="size-4" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 class="font-semibold text-sm text-zinc-900 dark:text-zinc-100" x-text="previewModalTitle">Pratinjau Foto Tim</h3>
+                                                        <p class="text-[11px] text-zinc-500">Pratinjau gambar bersama tim ukuran penuh</p>
+                                                    </div>
+                                                </div>
+                                                <div class="flex items-center gap-2">
+                                                    <a 
+                                                        :href="previewModalSrc" 
+                                                        target="_blank" 
+                                                        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                                                        title="Buka gambar di tab baru"
+                                                    >
+                                                        <flux:icon icon="arrow-top-right-on-square" class="size-3.5" />
+                                                        <span>Tab Baru</span>
+                                                    </a>
+                                                    <button 
+                                                        type="button" 
+                                                        @click="previewModalOpen = false"
+                                                        class="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                                                    >
+                                                        <flux:icon icon="x-mark" class="size-5" />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {{-- Image Display Area --}}
+                                            <div class="p-4 sm:p-6 bg-zinc-950/5 dark:bg-black/40 flex-1 overflow-auto flex items-center justify-center min-h-[250px]">
+                                                <img 
+                                                    :src="previewModalSrc" 
+                                                    alt="Pratinjau Foto Resolusi Penuh" 
+                                                    class="max-h-[70vh] w-auto max-w-full rounded-xl object-contain shadow-md mx-auto"
+                                                />
+                                            </div>
+
+                                            {{-- Footer --}}
+                                            <div class="flex items-center justify-between px-5 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/20 text-xs text-zinc-500 shrink-0">
+                                                <span class="hidden sm:inline">Tekan <kbd class="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 font-mono text-[10px]">ESC</kbd> untuk menutup</span>
+                                                <span class="sm:hidden">Sentuh tombol untuk keluar</span>
+                                                <flux:button size="sm" variant="ghost" @click="previewModalOpen = false">
+                                                    Tutup
+                                                </flux:button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
                             </div>
 
                             <form wire:submit="updateProfilTim" class="space-y-4">

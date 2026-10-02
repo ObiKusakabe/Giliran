@@ -122,6 +122,19 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
         isSaturday: false,
 
         initCalendar() {
+            if (!this.$refs.kalender) {
+                setTimeout(() => this.initCalendar(), 50);
+                return;
+            }
+            if (!window.FullCalendar || !window.FullCalendar.Calendar) {
+                setTimeout(() => this.initCalendar(), 50);
+                return;
+            }
+            if (this.calendar) {
+                this.calendar.destroy();
+                this.calendar = null;
+            }
+
             this.calendar = new FullCalendar.Calendar(this.$refs.kalender, {
                 initialView: 'dayGridMonth',
                 locale: FullCalendar.idLocale,
@@ -210,9 +223,10 @@ new #[Title('Kalender')] #[Layout('layouts.admin')] class extends Component {
             if (this.calendar) this.calendar.refetchEvents();
         }
     }"
-    x-init="$watch('$wire.viewMode', v => { if (v === 'kalender') $nextTick(() => { initCalendar() }) })"
+    x-init="if ($wire.viewMode === 'kalender') { $nextTick(() => initCalendar()) }; $watch('$wire.viewMode', v => { if (v === 'kalender') $nextTick(() => { initCalendar() }) })"
     @filter-changed.window="filterJenis = $event.detail.jenis; filterTimId = String($event.detail.timId ?? ''); refetchEvents()"
     @sidebar-toggled.window="setTimeout(() => { if (calendar) calendar.updateSize() }, 220)"
+    x-destroy="if (calendar) { calendar.destroy(); calendar = null; }"
     class="flex flex-col gap-6"
 >
     {{-- Header --}}

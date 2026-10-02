@@ -1,10 +1,14 @@
 <?php
 
 use Livewire\Attributes\Lazy;
+use Livewire\Attributes\Reactive;
 use Livewire\Component;
 
 new #[Lazy] class extends Component {
+    #[Reactive]
     public string $filterJenis = '';
+
+    #[Reactive]
     public string $filterTimId = '';
     
     public function mount(string $filterJenis = '', string $filterTimId = ''): void
@@ -89,7 +93,20 @@ new #[Lazy] class extends Component {
         isSaturday: false,
 
         initCalendar() {
-            this.calendar = new FullCalendar.Calendar(this.\$refs.kalender, {
+            if (!this.$refs.kalender) {
+                setTimeout(() => this.initCalendar(), 50);
+                return;
+            }
+            if (!window.FullCalendar || !window.FullCalendar.Calendar) {
+                setTimeout(() => this.initCalendar(), 50);
+                return;
+            }
+            if (this.calendar) {
+                this.calendar.destroy();
+                this.calendar = null;
+            }
+
+            this.calendar = new FullCalendar.Calendar(this.$refs.kalender, {
                 initialView: 'dayGridMonth',
                 locale: FullCalendar.idLocale,
                 plugins: [
@@ -146,13 +163,16 @@ new #[Lazy] class extends Component {
                     }
                 },
                 events: (info, successCb, failureCb) => {
-                    const url = `/admin/kalender/events?start=${info.startStr}&end=${info.endStr}&tim_id=${this.filterTimId}`;
+                    const params = new URLSearchParams({
+                        start: info.startStr,
+                        end: info.endStr,
+                        tim_id: this.filterTimId || '',
+                        jenis: this.filterJenis || '',
+                    });
+                    const url = `/admin/kalender/events?${params.toString()}`;
                     fetch(url)
                         .then(r => r.json())
                         .then(data => {
-                            if (this.filterJenis) {
-                                data = data.filter(e => e.extendedProps.jenis === this.filterJenis);
-                            }
                             successCb(data);
                         })
                         .catch(failureCb);
@@ -170,15 +190,19 @@ new #[Lazy] class extends Component {
                 height: 'auto',
             });
             this.calendar.render();
+
+            this.$watch('filterJenis', () => this.refetchEvents());
+            this.$watch('filterTimId', () => this.refetchEvents());
         },
 
         refetchEvents() {
             if (this.calendar) this.calendar.refetchEvents();
         }
     }"
-    x-init="\$nextTick(() => initCalendar())"
-    @filter-changed.window="filterJenis = \$event.detail.jenis; filterTimId = String(\$event.detail.timId ?? ''); refetchEvents()"
+    x-init="$nextTick(() => initCalendar())"
+    @filter-changed.window="filterJenis = $event.detail.jenis; filterTimId = String($event.detail.timId ?? ''); refetchEvents()"
     @sidebar-toggled.window="setTimeout(() => { if (calendar) calendar.updateSize() }, 220)"
+    x-destroy="if (calendar) { calendar.destroy(); calendar = null; }"
 >
     <div class="p-4">
         <style>
@@ -365,6 +389,25 @@ new #[Lazy] class extends Component {
                     </div>
 
                     <div class="space-y-3">
+                        <template x-if="selectedEvent?.jenis === 'wfo'">
+                            <div class="space-y-2">
+                                <div>
+                                    <p class="text-xs text-zinc-500 font-medium mb-1">Jadwal</p>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300">
+                                        Work From Office (WFO)
+                                    </span>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-zinc-500 font-medium mb-1">Hari Rutin</p>
+                                    <p class="text-sm font-semibold" x-text="selectedEvent?.hari ?? '-'"></p>
+                                </div>
+                                <div x-show="selectedEvent?.periode">
+                                    <p class="text-xs text-zinc-500 font-medium mb-1">Periode WFO</p>
+                                    <p class="text-sm" x-text="selectedEvent?.periode ?? '-'"></p>
+                                </div>
+                            </div>
+                        </template>
+
                         <template x-if="selectedEvent?.jenis === 'adzan'">
                             <div>
                                 <p class="text-xs text-zinc-500 font-medium mb-1">Waktu Sholat</p>

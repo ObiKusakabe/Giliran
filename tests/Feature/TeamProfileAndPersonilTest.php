@@ -3,7 +3,9 @@
 use App\Models\Personil;
 use App\Models\Tim;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 test('tim user can access profil page', function () {
@@ -123,4 +125,119 @@ test('tim user can access jadwal-tim page and component renders without error', 
         ->test('pages::tim.jadwal-tim')
         ->assertSee('Jadwal Tim')
         ->assertSee('Tidak ada tugas mendatang');
+});
+
+test('tim user can access akun page with foto preview and lightbox modal', function () {
+    $tim = Tim::create(['nama_tim' => 'Tim Akun Test', 'status' => 'active']);
+    $user = User::factory()->create([
+        'name' => 'Tim Akun Test',
+        'role' => 'tim',
+        'tim_id' => $tim->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('tim.akun'))
+        ->assertOk()
+        ->assertSee('Foto Bersama Tim')
+        ->assertSee('Pratinjau Foto Tim')
+        ->assertSee('Informasi');
+});
+
+test('tim user can upload foto bersama and it synchronizes user name', function () {
+    Storage::fake('public');
+
+    $tim = Tim::create(['nama_tim' => 'Tim Lama', 'status' => 'active']);
+    $user = User::factory()->create([
+        'name' => 'Tim Lama',
+        'role' => 'tim',
+        'tim_id' => $tim->id,
+    ]);
+
+    $file = UploadedFile::fake()->image('tim_photo.jpg', 800, 600);
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::tim.akun')
+        ->set('nama_tim', 'Tim Baru Modern')
+        ->set('keterangan', 'Divisi Web Developer')
+        ->set('foto_bersama', $file)
+        ->call('updateProfilTim')
+        ->assertHasNoErrors()
+        ->assertDispatched('photo-saved');
+
+    $tim->refresh();
+    $user->refresh();
+
+    expect($tim->nama_tim)->toBe('Tim Baru Modern');
+    expect($tim->keterangan)->toBe('Divisi Web Developer');
+    expect($tim->foto_bersama)->not->toBeNull();
+    Storage::disk('public')->assertExists($tim->foto_bersama);
+
+    // Verify User model name is synchronized
+    expect($user->name)->toBe('Tim Baru Modern');
+});
+
+test('tim user can delete foto bersama', function () {
+    Storage::fake('public');
+
+    $path = UploadedFile::fake()->image('saved_photo.jpg')->store('tim-photos', 'public');
+
+    $tim = Tim::create([
+        'nama_tim' => 'Tim Hapus Foto',
+        'status' => 'active',
+        'foto_bersama' => $path,
+    ]);
+    $user = User::factory()->create([
+        'role' => 'tim',
+        'tim_id' => $tim->id,
+    ]);
+
+    Storage::disk('public')->assertExists($path);
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::tim.akun')
+        ->call('hapusFotoBersama')
+        ->assertHasNoErrors()
+        ->assertDispatched('photo-deleted');
+
+    $tim->refresh();
+    expect($tim->foto_bersama)->toBeNull();
+    Storage::disk('public')->assertMissing($path);
+});
+
+test('foto bersama upload validates max size', function () {
+    Storage::fake('public');
+
+    $tim = Tim::create(['nama_tim' => 'Tim Validasi', 'status' => 'active']);
+    $user = User::factory()->create(['role' => 'tim', 'tim_id' => $tim->id]);
+
+    $this->actingAs($user);
+
+    // Test oversize file (> 5MB = 5120KB)
+    $largeFile = UploadedFile::fake()->image('huge.jpg')->size(6000);
+
+    Livewire::test('pages::tim.akun')
+        ->set('foto_bersama', $largeFile)
+        ->call('updateProfilTim')
+        ->assertHasErrors(['foto_bersama']);
+});
+
+test('tim user can update email in akun page', function () {
+    $tim = Tim::create(['nama_tim' => 'Tim Email Test', 'status' => 'active']);
+    $user = User::factory()->create([
+        'role' => 'tim',
+        'tim_id' => $tim->id,
+        'email' => null,
+    ]);
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::tim.akun')
+        ->set('email', 'tim-baru@instansi.sch.id')
+        ->call('updateEmail')
+        ->assertHasNoErrors();
+
+    $user->refresh();
+    expect($user->email)->toBe('tim-baru@instansi.sch.id');
 });

@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\ExportController;
 use App\Http\Controllers\Admin\KalenderController;
 use App\Http\Controllers\Api\DevModeController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
+use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\HomeController;
 use App\Http\Middleware\EnsureTeamOnboardingCompleted;
 use Illuminate\Support\Facades\Route;
@@ -11,10 +12,22 @@ use Illuminate\Support\Facades\Route;
 // ── Halaman publik ────────────────────────────────────────────────────────────
 Route::view('/welcome', 'welcome')->name('home');
 
-// Override Fortify forgot-password POST to support email OR username
+// Override Fortify password reset flow to support email OR username & Email OTP
 Route::post('/forgot-password', [ForgotPasswordController::class, 'store'])
     ->middleware(['guest'])
     ->name('password.email');
+
+Route::post('/forgot-password/resend-otp', [ForgotPasswordController::class, 'resendOtp'])
+    ->middleware(['guest'])
+    ->name('password.resend-otp');
+
+Route::get('/reset-password/{token?}', [ResetPasswordController::class, 'create'])
+    ->middleware(['guest'])
+    ->name('password.reset');
+
+Route::post('/reset-password', [ResetPasswordController::class, 'store'])
+    ->middleware(['guest'])
+    ->name('password.update');
 
 // ── Redirect root ke dashboard sesuai role ────────────────────────────────────
 Route::middleware('auth')->get('/', HomeController::class)->name('home.redirect');

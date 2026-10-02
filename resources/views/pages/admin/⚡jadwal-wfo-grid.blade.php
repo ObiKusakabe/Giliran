@@ -1,8 +1,12 @@
 <?php
 
+use App\Models\AlokasiRuangan;
 use App\Models\JadwalWfo;
 use App\Models\PeriodeWfo;
+use App\Models\Ruangan;
 use App\Models\Tim;
+use App\Services\LraScheduler;
+use Carbon\Carbon;
 use Flux\Flux;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -149,6 +153,9 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
             'hari'           => $hari,
         ]);
 
+        // Auto-assign ruangan kosong di hari tersebut sepanjang periode jika tersedia
+        $this->autoAssignRoomIfAvailable($timId, $hari, $this->periodeDipilih);
+
         $tim = Tim::find($timId);
 
         // Kembalikan row baru ke Alpine supaya state client sync
@@ -169,9 +176,24 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
             return;
         }
 
-        JadwalWfo::where('id', $rowId)
-            ->where(fn ($q) => $q->whereHas('periodeWfo', fn ($q2) => $q2->where('id', $this->periodeId)))
-            ->delete();
+        $row = JadwalWfo::with('periodeWfo')->find($rowId);
+        if (! $row) {
+            return;
+        }
+
+        $timId = $row->tim_id;
+        $hari = $row->hari;
+        $periode = $row->periodeWfo ?? PeriodeWfo::find($this->periodeId);
+
+        // Hapus alokasi ruangan tim ini untuk hari terkait di seluruh periode
+        $dates = $this->getDatesForHari($periode, $hari);
+        if (! empty($dates)) {
+            AlokasiRuangan::where('tim_id', $timId)
+                ->whereIn('tanggal', $this->expandDateQueryFormats($dates))
+                ->delete();
+        }
+
+        $row->delete();
 
         $this->dispatch('row-dihapus', rowId: $rowId);
         $this->refreshGrid();
@@ -183,9 +205,21 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
             return;
         }
 
-        JadwalWfo::whereIn('id', $rowIds)
-            ->where(fn ($q) => $q->whereHas('periodeWfo', fn ($q2) => $q2->where('id', $this->periodeId)))
-            ->delete();
+        $periode = PeriodeWfo::find($this->periodeId);
+        $rows = JadwalWfo::whereIn('id', $rowIds)
+            ->where('periode_wfo_id', $this->periodeId)
+            ->get();
+
+        foreach ($rows as $row) {
+            $dates = $this->getDatesForHari($periode, $row->hari);
+            if (! empty($dates)) {
+                AlokasiRuangan::where('tim_id', $row->tim_id)
+                    ->whereIn('tanggal', $this->expandDateQueryFormats($dates))
+                    ->delete();
+            }
+        }
+
+        JadwalWfo::whereIn('id', $rows->pluck('id'))->delete();
 
         $this->refreshGrid();
     }
@@ -211,7 +245,7 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
             return;
         }
 
-        $row = JadwalWfo::find($rowId);
+        $row = JadwalWfo::with('periodeWfo')->find($rowId);
 
         if (! $row || $row->hari === $hariTujuan) {
             return;
@@ -230,8 +264,115 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
             return;
         }
 
+        $hariAsal = $row->hari;
+        $timId = $row->tim_id;
+        $periode = $row->periodeWfo ?? PeriodeWfo::find($this->periodeId);
+
+        // 1. Bersihkan alokasi ruangan di hari asal sepanjang periode
+        $datesAsal = $this->getDatesForHari($periode, $hariAsal);
+        if (! empty($datesAsal)) {
+            AlokasiRuangan::where('tim_id', $timId)
+                ->whereIn('tanggal', $this->expandDateQueryFormats($datesAsal))
+                ->delete();
+        }
+
+        // 2. Update hari di JadwalWfo
         $row->update(['hari' => $hariTujuan]);
+
+        // 3. Auto-assign ruangan kosong di hari tujuan (jika tersedia)
+        $this->autoAssignRoomIfAvailable($timId, $hariTujuan, $periode);
+
         $this->refreshGrid();
+    }
+
+    public const ISO_HARI_MAP = [
+        'senin' => 1,
+        'selasa' => 2,
+        'rabu' => 3,
+        'kamis' => 4,
+        'jumat' => 5,
+        'sabtu' => 6,
+    ];
+
+    private function getDatesForHari(?PeriodeWfo $periode, string $hari): array
+    {
+        if (! $periode || ! $periode->tanggal_mulai || ! $periode->tanggal_selesai) {
+            return [];
+        }
+
+        $targetIso = self::ISO_HARI_MAP[$hari] ?? null;
+        if (! $targetIso) {
+            return [];
+        }
+
+        $dates = [];
+        $cur = Carbon::parse($periode->tanggal_mulai)->copy();
+        $end = Carbon::parse($periode->tanggal_selesai)->copy();
+
+        while ($cur->lte($end)) {
+            if ($cur->dayOfWeekIso === $targetIso) {
+                $dates[] = $cur->toDateString();
+            }
+            $cur = $cur->copy()->addDay();
+        }
+
+        return $dates;
+    }
+
+    private function expandDateQueryFormats(array $dates): array
+    {
+        $expanded = [];
+        foreach ($dates as $d) {
+            $dStr = is_string($d) ? substr($d, 0, 10) : Carbon::parse($d)->toDateString();
+            $expanded[] = $dStr;
+            $expanded[] = $dStr.' 00:00:00';
+        }
+
+        return array_values(array_unique($expanded));
+    }
+
+    private function autoAssignRoomIfAvailable(int $timId, string $hari, ?PeriodeWfo $periode): void
+    {
+        if (! $periode || ! $periode->tanggal_mulai || ! $periode->tanggal_selesai) {
+            return;
+        }
+
+        $dates = $this->getDatesForHari($periode, $hari);
+        if (empty($dates)) {
+            return;
+        }
+
+        $availableRuangan = Ruangan::where('status', 'tersedia')->orderBy('id')->get();
+        if ($availableRuangan->isEmpty()) {
+            return;
+        }
+
+        $occupiedRuanganIds = AlokasiRuangan::whereIn('tanggal', $this->expandDateQueryFormats($dates))
+            ->pluck('ruangan_id')
+            ->unique()
+            ->toArray();
+
+        $freeRuangan = $availableRuangan->first(fn ($r) => ! in_array($r->id, $occupiedRuanganIds));
+
+        if ($freeRuangan) {
+            $tim = Tim::withCount('personil')->find($timId);
+            $expectedAttendance = $tim?->personil_count ?? null;
+
+            $records = [];
+            $now = now();
+            foreach ($dates as $tgl) {
+                $records[] = [
+                    'tim_id' => $timId,
+                    'ruangan_id' => $freeRuangan->id,
+                    'tanggal' => $tgl,
+                    'expected_attendance' => $expectedAttendance,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            AlokasiRuangan::insert($records);
+        }
     }
     
     /**
@@ -320,6 +461,14 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
         // Hapus jadwal lama untuk periode ini
         JadwalWfo::where('periode_wfo_id', $this->periodeId)->delete();
 
+        // Hapus alokasi ruangan lama untuk periode ini agar sinkron
+        if ($periode->tanggal_mulai && $periode->tanggal_selesai) {
+            AlokasiRuangan::whereBetween('tanggal', [
+                $periode->tanggal_mulai->toDateString(),
+                $periode->tanggal_selesai->toDateString(),
+            ])->delete();
+        }
+
         // Track frekuensi alokasi per tim (LRA algorithm)
         $timFrequency = [];
         foreach ($semuaTim as $tim) {
@@ -368,6 +517,28 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
             }
         }
 
+        // Auto-generate alokasi ruangan awal berdasarkan pola jadwal WFO yang baru
+        if ($periode->tanggal_mulai && $periode->tanggal_selesai) {
+            $scheduler = app(LraScheduler::class);
+            $tanggalList = $scheduler->expandTanggal(
+                Carbon::parse($periode->tanggal_mulai),
+                Carbon::parse($periode->tanggal_selesai)
+            );
+
+            $alokasiHasil = $scheduler->generateAlokasiRuangan($tanggalList, $periode->id);
+            if (! empty($alokasiHasil)) {
+                $now = now();
+                AlokasiRuangan::insert(array_map(fn ($r) => [
+                    'tim_id' => $r['tim_id'],
+                    'ruangan_id' => $r['ruangan_id'],
+                    'tanggal' => $r['tanggal'],
+                    'expected_attendance' => $r['expected_attendance'] ?? null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ], $alokasiHasil));
+            }
+        }
+
         $this->refreshGrid();
 
         // Close modal after successful generation
@@ -375,7 +546,7 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
 
         Flux::toast(
             variant: 'success',
-            text: 'Jadwal WFO berhasil di-generate! Total: '.count($created).' alokasi ('.$timPerHari.' tim × '.count(self::HARI).' hari).'
+            text: 'Jadwal WFO & alokasi ruangan berhasil di-generate! Total: '.count($created).' alokasi ('.$timPerHari.' tim × '.count(self::HARI).' hari).'
         );
     }
 

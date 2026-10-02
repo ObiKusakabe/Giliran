@@ -119,4 +119,137 @@ class OtpService
 
         return $remaining > 0 ? (int) $remaining : 0;
     }
+
+    /**
+     * Send Password Reset OTP to user's registered email.
+     */
+    public function sendPasswordResetOtp(User $user, ?string $token = null): bool
+    {
+        if (empty($user->email)) {
+            return false;
+        }
+
+        $otp = $this->generateOtp();
+        $expiresAt = now()->addMinutes(15);
+
+        $user->update([
+            'password_reset_otp' => $otp,
+            'password_reset_otp_expires_at' => $expiresAt,
+            'password_reset_otp_attempts' => 0,
+        ]);
+
+        $url = $token ? url(route('password.reset', [
+            'token' => $token,
+            'email' => $user->email,
+        ], false)) : null;
+
+        $username = $user->name ?: ($user->username ?: 'Pengguna');
+
+        try {
+            Mail::send('emails.reset-password', [
+                'otp' => $otp,
+                'username' => $username,
+                'expiresInMinutes' => 15,
+                'url' => $url,
+            ], function ($message) use ($user) {
+                $message->to($user->email)
+                    ->subject('Kode OTP Reset Password - Sistem Giliran WFO');
+            });
+
+            return true;
+        } catch (\Throwable $e) {
+            logger()->error('Failed to send password reset OTP email', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Verify Password Reset OTP code.
+     *
+     * @return array{valid: bool, message: string}
+     */
+    public function verifyPasswordResetOtp(User $user, string $otp): array
+    {
+        if (! $user->password_reset_otp || ! $user->password_reset_otp_expires_at) {
+            return [
+                'valid' => false,
+                'message' => 'Kode OTP tidak ditemukan atau telah kedaluwarsa. Silakan minta kode OTP baru.',
+            ];
+        }
+
+        if (now()->isAfter($user->password_reset_otp_expires_at)) {
+            $this->clearPasswordResetOtp($user);
+
+            return [
+                'valid' => false,
+                'message' => 'Kode OTP telah kedaluwarsa. Silakan minta kode OTP baru.',
+            ];
+        }
+
+        if ($user->password_reset_otp_attempts >= 5) {
+            $this->clearPasswordResetOtp($user);
+
+            return [
+                'valid' => false,
+                'message' => 'Terlalu banyak percobaan kode OTP yang salah. Silakan minta kode OTP baru.',
+            ];
+        }
+
+        if ($user->password_reset_otp !== trim($otp)) {
+            $user->increment('password_reset_otp_attempts');
+            $remaining = max(0, 5 - $user->password_reset_otp_attempts);
+
+            return [
+                'valid' => false,
+                'message' => "Kode OTP salah. Sisa kesempatan mencoba: {$remaining} kali.",
+            ];
+        }
+
+        return [
+            'valid' => true,
+            'message' => 'Kode OTP valid.',
+        ];
+    }
+
+    /**
+     * Clear Password Reset OTP after successful reset.
+     */
+    public function clearPasswordResetOtp(User $user): void
+    {
+        $user->update([
+            'password_reset_otp' => null,
+            'password_reset_otp_expires_at' => null,
+            'password_reset_otp_attempts' => 0,
+        ]);
+    }
+
+    /**
+     * Check if user can request a new Password Reset OTP (60 seconds cooldown).
+     */
+    public function canRequestPasswordResetOtp(User $user): bool
+    {
+        return $this->getPasswordResetOtpCooldownRemaining($user) <= 0;
+    }
+
+    /**
+     * Get remaining cooldown seconds before user can request a new Password Reset OTP.
+     */
+    public function getPasswordResetOtpCooldownRemaining(User $user): int
+    {
+        if (! $user->password_reset_otp_expires_at) {
+            return 0;
+        }
+
+        // OTP expires in 15 minutes (900 seconds). Cooldown is 60 seconds from generation.
+        // That means if remaining expiration > 840 seconds (900 - 60), cooldown is active.
+        $remainingSeconds = now()->diffInSeconds($user->password_reset_otp_expires_at, false);
+        $cooldown = $remainingSeconds - (15 * 60 - 60);
+
+        return $cooldown > 0 ? (int) $cooldown : 0;
+    }
 }

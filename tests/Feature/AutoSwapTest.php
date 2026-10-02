@@ -26,9 +26,9 @@ function buatSetupSwap(): array
     ]);
 
     $tim = Tim::create(['nama_tim' => 'Tim Swap']);
-    $p1 = Personil::create(['tim_id' => $tim->id, 'nama' => 'Personil A', 'status' => 'aktif']);
-    $p2 = Personil::create(['tim_id' => $tim->id, 'nama' => 'Personil B', 'status' => 'aktif']);
-    $p3 = Personil::create(['tim_id' => $tim->id, 'nama' => 'Personil C', 'status' => 'aktif']);
+    $p1 = Personil::create(['tim_id' => $tim->id, 'nama' => 'Personil A', 'status' => 'aktif', 'jenis_kelamin' => 'laki-laki']);
+    $p2 = Personil::create(['tim_id' => $tim->id, 'nama' => 'Personil B', 'status' => 'aktif', 'jenis_kelamin' => 'laki-laki']);
+    $p3 = Personil::create(['tim_id' => $tim->id, 'nama' => 'Personil C', 'status' => 'aktif', 'jenis_kelamin' => 'laki-laki']);
 
     // Jadwal WFO harus ada supaya ambilPersonilWfo() bisa menemukan kandidat pengganti
     JadwalWfo::create(['periode_wfo_id' => $periode->id, 'tim_id' => $tim->id, 'hari' => 'senin']);
@@ -85,8 +85,7 @@ test('berhalangan adzan: status diupdate dan pengganti ditemukan', function () {
     // Pesan harus menyebut pengganti ditemukan
     expect($hasil)->toContain('Pengganti ditemukan');
 
-    // Jadwal baru dibuat untuk pengganti
-    $jadwalBaru = JadwalAdzanKitab::where('tanggal', '2026-08-03')
+    $jadwalBaru = JadwalAdzanKitab::whereDate('tanggal', '2026-08-03')
         ->where('waktu_sholat', 'dhuhr')
         ->where('jenis_tugas', 'adzan')
         ->where('status_konfirmasi', 'menunggu')
@@ -143,10 +142,10 @@ test('berhalangan briefing: pengganti dari tim yang sama ditemukan', function ()
     expect($hasil)->toContain('Pengganti ditemukan');
 
     // Pengganti harus dari tim yang sama
-    $jadwalBaru = JadwalBriefing::where('tanggal', '2026-08-03')
+    $jadwalBaru = JadwalBriefing::whereDate('tanggal', '2026-08-03')
         ->where('sesi', 'pagi')
         ->where('tim_id', $tim->id)
-        ->where('status_konfirmasi', 'menunggu')
+        ->where('status_konfirmasi', 'siap')
         ->where('personil_id', '!=', $p1->id)
         ->first();
 

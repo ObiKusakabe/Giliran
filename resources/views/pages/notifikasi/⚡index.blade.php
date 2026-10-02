@@ -8,7 +8,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new #[Title('Notifikasi')] #[Layout('layouts.auth')] class extends Component {
+new #[Title('Notifikasi')] #[Layout('layouts.app', ['breadcrumbs' => [['label' => 'Notifikasi']]])] class extends Component {
     use WithPagination;
 
     #[Computed]
@@ -92,80 +92,102 @@ new #[Title('Notifikasi')] #[Layout('layouts.auth')] class extends Component {
     }
 }; ?>
 
-<div class="min-h-screen bg-zinc-50 dark:bg-zinc-900">
-    {{-- Topbar --}}
-    <header class="sticky top-0 z-20 border-b border-zinc-200/60 dark:border-zinc-700/60 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md h-14 flex items-center px-4 gap-3">
-        <a
-            href="{{ auth()->user()->isAdmin() ? route('admin.dashboard') : route('tim.jadwal') }}"
-            wire:navigate
-            class="p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700"
-        >
-            <flux:icon icon="arrow-left" class="h-5 w-5 text-zinc-500" />
-        </a>
-        <span class="font-semibold text-sm text-zinc-900 dark:text-zinc-100 flex-1">Notifikasi</span>
-
-        @if ($this->jumlahBelumDibaca > 0)
-            <flux:button size="sm" variant="ghost" wire:click="tandaiSemuaDibaca">
-                Tandai semua dibaca
-            </flux:button>
-        @endif
-    </header>
-
-    <div class="max-w-3xl mx-auto px-4 py-6">
-        @if ($this->notifikasiList->isEmpty())
-            <x-empty-state
-                icon="bell"
-                title="Tidak ada notifikasi"
-                description="Kamu belum memiliki notifikasi apapun."
+<div class="max-w-4xl mx-auto space-y-6">
+    {{-- Header Section --}}
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-zinc-200 dark:border-zinc-800">
+        <div class="flex items-center gap-3">
+            <flux:button 
+                variant="ghost" 
+                size="sm" 
+                icon="arrow-left" 
+                href="{{ auth()->user()->isAdmin() ? route('admin.dashboard') : route('tim.jadwal') }}" 
+                wire:navigate 
+                title="Kembali"
+                class="sm:hidden"
             />
-        @else
-            <div class="flex flex-col gap-1">
-                @foreach ($this->notifikasiList as $notif)
-                    <button
-                        wire:click="tandaiDibaca({{ $notif->id }})"
-                        class="w-full text-left flex items-start gap-3 px-4 py-3 rounded-lg transition-colors
-                            {{ $notif->dibaca ? 'bg-white dark:bg-zinc-800' : 'bg-blue-50 dark:bg-blue-900/20' }}
-                            hover:bg-zinc-100 dark:hover:bg-zinc-700/50"
-                    >
-                        {{-- Ikon tipe --}}
-                        <div class="flex-shrink-0 mt-0.5">
-                            @if ($notif->tipe === 'pengganti')
-                                <span class="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
-                                    <flux:icon icon="arrow-path" class="h-4 w-4 text-amber-600" />
-                                </span>
-                            @elseif ($notif->tipe === 'reminder')
-                                <span class="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 dark:bg-purple-900/30">
-                                    <flux:icon icon="clock" class="h-4 w-4 text-purple-600" />
-                                </span>
-                            @else
-                                <span class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
-                                    <flux:icon icon="bell" class="h-4 w-4 text-blue-600" />
-                                </span>
-                            @endif
-                        </div>
-
-                        <div class="flex-1 min-w-0">
-                            <p class="text-sm text-zinc-900 dark:text-zinc-100 {{ $notif->dibaca ? '' : 'font-medium' }}">
-                                {{ $notif->pesan }}
-                            </p>
-                            <p class="text-xs text-zinc-400 mt-0.5">
-                                {{ $notif->terkirim_pada->translatedFormat('l, d F Y') }}
-                            </p>
-                        </div>
-
-                        {{-- Dot belum dibaca --}}
-                        @if (! $notif->dibaca)
-                            <span class="flex-shrink-0 mt-2 h-2 w-2 rounded-full bg-[#3B71CA]"></span>
-                        @endif
-                    </button>
-                @endforeach
+            <div>
+                <flux:heading size="xl" class="flex items-center gap-2.5">
+                    <span>Semua Notifikasi</span>
+                    @if ($this->jumlahBelumDibaca > 0)
+                        <span class="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-xs font-semibold">
+                            {{ $this->jumlahBelumDibaca }} baru
+                        </span>
+                    @endif
+                </flux:heading>
+                <flux:subheading class="text-xs sm:text-sm mt-0.5">Daftar riwayat pemberitahuan jadwal, alokasi ruangan, dan tugas Anda</flux:subheading>
             </div>
+        </div>
 
-            @if ($this->notifikasiList->hasPages())
-                <div class="mt-4">
-                    {{ $this->notifikasiList->links() }}
-                </div>
+        <div class="flex items-center gap-2 self-start sm:self-auto">
+            @if ($this->jumlahBelumDibaca > 0)
+                <flux:button size="sm" variant="subtle" wire:click="tandaiSemuaDibaca" icon="check">
+                    Tandai Semua Dibaca
+                </flux:button>
             @endif
-        @endif
+        </div>
     </div>
+
+    {{-- Notification List --}}
+    @if ($this->notifikasiList->isEmpty())
+        <div class="py-12 text-center bg-white dark:bg-zinc-800/50 rounded-2xl border border-zinc-200 dark:border-zinc-700 p-8 shadow-xs">
+            <div class="mx-auto mb-3 flex size-14 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500">
+                <flux:icon icon="bell-slash" class="size-7" />
+            </div>
+            <flux:heading size="md">Tidak ada notifikasi</flux:heading>
+            <flux:subheading class="mt-1 max-w-sm mx-auto text-xs">Kamu belum memiliki riwayat notifikasi apapun saat ini.</flux:subheading>
+        </div>
+    @else
+        <div class="space-y-2.5">
+            @foreach ($this->notifikasiList as $notif)
+                <div
+                    wire:key="notif-page-{{ $notif->id }}"
+                    wire:click="tandaiDibaca({{ $notif->id }})"
+                    class="flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer shadow-xs {{ ! $notif->dibaca ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50 hover:border-blue-300 dark:hover:border-blue-800' : 'bg-white dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600' }}"
+                >
+                    {{-- Icon Tipe --}}
+                    <div class="flex size-9 shrink-0 items-center justify-center rounded-lg mt-0.5 {{ ! $notif->dibaca ? 'bg-blue-600 text-white shadow-xs' : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-300' }}">
+                        @if ($notif->tipe === 'pengganti')
+                            <flux:icon icon="arrows-right-left" class="size-4.5" />
+                        @elseif ($notif->tipe === 'reminder')
+                            <flux:icon icon="clock" class="size-4.5" />
+                        @elseif ($notif->tipe === 'jadwal')
+                            <flux:icon icon="calendar-days" class="size-4.5" />
+                        @else
+                            <flux:icon icon="bell" class="size-4.5" />
+                        @endif
+                    </div>
+
+                    {{-- Konten --}}
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-[10px]">
+                                {{ $notif->tipe ?: 'Umum' }}
+                            </span>
+                            <span class="text-[11px] text-zinc-400 dark:text-zinc-500 shrink-0">
+                                {{ ($notif->terkirim_pada ?? $notif->created_at)->diffForHumans() }}
+                            </span>
+                        </div>
+                        <p class="text-sm text-zinc-900 dark:text-zinc-100 mt-1 leading-relaxed {{ ! $notif->dibaca ? 'font-medium' : '' }}">
+                            {{ $notif->pesan }}
+                        </p>
+                        <p class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1.5 flex items-center gap-1">
+                            <flux:icon icon="calendar" class="size-3" />
+                            <span>{{ ($notif->terkirim_pada ?? $notif->created_at)->translatedFormat('l, d F Y H:i') }}</span>
+                        </p>
+                    </div>
+
+                    {{-- Unread Dot Indicator --}}
+                    @if (! $notif->dibaca)
+                        <span class="size-2.5 shrink-0 rounded-full bg-blue-600 dark:bg-blue-400 mt-2 ring-4 ring-blue-100 dark:ring-blue-900/40"></span>
+                    @endif
+                </div>
+            @endforeach
+        </div>
+
+        @if ($this->notifikasiList->hasPages())
+            <div class="pt-4">
+                {{ $this->notifikasiList->links() }}
+            </div>
+        @endif
+    @endif
 </div>

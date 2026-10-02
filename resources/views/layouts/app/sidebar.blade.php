@@ -206,7 +206,7 @@
                     <flux:sidebar.item icon="clipboard-document-list" :href="route('tim.notulen.history')" :current="request()->routeIs('tim.notulen.*')" wire:navigate.hover>
                         Notulen Briefing
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="user-group" :href="route('tim.profil')" :current="request()->routeIs('tim.profil') || request()->routeIs('tim.akun')" wire:navigate.hover>
+                    <flux:sidebar.item icon="user-group" :href="route('tim.akun')" :current="request()->routeIs('tim.profil') || request()->routeIs('tim.akun')" wire:navigate.hover>
                         Profil Tim
                     </flux:sidebar.item>
                 @endif
@@ -527,8 +527,8 @@
             </div>
         </flux:footer>
 
-        {{-- Dev Mode Floating UI (only in local/dev environment) --}}
-        @if (app()->environment('local') || config('app.debug'))
+        {{-- Dev Mode Floating UI (only in local/dev environment, admin role, and admin dashboard) --}}
+        @if ((app()->environment('local') || config('app.debug')) && auth()->user()?->hasRole('admin') && request()->routeIs('admin.dashboard'))
             <x-dev-mode-floating />
         @endif
 

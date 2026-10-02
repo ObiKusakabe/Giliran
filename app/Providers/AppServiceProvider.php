@@ -50,18 +50,25 @@ class AppServiceProvider extends ServiceProvider
     protected function configurePasswordReset(): void
     {
         ResetPassword::toMailUsing(function (object $notifiable, string $token) {
-            $url = url(route('password.reset', [
+            $params = [
                 'token' => $token,
                 'email' => $notifiable->getEmailForPasswordReset(),
-            ], false));
+            ];
 
-            $username = $notifiable->nama ?? $notifiable->username ?? 'Pengguna';
-            $expiresInMinutes = config('auth.passwords.'.config('auth.defaults.passwords').'.expire', 60);
+            if (! empty($notifiable->password_reset_otp)) {
+                $params['otp'] = $notifiable->password_reset_otp;
+            }
+
+            $url = url(route('password.reset', $params, false));
+
+            $username = $notifiable->nama ?? $notifiable->name ?? $notifiable->username ?? 'Pengguna';
+            $expiresInMinutes = 15;
 
             return (new MailMessage)
-                ->subject('Atur Ulang Kata Sandi - '.config('app.name'))
+                ->subject('Kode OTP Reset Password - '.config('app.name'))
                 ->view('emails.reset-password', [
                     'url' => $url,
+                    'otp' => $notifiable->password_reset_otp,
                     'username' => $username,
                     'expiresInMinutes' => $expiresInMinutes,
                 ]);

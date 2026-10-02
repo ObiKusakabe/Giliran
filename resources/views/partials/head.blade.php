@@ -232,10 +232,62 @@
         background-color: inherit !important;
     }
     
-    /* Flux modal backdrop blur */
-    [data-flux-modal-overlay] {
-        backdrop-filter: blur(4px) !important;
-        -webkit-backdrop-filter: blur(4px) !important;
+    /* Modal & Dialog Backdrop Blur Effect (Only for true modals & flyouts, NEVER for tooltips, toasts, or popovers) */
+    dialog:modal::backdrop,
+    [data-flux-modal] > dialog::backdrop,
+    [data-flux-modal] dialog::backdrop,
+    [data-flux-modal] > dialog[open]::backdrop,
+    [data-flux-modal] dialog[open]::backdrop,
+    ui-modal dialog::backdrop,
+    ui-modal::backdrop,
+    [data-flux-flyout]::backdrop,
+    [data-flux-modal-overlay],
+    [data-flux-overlay] {
+        background-color: rgba(15, 23, 42, 0.45) !important;
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+    }
+
+    .dark dialog:modal::backdrop,
+    .dark [data-flux-modal] > dialog::backdrop,
+    .dark [data-flux-modal] dialog::backdrop,
+    .dark [data-flux-modal] > dialog[open]::backdrop,
+    .dark [data-flux-modal] dialog[open]::backdrop,
+    .dark ui-modal dialog::backdrop,
+    .dark ui-modal::backdrop,
+    .dark [data-flux-flyout]::backdrop,
+    .dark [data-flux-modal-overlay],
+    .dark [data-flux-overlay] {
+        background-color: rgba(0, 0, 0, 0.65) !important;
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+    }
+
+    /* Strict guard: Tooltip, Toast, Dropdown, Menu, and non-modal popovers must NEVER show backdrop or blur */
+    [popover]:not(dialog)::backdrop,
+    [data-flux-toast]::backdrop,
+    [data-flux-toast-container]::backdrop,
+    [data-flux-tooltip]::backdrop,
+    ui-tooltip::backdrop,
+    ui-toast::backdrop,
+    ui-dropdown::backdrop,
+    [data-flux-menu]::backdrop,
+    [data-flux-dropdown]::backdrop {
+        display: none !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    /* Mobile Drawer Sidebar & Backdrop: Drawer (z-70) is always on top of Backdrop (z-65) and table headers */
+    @media (max-width: 1023px) {
+        [data-flux-sidebar-backdrop] {
+            z-index: 65 !important;
+        }
+        ui-sidebar[data-flux-sidebar],
+        [data-flux-sidebar] {
+            z-index: 70 !important;
+        }
     }
 </style>
 
