@@ -28,18 +28,19 @@
         <flux:menu.separator />
         <flux:menu.radio.group>
             <flux:menu.item :href="route('profile.edit')" icon="cog" wire:navigate.hover>
-                {{ __('Settings') }}
+                Pengaturan
             </flux:menu.item>
             <form method="POST" action="{{ route('logout') }}" class="w-full">
                 @csrf
                 <flux:menu.item
                     as="button"
                     type="submit"
+                    variant="danger"
                     icon="arrow-right-start-on-rectangle"
-                    class="w-full cursor-pointer"
+                    class="w-full cursor-pointer !text-red-600 dark:!text-red-500 [&_[data-flux-menu-item-icon]]:!text-red-600 dark:[&_[data-flux-menu-item-icon]]:!text-red-500"
                     data-test="logout-button"
                 >
-                    {{ __('Log out') }}
+                    Keluar
                 </flux:menu.item>
             </form>
         </flux:menu.radio.group>

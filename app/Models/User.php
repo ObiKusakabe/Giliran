@@ -40,6 +40,7 @@ class User extends Authenticatable implements PasskeyUser
         'username',
         'name',
         'email',
+        'avatar',
         'email_verification_otp',
         'email_verification_otp_expires_at',
         'password_reset_otp',

@@ -14,6 +14,7 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
     public string $tanggal_selesai = '';
     public string $keterangan      = '';
     public ?int $aktifkanId        = null;
+    public ?int $hapusId           = null;
 
     public string $sortField = 'tanggal_mulai';
     public string $sortDir   = 'desc';
@@ -121,6 +122,35 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
         unset($this->periodeList, $this->periodeAktif, $this->totalNonaktif);
     }
 
+    public function konfirmasiHapus(int $id): void
+    {
+        $this->hapusId = $id;
+        $this->modal('konfirmasi-hapus')->show();
+    }
+
+    public function hapus(): void
+    {
+        if (! $this->hapusId) {
+            return;
+        }
+
+        $periode = PeriodeWfo::findOrFail($this->hapusId);
+        
+        if ($periode->status === 'aktif') {
+            Flux::toast(variant: 'danger', text: 'Periode aktif tidak dapat dihapus. Nonaktifkan terlebih dahulu.');
+            $this->modal('konfirmasi-hapus')->close();
+            $this->hapusId = null;
+            return;
+        }
+
+        $periode->delete();
+
+        Flux::toast(variant: 'success', text: 'Periode WFO berhasil dihapus.');
+        $this->modal('konfirmasi-hapus')->close();
+        $this->hapusId = null;
+        unset($this->periodeList, $this->totalPeriode, $this->totalNonaktif);
+    }
+
     private function resetForm(): void
     {
         $this->editId          = null;
@@ -132,7 +162,7 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
 }; ?>
 
 <div class="flex flex-col gap-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
             <flux:heading size="xl">Periode WFO</flux:heading>
             <flux:text class="text-zinc-500">Kelola periode rotasi WFO - 1 periode aktif menjadi acuan penjadwalan.</flux:text>
@@ -190,9 +220,8 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
     </div>
 
     <flux:card class="p-0 overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
-        <div class="w-full overflow-x-auto scrollbar-thin">
-            <div class="min-w-[620px] px-5 py-1">
-                <flux:table>
+        <div class="px-5">
+            <flux:table>
                     <flux:table.columns class="bg-white dark:bg-zinc-900">
                         <flux:table.column class="whitespace-nowrap">Keterangan</flux:table.column>
                         <flux:table.column class="cursor-pointer select-none whitespace-nowrap" wire:click="sortBy('tanggal_mulai')">
@@ -220,13 +249,14 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
                     </flux:table.columns>
                     <flux:table.rows>
                         @forelse ($this->periodeList as $periode)
-                            <flux:table.row class="{{ $periode->isAktif() ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : '' }}">
+                            <flux:table.row class="group hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
                                 <flux:table.cell class="font-medium text-zinc-900 dark:text-zinc-100 whitespace-nowrap">{{ $periode->keterangan ?? '—' }}</flux:table.cell>
                                 <flux:table.cell class="text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{ $periode->tanggal_mulai->translatedFormat('d M Y') }}</flux:table.cell>
                                 <flux:table.cell class="text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{ $periode->tanggal_selesai->translatedFormat('d M Y') }}</flux:table.cell>
                                 <flux:table.cell align="center" class="whitespace-nowrap"><x-status-badge :status="$periode->status" /></flux:table.cell>
                                 <flux:table.cell align="end" class="whitespace-nowrap">
                                     <div class="flex items-center justify-end gap-1.5">
+                                        <div class="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                                         <flux:button 
                                             size="xs" 
                                             variant="ghost" 
@@ -254,7 +284,20 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
                                                     <flux:icon icon="arrow-path" class="size-4 animate-spin" />
                                                 </span>
                                             </flux:button>
-                                        @else
+                                            <flux:button 
+                                                size="xs" 
+                                                variant="danger" 
+                                                icon="trash"
+                                                wire:click="konfirmasiHapus({{ $periode->id }})"
+                                                wire:loading.attr="disabled" 
+                                                wire:target="konfirmasiHapus({{ $periode->id }})"
+                                                title="Hapus Periode"
+                                            >
+                                                <span class="sr-only">Hapus</span>
+                                            </flux:button>
+                                        @endif
+                                        </div>
+                                        @if ($periode->isAktif())
                                             <span class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold px-2">Sedang Aktif</span>
                                         @endif
                                     </div>
@@ -268,8 +311,7 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
                             </flux:table.row>
                         @endforelse
                     </flux:table.rows>
-                </flux:table>
-            </div>
+            </flux:table>
         </div>
     </flux:card>
 
@@ -315,6 +357,19 @@ new #[Title('Periode WFO')] #[Layout('layouts.admin')] class extends Component {
             <div class="flex justify-end gap-2">
                 <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
                 <flux:button variant="primary" wire:click="aktifkan" wire:loading.attr="disabled" wire:target="aktifkan">Ya, Aktifkan</flux:button>
+            </div>
+        </div>
+    </flux:modal>
+
+    <flux:modal name="konfirmasi-hapus" class="max-w-sm">
+        <div class="flex flex-col gap-4 p-1">
+            <div>
+                <flux:heading size="lg">Hapus Periode?</flux:heading>
+                <flux:text class="mt-1 text-zinc-500">Periode ini akan dihapus permanen. Jadwal yang terikat pada periode ini juga mungkin akan terhapus.</flux:text>
+            </div>
+            <div class="flex justify-end gap-2">
+                <flux:modal.close><flux:button variant="ghost">Batal</flux:button></flux:modal.close>
+                <flux:button variant="danger" wire:click="hapus" wire:loading.attr="disabled" wire:target="hapus">Ya, Hapus</flux:button>
             </div>
         </div>
     </flux:modal>

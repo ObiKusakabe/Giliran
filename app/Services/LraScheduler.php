@@ -36,8 +36,6 @@ class LraScheduler
             1, 2, 3, 4 => ['dhuhr', 'asr'],
             // Jumat: Ashar saja
             5 => ['asr'],
-            // Sabtu: Zuhur saja
-            6 => ['dhuhr'],
             default => [],
         };
     }
@@ -509,7 +507,7 @@ class LraScheduler
         $firstWeekDates = [];
         foreach ($tanggalList as $tanggal) {
             $namaHari = $this->namaHariIndonesia($tanggal);
-            if (! isset($seenDays[$namaHari]) && in_array($namaHari, ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'])) {
+            if (! isset($seenDays[$namaHari]) && in_array($namaHari, ['senin', 'selasa', 'rabu', 'kamis', 'jumat'])) {
                 $seenDays[$namaHari] = true;
                 $firstWeekDates[] = $tanggal;
             }
@@ -525,7 +523,8 @@ class LraScheduler
                 ->whereHas('tim', fn ($q) => $q->where('status', 'active')->whereNull('deleted_at'))
                 ->pluck('tim_id');
 
-            $ruanganDipakai = [];
+            // Track capacity used per room for this day
+            $ruanganCapacityUsed = [];
 
             foreach ($timIds as $timId) {
                 if (! isset($counterPerTim[$timId])) {
@@ -537,7 +536,7 @@ class LraScheduler
                 $ruanganTerpilih = $this->pilihRuangan(
                     $ruangans,
                     $counterPerTim[$timId],
-                    $ruanganDipakai,
+                    $ruanganCapacityUsed,
                     $expectedAttendance
                 );
 
@@ -554,7 +553,8 @@ class LraScheduler
                 $counterPerTim[$timId][$ruanganTerpilih->id] =
                     ($counterPerTim[$timId][$ruanganTerpilih->id] ?? 0) + 1;
 
-                $ruanganDipakai[] = $ruanganTerpilih->id;
+                // Accumulate capacity used for the room
+                $ruanganCapacityUsed[$ruanganTerpilih->id] = ($ruanganCapacityUsed[$ruanganTerpilih->id] ?? 0) + $expectedAttendance;
             }
         }
 
@@ -621,59 +621,60 @@ class LraScheduler
     }
 
     /**
-     * Pilih ruangan LRA yang belum dipakai hari ini dan kapasitas cukup.
+     * Pilih ruangan LRA yang belum penuh kapasitasnya.
      *
-     * FASE 4.4 ENHANCEMENT: Prioritizes rooms where kapasitas >= expectedAttendance.
-     * Fallback: If no suitable room, picks largest available room (best effort).
-     *
-     * Algorithm:
-     * 1. Filter out sudahDipakai (same day conflict)
-     * 2. Try to find rooms with sufficient capacity
-     * 3. If found, apply LRA (shuffle + sort by counter)
-     * 4. If not found, fallback to largest room available
+     * Jika ada ruangan dengan sisa kapasitas >= expectedAttendance, utamakan itu.
+     * Jika semua ruangan tidak cukup kapasitasnya, cari sisa kapasitas terbesar (paling sedikit defisitnya).
      *
      * @param  Collection<int, Ruangan>  $ruangans
      * @param  array<int, int>  $counter  [ruangan_id => count]
-     * @param  int[]  $sudahDipakai
-     * @param  int  $expectedAttendance  Expected number of attendees
+     * @param  array<int, int>  $ruanganCapacityUsed  [ruangan_id => used_capacity]
+     * @param  int  $expectedAttendance
      */
     private function pilihRuangan(
         Collection $ruangans,
         array $counter,
-        array $sudahDipakai,
+        array $ruanganCapacityUsed,
         int $expectedAttendance = 0
     ): ?Ruangan {
-        // Step 1: Filter out already used rooms (same day)
-        $available = $ruangans->reject(fn ($r) => in_array($r->id, $sudahDipakai));
-
-        if ($available->isEmpty()) {
+        if ($ruangans->isEmpty()) {
             return null;
         }
 
-        // Step 2: Try to find rooms with sufficient capacity
+        // Tambahkan atribut sisa kapasitas pada setiap ruangan saat ini
+        $mappedRuangans = $ruangans->map(function ($r) use ($ruanganCapacityUsed) {
+            $used = $ruanganCapacityUsed[$r->id] ?? 0;
+            $r->sisa_kapasitas = $r->kapasitas - $used;
+            return $r;
+        });
+
         if ($expectedAttendance > 0) {
-            $suitableRooms = $available->filter(fn ($r) => $r->kapasitas >= $expectedAttendance);
+            // Filter ruangan yang masih memiliki sisa kapasitas cukup
+            $suitableRooms = $mappedRuangans->filter(fn ($r) => $r->sisa_kapasitas >= $expectedAttendance);
 
             if ($suitableRooms->isNotEmpty()) {
-                // Apply LRA on suitable rooms
+                // Apply LRA (Least Recently Assigned) pada ruangan yang cukup
                 return $suitableRooms
-                    ->shuffle()
+                    ->shuffle() // Tie-breaker
                     ->sortBy(fn ($r) => $counter[$r->id] ?? 0)
                     ->first();
             }
 
-            // Step 3: Fallback to largest available room (best effort)
-            // This handles overflow scenarios (tim too large for any room)
-            return $available
-                ->sortByDesc(fn ($r) => $r->kapasitas)
+            // Fallback: Jika tidak ada yang cukup, pilih ruangan yang memiliki sisa kapasitas paling besar
+            // meskipun akan overcapacity, ini akan meminimalkan seberapa jauh dia melebihi batas.
+            return $mappedRuangans
+                ->sortByDesc('sisa_kapasitas')
                 ->first();
         }
 
-        // Step 4: No capacity constraint (legacy behavior)
-        return $available
-            ->shuffle()
-            ->sortBy(fn ($r) => $counter[$r->id] ?? 0)
-            ->first();
+        // No capacity constraint (legacy behavior)
+        // Just pick one based on LRA that isn't fully used if possible, but fallback to LRA purely
+        $unused = $mappedRuangans->filter(fn ($r) => ($ruanganCapacityUsed[$r->id] ?? 0) == 0);
+        if ($unused->isNotEmpty()) {
+            return $unused->shuffle()->sortBy(fn ($r) => $counter[$r->id] ?? 0)->first();
+        }
+
+        return $mappedRuangans->shuffle()->sortBy(fn ($r) => $counter[$r->id] ?? 0)->first();
     }
 
     /**
@@ -703,7 +704,7 @@ class LraScheduler
         $current = $mulai->copy();
 
         while ($current->lte($selesai)) {
-            if ($current->dayOfWeekIso !== 7) { // bukan Minggu
+            if (!in_array($current->dayOfWeekIso, [6, 7])) { // bukan Sabtu dan Minggu
                 $list[] = $current->copy();
             }
             $current->addDay();

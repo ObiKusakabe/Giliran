@@ -679,13 +679,13 @@ new #[Title('Generate Jadwal')] #[Layout('layouts.admin')] class extends Compone
                             // Group by ruangan_id, then by tanggal
                             $groupedByRuangan = collect($previewRuangan)->groupBy('ruangan_id');
                             
-                            // Generate full week range (Senin-Sabtu) dari tanggal pertama yang ada di data
+                            // Generate full week range (Senin-Jumat) dari tanggal pertama yang ada di data
                             $firstDate = collect($previewRuangan)->pluck('tanggal')->sort()->first();
                             $startOfWeek = \Carbon\Carbon::parse($firstDate)->startOfWeek(\Carbon\Carbon::MONDAY);
                             
-                            // Generate 6 hari (Senin-Sabtu)
+                            // Generate 5 hari (Senin-Jumat)
                             $allDates = collect();
-                            for ($i = 0; $i < 6; $i++) {
+                            for ($i = 0; $i < 5; $i++) {
                                 $allDates->push($startOfWeek->copy()->addDays($i)->toDateString());
                             }
                             

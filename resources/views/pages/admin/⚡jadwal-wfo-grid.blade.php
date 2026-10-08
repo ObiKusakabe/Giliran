@@ -19,7 +19,7 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
     public array $gridRowsCache = [];
     public bool $modalConfirmGenerate = false; // Confirmation modal before generate
 
-    public const HARI = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+    public const HARI = ['senin', 'selasa', 'rabu', 'kamis', 'jumat'];
 
     public function mount(): void
     {
@@ -195,6 +195,8 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
 
         $row->delete();
 
+        Flux::toast(variant: 'success', text: 'Tim berhasil dihapus dari jadwal.');
+
         $this->dispatch('row-dihapus', rowId: $rowId);
         $this->refreshGrid();
     }
@@ -291,7 +293,6 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
         'rabu' => 3,
         'kamis' => 4,
         'jumat' => 5,
-        'sabtu' => 6,
     ];
 
     private function getDatesForHari(?PeriodeWfo $periode, string $hari): array
@@ -347,17 +348,45 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
             return;
         }
 
-        $occupiedRuanganIds = AlokasiRuangan::whereIn('tanggal', $this->expandDateQueryFormats($dates))
-            ->pluck('ruangan_id')
-            ->unique()
+        $tim = Tim::withCount('personil')->find($timId);
+        $expectedAttendance = $tim?->personil_count ?? 0;
+
+        // Cari total expected attendance tiap ruangan pada tanggal target
+        // Kita cukup cek salah satu tanggal, karena polanya mingguan, tapi untuk amannya kita query untuk semua dates
+        $expandedDates = $this->expandDateQueryFormats($dates);
+        
+        $occupiedRuangan = AlokasiRuangan::whereIn('tanggal', $expandedDates)
+            ->select('ruangan_id', DB::raw('SUM(expected_attendance) as total_attendance'))
+            ->groupBy('ruangan_id')
+            ->pluck('total_attendance', 'ruangan_id')
             ->toArray();
 
-        $freeRuangan = $availableRuangan->first(fn ($r) => ! in_array($r->id, $occupiedRuanganIds));
+        $freeRuangan = null;
+        
+        // Cari ruangan yang sisa kapasitasnya cukup
+        foreach ($availableRuangan as $ruangan) {
+            $used = $occupiedRuangan[$ruangan->id] ?? 0;
+            $sisa = $ruangan->kapasitas - $used;
+            if ($sisa >= $expectedAttendance) {
+                $freeRuangan = $ruangan;
+                break;
+            }
+        }
+        
+        // Fallback: Jika tidak ada yang cukup, cari yang sisa kapasitasnya paling besar
+        if (! $freeRuangan) {
+            $maxSisa = -9999;
+            foreach ($availableRuangan as $ruangan) {
+                $used = $occupiedRuangan[$ruangan->id] ?? 0;
+                $sisa = $ruangan->kapasitas - $used;
+                if ($sisa > $maxSisa) {
+                    $maxSisa = $sisa;
+                    $freeRuangan = $ruangan;
+                }
+            }
+        }
 
         if ($freeRuangan) {
-            $tim = Tim::withCount('personil')->find($timId);
-            $expectedAttendance = $tim?->personil_count ?? null;
-
             $records = [];
             $now = now();
             foreach ($dates as $tgl) {
@@ -1093,12 +1122,11 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                 3 => 'rabu',
                 4 => 'kamis',
                 5 => 'jumat',
-                6 => 'sabtu',
             ];
             $hariIni = $hariMap[now()->dayOfWeek] ?? null;
         @endphp
-        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            @foreach (['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'] as $hari)
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            @foreach (['senin', 'selasa', 'rabu', 'kamis', 'jumat'] as $hari)
                 @php
                     $isToday = ($hari === $hariIni);
                     $count = $this->timCountPerHari[$hari] ?? 0;
@@ -1144,11 +1172,11 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                                     @touchmove="touchMoveDrag($event)"
                                     @touchend="touchEndDrag($event)"
                                     @mousedown.stop
-                                    class="inline-flex items-center gap-1 rounded-full text-xs font-medium px-2 py-0.5 border cursor-grab active:cursor-grabbing touch-none transition-all"
+                                    class="group inline-flex items-center gap-1 rounded-full text-xs font-medium px-2 py-0.5 border cursor-grab active:cursor-grabbing touch-none transition-all hover:shadow-[0_0_10px_currentColor] hover:-translate-y-px"
                                     style="flex-shrink:0; width:auto; max-width:100%;"
                                     :class="[
                                         row.color_classes,
-                                        isSelected(row.id) && 'ring-2 ring-blue-500',
+                                        isSelected(row.id) ? 'ring-2 ring-blue-500 hover:ring-2 hover:ring-blue-500' : 'hover:ring-1 hover:ring-current',
                                         (dragging && (dragging.rowId === row.id || (dragging.isMulti && dragging.rowIds?.includes(row.id)))) && 'opacity-40 !cursor-grabbing'
                                     ]"
                                 >
@@ -1158,8 +1186,8 @@ new #[Title('Jadwal WFO')] #[Layout('layouts.admin')] class extends Component {
                                 <button
                                     @click.stop="hapusTimOptimistic(row.id)"
                                     :disabled="isLoading(row.id)"
-                                    class="ml-0.5 flex-shrink-0 transition-colors focus:outline-none rounded-full p-0.5 hover:bg-black/10 dark:hover:bg-white/10"
-                                    :class="isLoading(row.id) ? 'opacity-30 cursor-wait' : 'opacity-60 hover:opacity-100'"
+                                    class="ml-0.5 flex-shrink-0 transition-all focus:outline-none rounded-full p-0.5 hover:bg-black/10 dark:hover:bg-white/10 opacity-0 group-hover:opacity-100"
+                                    :class="isLoading(row.id) ? 'opacity-100 cursor-wait' : ''"
                                 >
                                     {{-- Spinner saat loading --}}
                                     <svg x-show="isLoading(row.id)" class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">

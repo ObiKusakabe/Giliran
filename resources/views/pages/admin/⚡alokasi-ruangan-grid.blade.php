@@ -60,7 +60,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         unset($this->alokasiRows);
         
         $start = Carbon::parse($this->tanggalMulaiMinggu);
-        $end = $start->copy()->addDays(5);
+        $end = $start->copy()->addDays(4);
 
         $this->alokasiRowsCache = AlokasiRuangan::with(['tim.personil', 'ruangan'])
             ->whereBetween('tanggal', [$start->toDateString(), $end->toDateString()])
@@ -109,6 +109,15 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         return $colors[$index];
     }
 
+    public function badgeTim(?\App\Models\Tim $tim): string
+    {
+        if (!$tim) {
+            return 'Tim Tidak Diketahui';
+        }
+        $index = ($tim->id - 1) % 10;
+        return "[[TIM:{$tim->nama_tim}:{$index}]]";
+    }
+
     #[Computed]
     public function periodeAktif(): ?PeriodeWfo
     {
@@ -126,9 +135,9 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
     {
         $start = Carbon::parse($this->tanggalMulaiMinggu);
         $hariList = [];
-        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat'];
 
-        for ($i = 0; $i < 6; $i++) {
+        for ($i = 0; $i < 5; $i++) {
             $tgl = $start->copy()->addDays($i);
             $hariList[] = [
                 'kode' => $namaHariIndo[$i],
@@ -168,7 +177,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
     public function alokasiRows(): array
     {
         $start = Carbon::parse($this->tanggalMulaiMinggu);
-        $end = $start->copy()->addDays(5);
+        $end = $start->copy()->addDays(4);
 
         return AlokasiRuangan::with(['tim.personil', 'ruangan'])
             ->whereBetween('tanggal', [$start->toDateString(), $end->toDateString()])
@@ -234,7 +243,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         $this->tanggalMulaiMinggu = Carbon::now()->startOfWeek(Carbon::MONDAY)->toDateString();
     }
 
-    public function pindahRuangan(int $alokasiId, int $targetRuanganId, string $targetTanggal): void
+    public function pindahRuangan(int $alokasiId, int $targetRuanganId, string $targetTanggal, ?int $targetAlokasiId = null): void
     {
         $alokasi = AlokasiRuangan::with('tim')->find($alokasiId);
         if (! $alokasi) {
@@ -253,7 +262,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             return;
         }
 
-        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat'];
 
         // 2. Validasi Jadwal WFO untuk hari target
         $targetDayOfWeek = Carbon::parse($targetTanggal)->dayOfWeekIso;
@@ -266,23 +275,22 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 ->exists();
 
             if (! $isWfo) {
-                Flux::toast(variant: 'danger', text: "Tim {$alokasi->tim?->nama_tim} tidak memiliki jadwal WFO pada hari ".ucfirst($targetHariKode).'.');
+                Flux::toast(variant: 'danger', text: "Tim " . $this->badgeTim($alokasi->tim) . " tidak memiliki jadwal WFO pada hari ".ucfirst($targetHariKode).'.');
                 $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
                 $this->refreshAlokasiCache();
                 return;
             }
         }
 
-        // 3. Cek apakah ruangan target di tanggal target sudah terisi tim lain
-        $bentrok = AlokasiRuangan::with('tim')
-            ->where('ruangan_id', $targetRuanganId)
-            ->whereIn('tanggal', $this->expandDateQueryFormats([$targetTanggal]))
-            ->where('id', '!=', $alokasiId)
-            ->first();
+        // 3. Cari tim yang akan diswap (jika ada targetAlokasiId)
+        $bentrok = null;
+        if ($targetAlokasiId) {
+            $bentrok = AlokasiRuangan::with('tim')->find($targetAlokasiId);
+        }
 
         // Jika ruangan target sudah berisi tim yang sama
         if ($bentrok && $bentrok->tim_id === $alokasi->tim_id) {
-            Flux::toast(variant: 'warning', text: "Tim {$alokasi->tim?->nama_tim} sudah berada di ruangan tersebut.");
+            Flux::toast(variant: 'warning', text: "Tim " . $this->badgeTim($alokasi->tim) . " sudah berada di ruangan tersebut.");
             $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
             return;
         }
@@ -296,7 +304,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 ->exists();
 
             if ($timSudahAdaDiTargetTanggal) {
-                Flux::toast(variant: 'warning', text: "Tim {$alokasi->tim?->nama_tim} sudah dialokasikan di ruangan lain pada tanggal {$targetTanggal}.");
+                Flux::toast(variant: 'warning', text: "Tim " . $this->badgeTim($alokasi->tim) . " sudah dialokasikan di ruangan lain pada tanggal {$targetTanggal}.");
                 $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
                 $this->refreshAlokasiCache();
                 return;
@@ -314,7 +322,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                         ->exists();
 
                     if (! $bentrokIsWfo) {
-                        Flux::toast(variant: 'danger', text: "Tim {$bentrok->tim?->nama_tim} tidak memiliki jadwal WFO pada hari ".ucfirst($oldHariKode).' untuk ditukar.');
+                        Flux::toast(variant: 'danger', text: "Tim " . $this->badgeTim($bentrok->tim) . " tidak memiliki jadwal WFO pada hari ".ucfirst($oldHariKode).' untuk ditukar.');
                         $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
                         $this->refreshAlokasiCache();
                         return;
@@ -327,7 +335,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                     ->exists();
 
                 if ($bentrokSudahAdaDiOldTanggal) {
-                    Flux::toast(variant: 'warning', text: "Tim {$bentrok->tim?->nama_tim} sudah dialokasikan di ruangan lain pada tanggal asal ({$oldTanggal}).");
+                    Flux::toast(variant: 'warning', text: "Tim " . $this->badgeTim($bentrok->tim) . " sudah dialokasikan di ruangan lain pada tanggal asal ({$oldTanggal}).");
                     $this->dispatch('alokasiActionFeedback', success: false, targetRuanganId: $targetRuanganId, targetTanggal: $targetTanggal, oldRuanganId: $oldRuanganId, oldTanggal: $oldTanggal);
                     $this->refreshAlokasiCache();
                     return;
@@ -356,11 +364,6 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                             ->whereIn('tanggal', $expandedDates)
                             ->delete();
 
-                        // Bersihkan kedua ruangan dari sisa data lama pada tanggal-tanggal tersebut
-                        AlokasiRuangan::whereIn('ruangan_id', [$targetRuanganId, $oldRuanganId])
-                            ->whereIn('tanggal', $expandedDates)
-                            ->delete();
-
                         // Masukkan kembali dengan ruangan yang sudah bertukar
                         foreach ($allDates as $d) {
                             AlokasiRuangan::create([
@@ -377,13 +380,8 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                             ]);
                         }
                     } else {
-                        // PINDAH KE RUANGAN KOSONG SEPANJANG PERIODE
+                        // PINDAH KE RUANGAN (JADI TAMBAHAN TIM) SEPANJANG PERIODE
                         AlokasiRuangan::where('tim_id', $timIdA)
-                            ->whereIn('tanggal', $expandedDates)
-                            ->delete();
-
-                        // Bersihkan ruangan target dari sisa data lama pada tanggal-tanggal tersebut
-                        AlokasiRuangan::where('ruangan_id', $targetRuanganId)
                             ->whereIn('tanggal', $expandedDates)
                             ->delete();
 
@@ -436,12 +434,12 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 $oldRuangan = Ruangan::find($oldRuanganId);
                 Flux::toast(
                     variant: 'success',
-                    text: "Berhasil menukar: Tim {$alokasi->tim?->nama_tim} ({$targetRuangan?->nama_ruangan}) ⇄ Tim {$bentrok->tim?->nama_tim} ({$oldRuangan?->nama_ruangan})."
+                    text: "Berhasil menukar: Tim " . $this->badgeTim($alokasi->tim) . " ({$targetRuangan?->nama_ruangan}) ⇄ Tim " . $this->badgeTim($bentrok->tim) . " ({$oldRuangan?->nama_ruangan})."
                 );
             } else {
                 Flux::toast(
                     variant: 'success',
-                    text: "Tim {$alokasi->tim?->nama_tim} berhasil dialokasikan ke {$targetRuangan?->nama_ruangan}."
+                    text: "Tim " . $this->badgeTim($alokasi->tim) . " berhasil dialokasikan ke {$targetRuangan?->nama_ruangan}."
                 );
             }
 
@@ -499,7 +497,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             ->map(fn ($rows) => $rows->pluck('hari')->toArray())
             ->toArray();
 
-        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat'];
 
         // Ambil semua alokasi dalam rentang periode
         $start = Carbon::parse($this->periodeAktif->tanggal_mulai)->startOfDay();
@@ -563,7 +561,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         $tanggalList = $scheduler->expandTanggal($mulai, $selesai);
 
         $startWeek1 = Carbon::parse($this->tanggalMulaiMinggu);
-        $endWeek1 = $startWeek1->copy()->addDays(5);
+        $endWeek1 = $startWeek1->copy()->addDays(4);
 
         $week1Allocs = AlokasiRuangan::whereBetween('tanggal', [
             $startWeek1->toDateString(),
@@ -612,7 +610,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
     public function tambahAlokasi(int $timId, int $ruanganId, string $tanggal): void
     {
         $dayOfWeek = Carbon::parse($tanggal)->dayOfWeekIso;
-        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat'];
         $hariKode = $namaHariIndo[$dayOfWeek - 1] ?? null;
 
         // Validasi: Apakah tim terjadwal WFO pada hari ini di periode aktif?
@@ -635,12 +633,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             return;
         }
 
-        // Cek bentrok ruangan di tanggal sama
-        $sudahAdaRuangan = AlokasiRuangan::where('ruangan_id', $ruanganId)->whereIn('tanggal', $this->expandDateQueryFormats([$tanggal]))->first();
-        if ($sudahAdaRuangan) {
-            Flux::toast(variant: 'danger', text: 'Ruangan ini sudah dialokasikan ke tim lain pada tanggal tersebut.');
-            return;
-        }
+        // Cek bentrok ruangan di tanggal sama dihilangkan untuk mengizinkan multiple tim per ruangan (sesuai kapasitas)
 
         $tim = Tim::withCount('personil')->find($timId);
         $ruangan = Ruangan::find($ruanganId);
@@ -651,15 +644,8 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             $allDates = $this->getDatesForDayOfWeek($this->periodeAktif, $dayOfWeek);
 
             foreach ($allDates as $tgl) {
-                // Jangan timpa jika ruangan sudah terisi tim lain di tanggal tertentu
-                $occupied = AlokasiRuangan::where('ruangan_id', $ruanganId)
-                    ->whereIn('tanggal', $this->expandDateQueryFormats([$tgl]))
-                    ->where('tim_id', '!=', $timId)
-                    ->exists();
-                if ($occupied) {
-                    continue;
-                }
-
+                // Kita bisa cek apakah melebihi kapasitas dan memberi warning, tapi tetap masukkan
+                // $occupied check dihilangkan agar bisa berbagi ruangan
                 AlokasiRuangan::updateOrCreate(
                     ['tim_id' => $timId, 'tanggal' => $tgl],
                     ['ruangan_id' => $ruanganId, 'expected_attendance' => $expectedAttendance]
@@ -668,7 +654,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
 
             Flux::toast(
                 variant: 'success',
-                text: "Alokasi berhasil: {$tim?->nama_tim} → {$ruangan?->nama_ruangan} (berlaku sepanjang periode)."
+                text: "Alokasi berhasil: " . $this->badgeTim($tim) . " → {$ruangan?->nama_ruangan} (berlaku sepanjang periode)."
             );
         } else {
             AlokasiRuangan::create([
@@ -680,7 +666,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
 
             Flux::toast(
                 variant: 'success',
-                text: "Alokasi berhasil: {$tim?->nama_tim} → {$ruangan?->nama_ruangan}."
+                text: "Alokasi berhasil: " . $this->badgeTim($tim) . " → {$ruangan?->nama_ruangan}."
             );
         }
 
@@ -703,10 +689,10 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                     ->whereIn('tanggal', $this->expandDateQueryFormats($allDates))
                     ->delete();
 
-                Flux::toast(variant: 'success', text: "Alokasi ruangan tim {$nama} berhasil dihapus sepanjang periode.");
+                Flux::toast(variant: 'success', text: "Alokasi ruangan tim " . $this->badgeTim($alokasi->tim) . " berhasil dihapus sepanjang periode.");
             } else {
                 $alokasi->delete();
-                Flux::toast(variant: 'success', text: "Alokasi ruangan tim {$nama} berhasil dihapus.");
+                Flux::toast(variant: 'success', text: "Alokasi ruangan tim " . $this->badgeTim($alokasi->tim) . " berhasil dihapus.");
             }
         }
 
@@ -817,11 +803,11 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
 
         $start = Carbon::parse($this->tanggalMulaiMinggu);
         $week1Tanggal = [];
-        for ($i = 0; $i < 6; $i++) {
+        for ($i = 0; $i < 5; $i++) {
             $week1Tanggal[] = $start->copy()->addDays($i);
         }
 
-        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+        $namaHariIndo = ['senin', 'selasa', 'rabu', 'kamis', 'jumat'];
         $timWfoPerHari = [];
         
         foreach ($week1Tanggal as $idx => $tgl) {
@@ -1019,31 +1005,12 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             window.addEventListener('dragend', handleGlobalDragEnd);
             document.addEventListener('dragend', handleGlobalDragEnd);
 
-            // Direct synchronous sticky header on window scroll
-            window.addEventListener('scroll', () => this.updateStickyHeader(), { passive: true });
-            window.addEventListener('resize', () => this.updateStickyHeader(), { passive: true });
+            // Window resize hook if needed (removed JS scroll listener)
+            window.addEventListener('resize', () => {}, { passive: true });
         },
 
         updateStickyHeader() {
-            const table = this.$refs.tableRef;
-            const thead = this.$refs.tableThead;
-            if (!table || !thead) return;
-
-            const navHeight = 56;
-            const tableRect = table.getBoundingClientRect();
-            const theadHeight = thead.offsetHeight || 48;
-            const maxOffset = table.offsetHeight - theadHeight - 20;
-
-            if (tableRect.top < navHeight && tableRect.bottom > navHeight + theadHeight) {
-                const offset = Math.min(maxOffset, navHeight - tableRect.top);
-                thead.style.transform = `translate3d(0, ${offset}px, 0)`;
-                thead.style.zIndex = '20';
-                thead.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.08)';
-            } else {
-                thead.style.transform = '';
-                thead.style.zIndex = '';
-                thead.style.boxShadow = '';
-            }
+            // Deprecated: Using native CSS position: sticky instead for better performance
         },
 
         handleAutoScroll(event) {
@@ -1143,6 +1110,16 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         getAllocation(ruanganId, tanggal) {
             if (!Array.isArray(this.rows)) return null;
             return this.rows.find(r => r.ruangan_id == ruanganId && r.tanggal == tanggal);
+        },
+
+        getAllocations(ruanganId, tanggal) {
+            if (!Array.isArray(this.rows)) return [];
+            return this.rows.filter(r => r.ruangan_id == ruanganId && r.tanggal == tanggal);
+        },
+
+        getTotalAttendance(ruanganId, tanggal) {
+            const allocs = this.getAllocations(ruanganId, tanggal);
+            return allocs.reduce((sum, a) => sum + (a.personil_count || 0), 0);
         },
 
         setCellFeedback(ruanganId, tanggal, type) {
@@ -1346,10 +1323,6 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
         },
 
         hapusSingle(alokasiId) {
-            // Optimistic: remove from rows
-            if (Array.isArray(this.rows)) {
-                this.rows = this.rows.filter(r => r.id !== alokasiId);
-            }
             $wire.hapusAlokasi(alokasiId);
         },
 
@@ -1482,7 +1455,11 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 return;
             }
 
-            const targetAlloc = this.getAllocation(targetRuanganId, targetTanggal);
+            let targetAlloc = null;
+            if (this.dragOverAlokasiId) {
+                targetAlloc = this.rows.find(r => r.id === this.dragOverAlokasiId);
+            }
+
             if (!targetAlloc || targetAlloc.id === this.draggingItem.id || targetAlloc.tim_id === this.draggingItem.tim_id) {
                 this.clearSwapPreview();
                 return;
@@ -1534,16 +1511,21 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 this.clearSwapPreview();
                 this.dragOverRuanganId = null;
                 this.dragOverTanggal = null;
+                this.dragOverAlokasiId = null;
             }
         },
 
         dragOver(event, ruanganId, tanggal) {
             event.preventDefault();
-            if (this.dragOverRuanganId == ruanganId && this.dragOverTanggal == tanggal) {
+            const overCard = event.target.closest('[data-alokasi-card]');
+            const overAlokasiId = overCard ? parseInt(overCard.dataset.alokasiCard) : null;
+            
+            if (this.dragOverRuanganId == ruanganId && this.dragOverTanggal == tanggal && this.dragOverAlokasiId === overAlokasiId) {
                 return;
             }
             this.dragOverRuanganId = ruanganId;
             this.dragOverTanggal = tanggal;
+            this.dragOverAlokasiId = overAlokasiId;
             this.updateSwapPreview();
         },
 
@@ -1558,6 +1540,10 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             const alokasiId = this.draggingItem.id;
             const sourceRuanganId = this.draggingItem.ruangan_id;
             const sourceTanggal = this.draggingItem.tanggal;
+            
+            const overCard = event.target.closest('[data-alokasi-card]');
+            const targetAlokasiId = overCard ? parseInt(overCard.dataset.alokasiCard) : null;
+            
             this.resetDrag();
 
             if (sourceRuanganId == targetRuanganId && sourceTanggal == targetTanggal) {
@@ -1578,8 +1564,11 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 return;
             }
 
-            // Temukan item di cell tujuan (jika cell sudah terisi tim lain)
-            const targetAlloc = this.getAllocation(targetRuanganId, targetTanggal);
+            // Jika didrop ke atas chip (targetAlokasiId), lakukan swap dengan chip tersebut
+            let targetAlloc = null;
+            if (targetAlokasiId) {
+                targetAlloc = this.rows.find(r => r.id === targetAlokasiId);
+            }
 
             if (targetAlloc) {
                 // Jangan lakukan apa-apa jika di drag ke tim yang sama
@@ -1591,7 +1580,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 if (sourceTanggal !== targetTanggal && !this.isTeamWfoOnDate(targetAlloc.tim_id, sourceTanggal)) {
                     this.setCellFeedback(targetRuanganId, targetTanggal, 'error');
                     this.setCellFeedback(sourceRuanganId, sourceTanggal, 'error');
-                    $wire.pindahRuangan(alokasiId, targetRuanganId, targetTanggal);
+                    $wire.pindahRuangan(alokasiId, targetRuanganId, targetTanggal, targetAlokasiId);
                     return;
                 }
 
@@ -1609,7 +1598,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                 this.setCellFeedback(targetRuanganId, targetTanggal, 'success');
                 this.setCellFeedback(sourceRuanganId, sourceTanggal, 'success');
             } else {
-                // Geser ke ruangan kosong
+                // Geser ke ruangan kosong atau slot kosong di ruangan yang sama
                 sourceAlloc.ruangan_id = targetRuanganId;
                 sourceAlloc.tanggal = targetTanggal;
 
@@ -1628,7 +1617,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             }, 600);
 
             // Jalankan atomic swap / pindah di backend
-            $wire.pindahRuangan(alokasiId, targetRuanganId, targetTanggal);
+            $wire.pindahRuangan(alokasiId, targetRuanganId, targetTanggal, targetAlokasiId);
         }
     }"
     @mousedown="startBoxSelection($event)"
@@ -1643,8 +1632,8 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
     @keydown.escape.window="clearSelection(); resetDrag()"
 >
     {{-- Top Header Section --}}
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+    <div class="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+        <div class="flex-1">
             <flux:heading size="xl" class="font-bold tracking-tight text-zinc-900 dark:text-white">
                 Alokasi Ruangan Periode
             </flux:heading>
@@ -1813,12 +1802,13 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             </div>
         </div>
 
-        {{-- Single Table Container (Horizontal scrollable, natural full height) --}}
+        {{-- Single Table Container (Horizontal & vertical scrollable for native sticky header) --}}
         <div
             x-ref="gridScroll"
             @dragover="handleAutoScroll($event)"
             @dragleave="dragLeaveContainer($event)"
-            class="overflow-x-auto relative"
+            class="overflow-auto relative min-h-[400px]"
+            style="max-height: calc(100vh - 210px);"
         >
             {{-- Loading Overlay --}}
             <div 
@@ -1838,25 +1828,21 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             <table
                 x-ref="tableRef"
                 class="w-full text-left border-separate border-spacing-0"
-                style="min-width: 1100px;"
+                style="min-width: {{ 220 + (count($this->daftarHariMingguIni) * 146) }}px;"
             >
                 <colgroup>
                     <col style="width: 220px; min-width: 220px;">
-                    <col style="width: 146px; min-width: 146px;">
-                    <col style="width: 146px; min-width: 146px;">
-                    <col style="width: 146px; min-width: 146px;">
-                    <col style="width: 146px; min-width: 146px;">
-                    <col style="width: 146px; min-width: 146px;">
-                    <col style="width: 146px; min-width: 146px;">
+                    @foreach ($this->daftarHariMingguIni as $h)
+                        <col style="width: {{ 100 / max(1, count($this->daftarHariMingguIni)) }}%; min-width: 146px;">
+                    @endforeach
                 </colgroup>
                 <thead
                     x-ref="tableThead"
-                    class="relative z-20 bg-zinc-100 dark:bg-zinc-900 transition-none"
-                    style="will-change: transform;"
+                    class="z-20 bg-zinc-100 dark:bg-zinc-900"
                 >
                     <tr class="bg-zinc-100 dark:bg-zinc-900 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-                        {{-- Kolom Ruangan: Sticky Left --}}
-                        <th class="p-3.5 ps-5 border-b border-r border-zinc-200 dark:border-zinc-800 select-none sticky left-0 z-25 bg-zinc-100 dark:bg-zinc-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                        {{-- Kolom Ruangan: Sticky Top & Left --}}
+                        <th class="p-3.5 ps-5 border-b border-r border-zinc-200 dark:border-zinc-800 select-none sticky left-0 top-0 z-30 bg-zinc-100 dark:bg-zinc-900 shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.08)]">
                             <div class="flex items-center gap-2 font-semibold text-xs uppercase tracking-wider text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                                 <flux:icon icon="building-office-2" class="size-4 text-zinc-400 shrink-0" />
                                 <span>Ruangan</span>
@@ -1866,7 +1852,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                         @foreach ($this->daftarHariMingguIni as $h)
                             <th
                                 data-day-header="{{ $h['tanggal'] }}"
-                                class="p-3.5 text-center border-b border-r border-zinc-200 dark:border-zinc-800 select-none relative z-20 bg-zinc-100 dark:bg-zinc-900 transition-colors duration-150"
+                                class="p-3.5 text-center border-b border-r border-zinc-200 dark:border-zinc-800 select-none sticky top-0 z-20 bg-zinc-100 dark:bg-zinc-900 transition-colors duration-150 shadow-[0_2px_5px_-2px_rgba(0,0,0,0.08)]"
                                 :class="(isDragging && draggingItem) ? getHeaderClass('{{ $h['tanggal'] }}') : ({{ $h['is_today'] ? 'true' : 'false' }} ? '!bg-blue-50/90 dark:!bg-blue-950/50 text-blue-600 dark:text-blue-400' : '!bg-zinc-100 dark:!bg-zinc-900 text-zinc-600 dark:text-zinc-300')"
                                 @dragover.prevent
                                 @drop="resetDrag()"
@@ -1919,8 +1905,8 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                                         'ring-2 !ring-emerald-500 !bg-emerald-500/20 dark:!bg-emerald-500/30 rounded-lg !border-emerald-500 shadow-md animate-pulse': feedbackCells['{{ $ruangan->id }}_{{ $h['tanggal'] }}'] === 'success',
                                         'bg-emerald-500/10 dark:bg-emerald-500/15 !border-emerald-300/60 dark:!border-emerald-700/50': isDragging && draggingItem && isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}') && (dragOverRuanganId != {{ $ruangan->id }} || dragOverTanggal != '{{ $h['tanggal'] }}'),
                                         'opacity-40 bg-zinc-100/70 dark:bg-zinc-900/70 cursor-not-allowed': isDragging && draggingItem && !isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}'),
-                                        'bg-[#3B71CA]/10 ring-2 ring-[#3B71CA] ring-inset rounded-lg': isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && !getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}') && (!draggingItem || isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}')),
-                                        'bg-amber-500/15 ring-2 ring-amber-500 ring-inset rounded-lg': isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}') && (!draggingItem || isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}')),
+                                        'bg-[#3B71CA]/10 ring-2 ring-[#3B71CA] ring-inset rounded-lg': isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && !dragOverAlokasiId && (!draggingItem || isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}')),
+                                        'bg-amber-500/15 ring-2 ring-amber-500 ring-inset rounded-lg': isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && dragOverAlokasiId && (!draggingItem || isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}')),
                                         'bg-red-500/15 ring-2 ring-red-500 ring-inset rounded-lg cursor-not-allowed': isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && draggingItem && !isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}'),
                                         '!z-40': previewSwapTargetId && getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')?.id === previewSwapTargetId,
                                         'bg-[#3B71CA]/5 dark:bg-[#3B71CA]/5': !isDragging && {{ $h['is_today'] ? 'true' : 'false' }}
@@ -1930,7 +1916,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                                 >
                                     {{-- Swap Indicator Badge on Hover when allowed --}}
                                     <div
-                                        x-show="isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}') && draggingItem && draggingItem.id !== getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')?.id && isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}')"
+                                        x-show="isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && dragOverAlokasiId && draggingItem && draggingItem.id !== dragOverAlokasiId && isTeamWfoOnDate(draggingItem.tim_id, '{{ $h['tanggal'] }}')"
                                         x-cloak
                                         class="absolute inset-x-2 -top-2.5 z-30 flex items-center justify-center pointer-events-none"
                                     >
@@ -1944,7 +1930,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
 
                                     {{-- Ghost Dropzone in target cell while target card is preview-swapped --}}
                                     <div
-                                        x-show="isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && previewSwapTargetId === getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')?.id"
+                                        x-show="isDragging && dragOverRuanganId == {{ $ruangan->id }} && dragOverTanggal == '{{ $h['tanggal'] }}' && previewSwapTargetId"
                                         x-cloak
                                         class="absolute inset-2 border-2 border-dashed border-amber-400 dark:border-amber-500 bg-amber-500/10 dark:bg-amber-500/15 rounded-xl flex items-center justify-center pointer-events-none z-10 transition-all duration-200"
                                     >
@@ -1956,62 +1942,60 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                                         </span>
                                     </div>
 
-                                    <div class="min-h-[72px] flex flex-col justify-center">
-                                        {{-- Assigned Team Card --}}
-                                        <template x-if="getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')">
-                                            <div
-                                                :data-alokasi-card="getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id"
-                                                draggable="true"
-                                                @click="toggleSelect(getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id, $event)"
-                                                @dragstart="dragStart($event, getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}'))"
-                                                @dragend="resetDrag()"
-                                                @mousedown.stop
-                                                class="group/card relative p-2.5 rounded-xl border shadow-xs hover:shadow-md transition-[background-color,border-color,box-shadow,opacity] duration-150 cursor-grab active:cursor-grabbing select-none"
-                                                :class="[
-                                                    getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').color_classes || 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800/60 hover:border-blue-400 dark:hover:border-blue-600',
-                                                    isSelected(getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id) && 'ring-2 ring-blue-500',
-                                                    (draggingItem && ((draggingItem.id === getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id) || (draggingItem.isMulti && draggingItem.ids?.includes(getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id)))) && 'opacity-40',
-                                                    swappingIds.includes(getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id) && 'ring-2 ring-emerald-500 dark:ring-emerald-400 shadow-md',
-                                                    (previewSwapTargetId === getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id) && 'z-50 shadow-2xl ring-2 ring-amber-400 dark:ring-amber-500 opacity-90'
-                                                ]"
-                                                :style="(previewSwapTargetId && previewSwapTargetId === getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')?.id) ? ('transform: ' + previewSwapTransform + '; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease; pointer-events: none;') : ''"
-                                            >
-                                                <div class="flex items-start justify-between gap-1.5">
-                                                    <div class="min-w-0 flex-1">
-                                                        <div class="font-semibold text-xs truncate leading-tight" x-text="getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').nama_tim"></div>
-                                                        
-                                                        {{-- Capacity info with occupancy percentage --}}
-                                                        <div class="flex items-center gap-1.5 text-[10px] font-medium mt-1.5">
-                                                            <span class="inline-block size-1.5 rounded-full bg-current"></span>
-                                                            <span x-text="getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').personil_count + '/' + getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').kapasitas + ' orang'"></span>
-                                                            <span class="opacity-60">•</span>
-                                                            <span 
-                                                                class="px-1.5 py-0.5 rounded font-semibold"
-                                                                :class="getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').is_over_capacity 
-                                                                    ? 'bg-red-500/90 text-white' 
-                                                                    : 'bg-white/90 dark:bg-zinc-900/90 text-zinc-900 dark:text-white'"
-                                                                x-text="Math.round((getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').personil_count / getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').kapasitas) * 100) + '%'"
-                                                            ></span>
-                                                        </div>
-                                                    </div>
+                                    <div class="min-h-[72px] flex flex-col justify-center gap-2">
+                                        {{-- Over-capacity Warning Badge --}}
+                                        <template x-if="getAllocations({{ $ruangan->id }}, '{{ $h['tanggal'] }}').length > 0 && getTotalAttendance({{ $ruangan->id }}, '{{ $h['tanggal'] }}') > {{ $ruangan->kapasitas }}">
+                                            <div class="flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-2 py-1 rounded-md mb-1 animate-pulse border border-red-200 dark:border-red-800/50">
+                                                <flux:icon icon="exclamation-triangle" class="size-3" />
+                                                <span>Over Capacity (<span x-text="getTotalAttendance({{ $ruangan->id }}, '{{ $h['tanggal'] }}')"></span>/{{ $ruangan->kapasitas }})</span>
+                                            </div>
+                                        </template>
 
-                                                    {{-- Delete allocation button --}}
-                                                    <button
-                                                        type="button"
-                                                        @click.stop="hapusSingle(getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}').id)"
-                                                        class="opacity-0 group-hover/card:opacity-100 p-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-md transition-all"
-                                                        title="Hapus alokasi ruangan"
-                                                    >
-                                                        <flux:icon icon="x-mark" class="size-3.5" />
-                                                    </button>
+                                        {{-- Assigned Team Cards --}}
+                                        <template x-for="alokasi in getAllocations({{ $ruangan->id }}, '{{ $h['tanggal'] }}')" :key="alokasi.id">
+                                            <div :data-alokasi-card="alokasi.id" class="relative">
+                                                <div
+                                                    draggable="true"
+                                                    @click="toggleSelect(alokasi.id, $event)"
+                                                    @dragstart="dragStart($event, alokasi)"
+                                                    @dragend="resetDrag()"
+                                                    @mousedown.stop
+                                                    class="group/card p-2.5 rounded-xl border shadow-xs transition-all duration-150 cursor-grab active:cursor-grabbing select-none hover:-translate-y-px hover:shadow-[0_0_12px_currentColor]"
+                                                    :class="[
+                                                        alokasi.color_classes || 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800/60 hover:border-blue-400 dark:hover:border-blue-600',
+                                                        isSelected(alokasi.id) ? 'ring-2 ring-blue-500 hover:ring-2 hover:ring-blue-500' : 'hover:ring-1 hover:ring-current',
+                                                        (draggingItem && ((draggingItem.id === alokasi.id) || (draggingItem.isMulti && draggingItem.ids?.includes(alokasi.id)))) && 'opacity-40',
+                                                        swappingIds.includes(alokasi.id) && 'ring-2 ring-emerald-500 dark:ring-emerald-400 shadow-md',
+                                                        (previewSwapTargetId === alokasi.id) && 'z-50 shadow-2xl ring-2 ring-amber-400 dark:ring-amber-500 opacity-90'
+                                                    ]"
+                                                    :style="(previewSwapTargetId && previewSwapTargetId === alokasi.id) ? ('transform: ' + previewSwapTransform + '; transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease; pointer-events: none;') : ''"
+                                                >
+                                                    <div class="flex items-start justify-between gap-1.5">
+                                                        <div class="min-w-0 flex-1">
+                                                            <div class="font-semibold text-xs truncate leading-tight" x-text="alokasi.nama_tim"></div>
+                                                            
+                                                            <div class="flex items-center gap-1.5 text-[10px] font-medium mt-1.5">
+                                                                <span class="inline-block size-1.5 rounded-full bg-current"></span>
+                                                                <span x-text="alokasi.personil_count + ' orang'"></span>
+                                                            </div>
+                                                        </div>
+
+                                                        <button
+                                                            type="button"
+                                                            @click.stop="hapusSingle(alokasi.id)"
+                                                            class="opacity-0 group-hover/card:opacity-100 p-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-md transition-all"
+                                                            title="Hapus alokasi ruangan"
+                                                        >
+                                                            <flux:icon icon="x-mark" class="size-3.5" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </template>
 
-                                        {{-- Empty Slot Dropzone with Add Button --}}
-                                        <template x-if="!getAllocation({{ $ruangan->id }}, '{{ $h['tanggal'] }}')">
-                                            <div class="h-full flex flex-col items-center justify-center p-2 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-700/60 hover:border-blue-400 dark:hover:border-blue-600 hover:bg-blue-50/20 dark:hover:bg-blue-950/20 transition-all">
-                                                <div x-data="{ openMenu: false }" class="relative">
+                                        {{-- Empty Slot / Add Button (Tampil di bawah tim atau sendirian jika kosong) --}}
+                                        <div class="h-full flex flex-col items-center justify-center p-2 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-700/60 hover:border-blue-400 dark:hover:border-blue-600 hover:bg-blue-50/20 dark:hover:bg-blue-950/20 transition-all mt-1">
+                                            <div x-data="{ openMenu: false }" class="relative w-full">
                                                     <button
                                                         type="button"
                                                         @click="openMenu = !openMenu"
@@ -2045,7 +2029,7 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
                                                     </div>
                                                 </div>
                                             </div>
-                                        </template>
+                                        </div>
                                     </div>
                                 </td>
                             @endforeach
@@ -2450,6 +2434,65 @@ new #[Title('Alokasi Ruangan')] #[Layout('layouts.admin')] class extends Compone
             </div>
         </form>
     </flux:modal>
+
+    <script>
+        if (!window.badgeHTMLFixer) {
+            window.badgeHTMLFixer = true;
+            const timColors = [
+                'bg-[#3B71CA] dark:bg-[#3B71CA] text-white border-[#2d5db3] dark:border-[#2d5db3]',
+                'bg-red-500 dark:bg-red-600 text-white border-red-600 dark:border-red-700',
+                'bg-green-500 dark:bg-green-600 text-white border-green-600 dark:border-green-700',
+                'bg-amber-400 dark:bg-amber-500 text-zinc-900 dark:text-zinc-900 border-amber-500 dark:border-amber-600',
+                'bg-purple-500 dark:bg-purple-600 text-white border-purple-600 dark:border-purple-700',
+                'bg-stone-600 dark:bg-stone-700 text-white border-stone-700 dark:border-stone-800',
+                'bg-pink-500 dark:bg-pink-600 text-white border-pink-600 dark:border-pink-700',
+                'bg-slate-700 dark:bg-slate-800 text-white border-slate-800 dark:border-slate-900',
+                'bg-orange-500 dark:bg-orange-600 text-white border-orange-600 dark:border-orange-700',
+                'bg-emerald-500 dark:bg-emerald-600 text-white border-emerald-600 dark:border-emerald-700',
+            ];
+
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach(mutation => {
+                    const processNode = (node) => {
+                        if (node.nodeValue && node.nodeValue.includes('[[TIM:')) {
+                            let replaced = false;
+                            let newValue = node.nodeValue.replace(/\[\[TIM:(.*?):(\d+)\]\]/g, (match, text, index) => {
+                                replaced = true;
+                                let classes = timColors[parseInt(index)] || timColors[0];
+                                return `<strong class="px-1.5 py-0.5 rounded text-[11px] font-bold mx-0.5 shadow-sm inline-block ${classes}">${text}</strong>`;
+                            });
+                            if (replaced) {
+                                const span = document.createElement('span');
+                                span.innerHTML = newValue;
+                                node.parentNode.replaceChild(span, node);
+                            }
+                        }
+                    };
+
+                    if (mutation.type === 'characterData') {
+                        processNode(mutation.target);
+                    } else if (mutation.type === 'childList') {
+                        mutation.addedNodes.forEach(node => {
+                            if (node.nodeType === Node.TEXT_NODE) {
+                                processNode(node);
+                            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                                const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false);
+                                let n;
+                                const toReplace = [];
+                                while ((n = walker.nextNode())) {
+                                    if (n.nodeValue && n.nodeValue.includes('[[TIM:')) {
+                                        toReplace.push(n);
+                                    }
+                                }
+                                toReplace.forEach(n => processNode(n));
+                            }
+                        });
+                    }
+                });
+            });
+            observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+        }
+    </script>
 </div>
 
 

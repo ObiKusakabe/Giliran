@@ -11,14 +11,19 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithFileUploads;
+use Illuminate\Support\Facades\Storage;
 
 new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label' => 'Pengaturan']]])] class extends Component {
     use ProfileValidationRules;
     use PasswordValidationRules;
+    use WithFileUploads;
 
     // Profile fields
     public string $name = '';
     public ?string $email = '';
+    public $avatar; 
+    public ?string $avatar_url = null;
 
     // Password fields
     public string $current_password = '';
@@ -52,6 +57,7 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
         // Profile
         $this->name = Auth::user()->name;
         $this->email = Auth::user()->email ?? '';
+        $this->avatar_url = Auth::user()->avatar ? asset('storage/' . Auth::user()->avatar) : null;
 
         // Two-Factor
         $this->canManageTwoFactor = \Laravel\Fortify\Features::canManageTwoFactorAuthentication();
@@ -92,9 +98,24 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
             $user->email_verified_at = null;
         }
 
+        if ($this->avatar) {
+            $this->validate([
+                'avatar' => 'image|max:2048', // max 2MB
+            ]);
+            
+            if ($user->avatar) {
+                Storage::disk('public')->delete($user->avatar);
+            }
+            
+            $path = $this->avatar->store('avatars', 'public');
+            $user->avatar = $path;
+            $this->avatar_url = asset('storage/' . $path);
+        }
+
         $user->save();
 
         Flux::toast(variant: 'success', text: __('Profile updated.'));
+        $this->dispatch('profile-updated'); // trigger top right avatar update
     }
 
     /**
@@ -248,6 +269,76 @@ new #[Title('Pengaturan')] #[Layout('layouts.admin', ['breadcrumbs' => [['label'
 
         <div class="flex-1 space-y-6">
             <form wire:submit="updateProfileInformation" class="space-y-6">
+                
+                {{-- Avatar Upload & Preview --}}
+                <div class="flex items-center gap-6">
+                    <div class="relative group cursor-pointer">
+                        <div @click="('{{ $avatar_url }}' || '{{ $avatar }}') ? Flux.modal('modal-preview-avatar').show() : null">
+                            @if ($avatar)
+                                <flux:avatar size="xl" src="{{ $avatar->temporaryUrl() }}" />
+                            @elseif ($avatar_url)
+                                <flux:avatar size="xl" src="{{ $avatar_url }}" />
+                            @else
+                                <flux:avatar size="xl" name="{{ $name }}" />
+                            @endif
+                        </div>
+
+                        {{-- Image Preview Modal --}}
+                        <flux:modal name="modal-preview-avatar" class="max-w-3xl">
+                            <div class="space-y-4">
+                                <div>
+                                    <flux:heading size="lg">Foto Profil</flux:heading>
+                                </div>
+                                <div class="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700">
+                                    <img src="{{ $avatar ? $avatar->temporaryUrl() : $avatar_url }}" alt="Preview" class="w-full h-auto object-contain max-h-[70vh]">
+                                </div>
+                                <div class="flex justify-end pt-2">
+                                    <flux:modal.close>
+                                        <flux:button variant="ghost">Tutup</flux:button>
+                                    </flux:modal.close>
+                                </div>
+                            </div>
+                        </flux:modal>
+                    </div>
+                    
+                    <div class="flex-1"
+                         x-data="{ isUploading: false, progress: 0 }"
+                         x-on:livewire-upload-start="isUploading = true; progress = 0"
+                         x-on:livewire-upload-finish="setTimeout(() => { isUploading = false; }, 500)"
+                         x-on:livewire-upload-error="isUploading = false"
+                         x-on:livewire-upload-progress="progress = $event.detail.progress"
+                    >
+                        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Foto Profil</label>
+                        <div class="flex items-center gap-3">
+                            <label class="cursor-pointer inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-700 focus-within:ring-2 focus-within:ring-brand focus-within:ring-offset-2 dark:focus-within:ring-offset-zinc-900 transition-colors"
+                                   :class="isUploading ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''">
+                                <flux:icon.camera class="w-4 h-4 text-zinc-500" />
+                                <span>Pilih Foto</span>
+                                <input type="file" wire:model.live="avatar" accept="image/*" class="sr-only" :disabled="isUploading">
+                            </label>
+                            
+                            <div x-show="isUploading" class="flex flex-col justify-center min-w-[120px]" x-cloak>
+                                <div class="flex items-center gap-1.5 mb-1">
+                                    <flux:icon icon="arrow-path" class="size-3 animate-spin text-zinc-500" />
+                                    <span class="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Mengunggah <span x-text="progress"></span>%</span>
+                                </div>
+                                <div class="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+                                    <div class="bg-brand h-1.5 rounded-full transition-all duration-300 ease-out" :style="'width: ' + progress + '%'"></div>
+                                </div>
+                            </div>
+                            
+                            @if($avatar && !$errors->has('avatar'))
+                                <div x-show="!isUploading" class="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 animate-in fade-in zoom-in duration-300" x-cloak>
+                                    <flux:icon icon="check-circle" class="size-4" />
+                                    <span class="text-xs font-medium">Foto siap disimpan</span>
+                                </div>
+                            @endif
+                        </div>
+                        <p class="text-xs text-zinc-500 mt-1">Format JPG/PNG maksimal 2MB. Klik foto untuk melihat ukuran penuh.</p>
+                        @error('avatar') <span class="text-xs text-red-500 mt-1 block font-medium flex items-center gap-1"><flux:icon icon="exclamation-triangle" class="size-3.5" /> {{ $message }}</span> @enderror
+                    </div>
+                </div>
+
                 <flux:input wire:model="name" label="Nama" type="text" required autofocus autocomplete="name" />
 
                 <div>
